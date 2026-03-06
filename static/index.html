@@ -16,7 +16,7 @@
   --bg:#0A0E1A;--surface:#101626;--surface2:#172033;--surface3:#1F2A40;
   --border:#1B2740;--border2:#243350;
   --accent:#6CB571;--accent2:#58A060;--accent-dim:rgba(108,181,113,.13);
-  --text:#E0E8F5;--text2:#8898B5;--text3:#465068;
+  --text:#EDF2FC;--text2:#A0B4CE;--text3:#7080A8;
   --danger:#FF4D6D;--warning:#FFB340;--success:#6CB571;
   --pam:#FF9F47;--mo:#4BBFFF;--radius:10px;--radius-sm:6px;
 }
@@ -40,6 +40,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
 .btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;transition:all .15s}
 .btn-primary{background:var(--accent);color:#0A1A0C}.btn-primary:hover{background:var(--accent2)}.btn-primary:disabled{opacity:.4;cursor:not-allowed}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2)}.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-folder{background:rgba(255,159,71,.1);color:var(--pam);border:1px solid rgba(255,159,71,.25)}.btn-folder:hover{background:rgba(255,159,71,.2);color:var(--pam)}
+.btn-indesign:hover{color:#E040A0 !important;border-color:rgba(224,64,160,.35) !important}
 .btn-danger{background:rgba(255,77,109,.12);color:var(--danger);border:1px solid rgba(255,77,109,.25)}.btn-danger:hover{background:rgba(255,77,109,.22)}
 .btn-sm{padding:5px 11px;font-size:12px}.btn-lg{padding:11px 22px;font-size:14px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
@@ -95,6 +97,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
 .browser-filters{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
 .filter-chip{padding:5px 12px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);cursor:pointer;font-size:12px;color:var(--text2);transition:all .15s}
 .filter-chip:hover{border-color:var(--accent);color:var(--accent)}.filter-chip.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+@keyframes chipRowIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}.lang-chips-row{animation:chipRowIn .18s ease}
+.filter-chip.active-box{background:rgba(255,159,71,.15);border-color:var(--pam);color:var(--pam)}.filter-chip.active-label{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}.filter-chip.active-indesign{background:rgba(224,64,160,.15);border-color:#E040A0;color:#E040A0}.filter-chip.active-print{background:rgba(255,255,255,.1);border-color:var(--text2);color:var(--text)}.filter-chip.active-wip{background:rgba(0,220,200,.15);border-color:#00DCC8;color:#00DCC8}.filter-chip.active-lang{background:rgba(75,191,255,.15);border-color:var(--mo);color:var(--mo)}.filter-chip.active-pam{background:rgba(255,159,71,.15);border-color:var(--pam);color:var(--pam)}.filter-chip.active-mo{background:rgba(75,191,255,.15);border-color:var(--mo);color:var(--mo)}
 .settings-tabs{display:flex;gap:2px;margin-bottom:24px;background:var(--surface2);border-radius:var(--radius-sm);padding:3px;border:1px solid var(--border);width:fit-content}
 .settings-tab{padding:7px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text2);border:none;background:none;transition:all .15s}
 .settings-tab.active{background:var(--surface3);color:var(--text)}

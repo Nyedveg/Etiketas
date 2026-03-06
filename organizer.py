@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 # -- Defaults ------------------------------------------------------------------
-DEFAULT_LABELS_DIR = Path.home() / "labels"
+DEFAULT_LABELS_DIR = Path.home() / "Documents" / "Etiketas"
 
 # -- Regex helpers -------------------------------------------------------------
 RE_PACKAGING  = re.compile(r'^\d+(\.\d+)?(kg|g|l|ml)(x\d+)?$', re.IGNORECASE)
@@ -86,11 +86,15 @@ def parse_label_filename(stem: str) -> dict | None:
     }
 
 # -- Destination builder -------------------------------------------------------
-def build_destination(info: dict, labels_dir: Path) -> Path:
-    product_folder  = info["product"].replace(' ', '_')
-    language_folder = '_'.join(info["languages"])
+def build_destination(info: dict, labels_dir: Path, products: list = None) -> Path:
+    product_folder = info["product"]
+    category = None
+    if products:
+        prod_cfg = next((p for p in products if p["name"] == info["product"]), None)
+        if prod_cfg:
+            category = prod_cfg["category"]
     if info["deze"]:
-        pack_folder = "Deze"
+        pack_folder = "Box"
     else:
         m = RE_PACK_AMT.match(info["packaging"])
         if m:
@@ -100,10 +104,14 @@ def build_destination(info: dict, labels_dir: Path) -> Path:
             pack_folder = f"{amount}{unit}"
         else:
             pack_folder = info["packaging"]
-    return labels_dir / product_folder / language_folder / pack_folder
+    lang_folder = ",".join(info["languages"])
+    if category:
+        return labels_dir / category / product_folder / lang_folder / pack_folder
+    else:
+        return labels_dir / "unsorted"
 
 # -- Ingest function -----------------------------------------------------------
-def ingest(source_dir: Path, labels_dir: Path = None, dry_run: bool = False) -> dict:
+def ingest(source_dir: Path, labels_dir: Path = None, dry_run: bool = False, products: list = None) -> dict:
     """
     Walk source_dir recursively. COPY all design/print files to labels_dir.
     The source directory is NEVER modified.
@@ -137,7 +145,7 @@ def ingest(source_dir: Path, labels_dir: Path = None, dry_run: bool = False) -> 
                 continue
 
             info      = parse_label_filename(stem)
-            dest_dir  = build_destination(info, labels_dir) if info else unsorted_dir
+            dest_dir  = build_destination(info, labels_dir, products) if info else unsorted_dir
             dest_file = dest_dir / src_file.name
             try:
                 rel_path = str(dest_dir.relative_to(labels_dir) / src_file.name)
