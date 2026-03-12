@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 -c \"import os; print\\(os.path.exists\\(r''C:\\\\Users\\\\DanieliusNiedzviegas\\\\OneDrive - Nando, UAB\\\\Documents\\\\Coders\\\\Etiketas''\\)\\)\")"
+      "Bash(python3 -c \"import os; print\\(os.path.exists\\(r''C:\\\\Users\\\\DanieliusNiedzviegas\\\\OneDrive - Nando, UAB\\\\Documents\\\\Coders\\\\Etiketas''\\)\\)\")",
+      "Bash(python -u -c \":*)"
     ]
   }
 }

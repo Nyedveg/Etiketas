@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "product": "BioNPK Powder S",
+    "code": "ES",
+    "flag": "🇪🇸",
+    "file": "BioNPK_Powder_S_ES.json"
+  },
+  "lang1": {
+    "header": "ES | NPK bioestimulante",
+    "bullet1": "Para el desarrollo radicular y el crecimiento de las plantas",
+    "bullet2": "Para una mejor absorci\u00f3n de nutrientes",
+    "bullet3": "Para mayor rendimiento y calidad del cultivo",
+    "bullet4": "Para una mejor salud del suelo"
+  },
+  "composition": {
+    "label": "Composici\u00f3n:",
+    "value": "Azospirillum brasilense, Bacillus subtilis, Bacillus amyloliquefaciens, Trichoderma harzianum. Concentraci\u00f3n total — no menos de 1 x 10\u2079 ufc/g."
+  },
+  "carriers": {
+    "label": "Portadores:",
+    "value": "dextrosa."
+  },
+  "form": {
+    "label": "Forma del producto:",
+    "value": "polvo."
+  },
+  "usage": {
+    "label": "Dosis de aplicaci\u00f3n:",
+    "value": "0,5–1 kg/ha. Para m\u00e1s informaci\u00f3n escanee el c\u00f3digo QR."
+  },
+  "preparation": {
+    "label": "Preparaci\u00f3n:",
+    "value": "Mezcle la cantidad requerida de BioNPK Powder S con 200–400 l de agua y aplique por aspersi\u00f3n/riego. Antes de a\u00f1adirlo al pulverizador, se recomienda disolver la cantidad necesaria de BioNPK Powder S en un recipiente aparte con agua y luego verter esta soluci\u00f3n en el pulverizador. BioNPK Powder S se a\u00f1ade al pulverizador en \u00faltimo lugar."
+  },
+  "storage": {
+    "label": "Condiciones de almacenamiento:",
+    "value": "El producto, en envase original hermicamente cerrado, en lugares secos, bien ventilados y protegidos de la luz solar directa, puede almacenarse durante 18 meses a +5 – +30 \u00b0C."
+  },
+  "box_section": {
+    "header": "ES | NPK bioestimulante"
+  },
+  "origin": {
+    "label": "Pa\u00eds de origen:",
+    "value": "Lituania."
+  },
+  "manufacturer": {
+    "label": "Fabricante:",
+    "value": "UAB \"Nando\", Europos av. 39, LT-46329 Kaunas, Lituania"
+  },
+  "footer": {
+    "sku_label": "C\u00f3digo SKU",
+    "mfg_date_label": "Fecha de fabricaci\u00f3n",
+    "batch_label": "N\u00ba de lote",
+    "exp_date_label": "Consumir preferentemente antes de",
+    "exp_date_value": "18 meses",
+    "manufacturer_label": "Fabricante"
+  }
+}

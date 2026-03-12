@@ -26,7 +26,8 @@ const api = {
   getColors:       ()    => api.get('/api/colors'),
   saveColors:      (c)   => api.post('/api/colors/save', c),
   getResourceDirs: ()    => api.get('/api/resource_dirs'),
-  checkAssets:     ()    => api.get('/api/assets_check'),
+  checkAssets:        ()    => api.get('/api/assets_check'),
+  listTranslations:   ()    => api.get('/api/translations'),
 };
 
 const scoreLabel = s => s>=75?{label:'Perfect',cls:'score-high'}:s>=50?{label:'Good',cls:'score-med'}:{label:'Fallback',cls:'score-low'};
@@ -35,12 +36,13 @@ const Icon = {
   Dashboard:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>,
   New:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm1 6h2a1 1 0 010 2H9v2a1 1 0 01-2 0V9H5a1 1 0 010-2h2V5a1 1 0 012 0v2z"/></svg>,
   Browse:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 011-1h3.586A1 1 0 017 2.293L7.707 3H13a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3z"/></svg>,
-  Settings:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M7.1 1.2a1 1 0 011.8 0l.5.9a5 5 0 011.2.7l1-.2a1 1 0 01.9 1.5l-.5.9c.1.4.1.8 0 1.2l.5.9a1 1 0 01-.9 1.5l-1-.2a5 5 0 01-1.2.7l-.5.9a1 1 0 01-1.8 0l-.5-.9A5 5 0 015.4 8.3l-1 .2a1 1 0 01-.9-1.5l.5-.9A5 5 0 014 4.9l-.5-.9a1 1 0 01.9-1.5l1 .2A5 5 0 016.6 2l.5-.9zM8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z" clipRule="evenodd"/></svg>,
+  Settings:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4.754a3.246 3.246 0 100 6.492 3.246 3.246 0 000-6.492zM5.754 8a2.246 2.246 0 114.492 0 2.246 2.246 0 01-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 01-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 01-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 01.52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 011.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 011.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 01.52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 01-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 01-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 002.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 001.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 00-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 00-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 00-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 003.06 8.858l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 004.175 4.4l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 002.692-1.115l.094-.319z"/></svg>,
   Refresh:()=><svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M13.6 2.4A7 7 0 102 8H1a7 7 0 013-5.8V1l3 2.5L4 6V4.5A5 5 0 108 3l-.8.1A5 5 0 0113 8a5 5 0 01-5 5 5 5 0 01-4.7-3.3L1.5 10A7 7 0 008 15a7 7 0 005.6-11.2l.5-1.4z"/></svg>,
   Open:()=><svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M9 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V7l-5-5zM3 13V3h5v4h4v6H3z"/></svg>,
   Folder:()=><svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M2 3a1 1 0 011-1h3.586L8 3.414 8.707 3H13a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm5.293 1H5V3H3v9h10V5H7.293z"/></svg>,
   Check:()=><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M13.3 3.3a1 1 0 00-1.4 0L6 9.2 4.1 7.3a1 1 0 00-1.4 1.4l2.6 2.6a1 1 0 001.4 0l6.6-6.6a1 1 0 000-1.4z"/></svg>,
   Resources:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.2 0-1.1.9-2 2-2h2a3 3 0 000-6A7 7 0 008 1zM5 8a1 1 0 110-2 1 1 0 010 2zm0-3a1 1 0 110-2 1 1 0 010 2zm3-2a1 1 0 110-2 1 1 0 010 2zm3 2a1 1 0 110-2 1 1 0 010 2z"/></svg>,
+  Info:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zM7.25 6.5h1.5v1h-1.5v-1zm0 2h1.5v3.5h-1.5V8.5z"/></svg>,
 };
 
 function App(){
@@ -71,6 +73,7 @@ function App(){
           {view==='browse'&&<LabelsBrowser map={map} config={config}/>}
           {view==='settings'&&<Settings config={config} saveConfig={saveConfig} setConfig={setConfig} refreshMap={refreshMap}/>}
           {view==='resources'&&<Resources config={config} saveConfig={saveConfig}/>}
+          {view==='information'&&<Information config={config} map={map}/>}
         </div>
       </div>
     </div>
@@ -92,6 +95,7 @@ function Sidebar({view,setView,map,refreshMap}){
         {[{id:'dashboard',label:'Dashboard',I:Icon.Dashboard},
           {id:'new',label:'New Label',I:Icon.New},
           {id:'browse',label:'Browse Files',I:Icon.Browse},
+          {id:'information',label:'Information',I:Icon.Info},
           {id:'settings',label:'Settings',I:Icon.Settings},
           {id:'resources',label:'Resources',I:Icon.Resources}
         ].map(({id,label,I})=>(
@@ -113,7 +117,7 @@ function Sidebar({view,setView,map,refreshMap}){
 }
 
 function Topbar({view,map}){
-  const titles={dashboard:'Dashboard',new:'New Label',browse:'Browse',settings:'Settings',resources:'Resources'};
+  const titles={dashboard:'Dashboard',new:'New Label',browse:'Browse',settings:'Settings',resources:'Resources',information:'Information'};
   return(
     <div className="topbar">
       <span className="topbar-title">{titles[view]}</span>
@@ -229,27 +233,34 @@ function NewLabelWizard({config,map,setMap}){
   const [selectedLabel,setSelectedLabel]=useState(0);
   const [selectedBox,setSelectedBox]=useState(0);
   const [reviewTab,setReviewTab]=useState('template');
+  const [langFiles,setLangFiles]=useState([]);
+  const [transFiles,setTransFiles]=useState([]);
+  const [sku,setSku]=useState('');
   const enabledProducts=(config?.products??[]).filter(p=>p.enabled);
   const enabledLangs=(config?.languages??[]).filter(l=>l.enabled);
   const productCfg=product?config.products.find(p=>p.name===product):null;
   const dimKey=productCfg?(productCfg.category==='PAM'?(productCfg.acidic?'PAM_acidic':'PAM_normal'):'MO'):null;
   const sizes=dimKey?(config?.packagingSizes?.[dimKey]??[]):[];
   const filtered=enabledProducts.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
+  useEffect(()=>{setLangFiles(languages.map(()=>null));},[languages.length]);
   useEffect(()=>{
-    if(step!==4||!product||!languages.length||!size)return;
+    if(step===3&&transFiles.length===0)
+      api.listTranslations().then(r=>{if(r?.files)setTransFiles(r.files);});
+    if(step!==5||!product||!languages.length||!size)return;
     setLoading(true);setSelectedLabel(0);setSelectedBox(0);
     api.findTemplate({product,languages,packagingSize:size}).then(info=>{setTmplInfo(info);setLoading(false);});
   },[step]);
-  const reset=()=>{setStep(1);setProduct(null);setLanguages([]);setSize(null);setTmplInfo(null);setResult(null);setSearch('');setSelectedLabel(0);setSelectedBox(0);setReviewTab('template');};
+  const reset=()=>{setStep(1);setProduct(null);setLanguages([]);setSize(null);setTmplInfo(null);setResult(null);setSearch('');setSelectedLabel(0);setSelectedBox(0);setReviewTab('template');setLangFiles([]);setTransFiles([]);setSku('');};
   const toggleLang=code=>setLanguages(prev=>prev.includes(code)?prev.filter(c=>c!==code):prev.length<3?[...prev,code]:prev);
   const handleCreate=async()=>{
     setLoading(true);
     const cfg=await api.loadConfig();
     const labelPath=tmplInfo?.labels?.[selectedLabel]?.file?.path??null;
     const boxPath=tmplInfo?.boxes?.[selectedBox]?.file?.path??null;
-    const res=await api.createLabel({product,languages,packagingSize:size,config:cfg,labelTemplatePath:labelPath,boxTemplatePath:boxPath});
+    const footerValues=sku?{sku,manufacturer_value:''}:null;
+    const res=await api.createLabel({product,languages,packagingSize:size,config:cfg,labelTemplatePath:labelPath,boxTemplatePath:boxPath,langFiles,footerValues});
     if(res.success&&res.results?.length){const m=await api.loadMap();setMap(m);}
-    setResult(res);setLoading(false);setStep(5);
+    setResult(res);setLoading(false);setStep(6);
   };
   const now=new Date(),dateStr=now.getFullYear()+'_'+String(now.getMonth()+1).padStart(2,'0');
   const boxMult=size?(config?.boxMultipliers?.[size]??size):'';
@@ -290,9 +301,9 @@ function NewLabelWizard({config,map,setMap}){
   );
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',maxWidth:720}}>
-      {step<5&&(
+      {step<6&&(
         <div className="wizard-steps" style={{flexShrink:0}}>
-          {['Product','Languages','Size','Review'].map((label,i)=>{
+          {['Product','Languages','Translations','Size','Review'].map((label,i)=>{
             const n=i+1,cls=n<step?'done':n===step?'active':'future';
             return(
               <Fragment key={n}>
@@ -300,7 +311,7 @@ function NewLabelWizard({config,map,setMap}){
                   <div className={'step-circle '+cls}>{n<step?<Icon.Check/>:n}</div>
                   <div className="step-label" style={{color:n===step?'var(--text)':'var(--text3)'}}>{label}</div>
                 </div>
-                {i<3&&<div className={'step-line '+(n<step?'done':'')}/>}
+                {i<4&&<div className={'step-line '+(n<step?'done':'')}/>}
               </Fragment>
             );
           })}
@@ -328,6 +339,7 @@ function NewLabelWizard({config,map,setMap}){
             ))}
           </div>
           <div className="flex mt-4" style={{flexShrink:0}}><button className="btn btn-primary ml-auto" disabled={!product} onClick={()=>setStep(2)}>Next &rarr;</button></div>
+
         </div>
       )}
       {step===2&&(
@@ -369,10 +381,61 @@ function NewLabelWizard({config,map,setMap}){
           <div className="flex mt-4 gap-2" style={{flexShrink:0}}>
             <button className="btn btn-ghost" onClick={()=>setStep(1)}>&larr; Back</button>
             <button className="btn btn-primary ml-auto" disabled={languages.length===0} onClick={()=>setStep(3)}>Next &rarr;</button>
+
           </div>
         </div>
       )}
       {step===3&&(
+        <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+          <div style={{flexShrink:0,marginBottom:14,fontSize:13,color:'var(--text2)'}}>
+            Optionally assign a translation file to each language slot. Leave blank to keep the template text.
+          </div>
+          <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
+            {languages.map((code,i)=>{
+              const l=enabledLangs.find(x=>x.code===code);
+              return(
+                <div key={code} style={{marginBottom:10,background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:'var(--radius-sm)',padding:'12px 14px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                    <span style={{fontSize:20}}>{l?.flag}</span>
+                    <span style={{fontWeight:500,color:'var(--text)'}}>{l?.name??code}</span>
+                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)',background:'var(--surface3)',padding:'2px 6px',borderRadius:3}}>{code}</span>
+                    <span style={{fontSize:11,color:'var(--text3)',marginLeft:'auto'}}>Slot LANG{i+1}</span>
+                  </div>
+                  <select
+                    style={{width:'100%',background:'var(--surface3)',border:'1px solid var(--border2)',borderRadius:'var(--radius-sm)',color:langFiles[i]?'var(--text)':'var(--text3)',padding:'7px 10px',fontSize:12,cursor:'pointer'}}
+                    value={langFiles[i]??''}
+                    onChange={e=>{const v=e.target.value||null;setLangFiles(prev=>{const n=[...prev];n[i]=v;return n;})}}>
+                    <option value=''>— Skip (keep template text) —</option>
+                    {transFiles.map(f=>(
+                      <option key={f.path} value={f.path}>{f.flag} {f.name} ({f.code}){f.product?` — ${f.product}`:''}</option>
+                    ))}
+                  </select>
+                  {(()=>{const sel=transFiles.find(f=>f.path===langFiles[i]);return sel?.product&&sel.product!==product?(<div style={{marginTop:6,fontSize:11,color:'#f5a623',display:'flex',alignItems:'center',gap:5}}><span>⚠</span><span>This file is for <strong>{sel.product}</strong>, not <strong>{product}</strong>. The text may not match.</span></div>):null;})()}
+                </div>
+              );
+            })}
+            {transFiles.length===0&&(
+              <div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>No translation files found in translations/ folder.</div>
+            )}
+            {/* Label footer details */}
+            <div style={{marginTop:16,borderTop:'1px solid var(--border2)',paddingTop:14}}>
+              <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>
+                Label details <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--text3)'}}>— optional, written to FOOTER_* stories</span>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:'var(--text2)',marginBottom:4}}>SKU code</div>
+                <input className="input" type="text" value={sku} onChange={e=>setSku(e.target.value)} placeholder="e.g. BNS-5KG-001" style={{width:'100%',boxSizing:'border-box'}}/>
+              </div>
+            </div>
+          </div>
+          <div className="flex mt-4 gap-2" style={{flexShrink:0,alignItems:'center'}}>
+            <button className="btn btn-ghost" onClick={()=>setStep(2)}>&larr; Back</button>
+            {!sku&&<span style={{fontSize:11,color:'var(--warn,#d97706)',marginLeft:'auto',marginRight:8}}>&#9888; No SKU provided</span>}
+            <button className="btn btn-primary" style={sku?{marginLeft:'auto'}:{}} onClick={()=>setStep(4)}>Next &rarr;</button>
+          </div>
+        </div>
+      )}
+      {step===4&&(
         <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
           <div style={{flexShrink:0,marginBottom:12,fontSize:13,color:'var(--text2)'}}>
             {productCfg?.category==='PAM'?'PAM (Adjuvant)':'MO (Biostimulant)'}
@@ -384,7 +447,7 @@ function NewLabelWizard({config,map,setMap}){
               return(
                 <div key={s} className={'size-card '+(size===s?'selected':'')}
                   onClick={()=>setSize(s)}
-                  onDoubleClick={()=>{setSize(s);setStep(4);}}>
+                  onDoubleClick={()=>{setSize(s);setStep(5);}}>
                   <div className="size-label">{s}</div>
                   <div className="size-dims">{d??'--'}</div>
                 </div>
@@ -392,12 +455,12 @@ function NewLabelWizard({config,map,setMap}){
             })}
           </div>
           <div className="flex mt-4 gap-2" style={{flexShrink:0}}>
-            <button className="btn btn-ghost" onClick={()=>setStep(2)}>&larr; Back</button>
-            <button className="btn btn-primary ml-auto" disabled={!size} onClick={()=>setStep(4)}>Next &rarr;</button>
+            <button className="btn btn-ghost" onClick={()=>setStep(3)}>&larr; Back</button>
+            <button className="btn btn-primary ml-auto" disabled={!size} onClick={()=>setStep(5)}>Next &rarr;</button>
           </div>
         </div>
       )}
-      {step===4&&(
+      {step===5&&(
         <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
           <div style={{flexShrink:0}}>
             <div className="review-row"><span className="review-label">Product</span><span className="review-value" style={{fontWeight:500}}>{product}</span></div>
@@ -449,14 +512,14 @@ function NewLabelWizard({config,map,setMap}){
             </div>
           )}
           <div className="flex mt-4 gap-2" style={{flexShrink:0}}>
-            <button className="btn btn-ghost" onClick={()=>setStep(3)}>&larr; Back</button>
+            <button className="btn btn-ghost" onClick={()=>setStep(4)}>&larr; Back</button>
             <button className="btn btn-primary ml-auto btn-lg" disabled={loading} onClick={handleCreate}>
               {loading?<><div className="spinner"/>Creating...</>:'Create Labels'}
             </button>
           </div>
         </div>
       )}
-      {step===5&&result&&(
+      {step===6&&result&&(
         <div style={{overflowY:'auto',flex:1}}>
           {result.success?(
             <div className="result-success">
@@ -466,10 +529,18 @@ function NewLabelWizard({config,map,setMap}){
                 {result.results?.map((r,i)=>{
                   const ops=r.ops||{};
                   const isBox=r.type==='box_label';
+                  const transOps=(ops.translations??[])
+                    .map((val,i)=>{
+                      if(val===null||val===undefined)return null;
+                      const code=languages[i];
+                      const l=config?.languages?.find(x=>x.code===code);
+                      return {key:`lang${i+1}`,label:`${l?.flag??''} ${code??''}`,val};
+                    }).filter(Boolean);
                   const opRows=[
                     {key:'colors', label:'Color swatches', val:ops.colors},
                     ...(!isBox?[{key:'qr', label:'QR code', val:ops.qr}]:[]),
                     {key:'logo',   label:'Logo',           val:ops.logo},
+                    ...transOps,
                   ];
                   return(
                     <div key={i} className="result-file" style={{flexDirection:'column',alignItems:'stretch',gap:8}}>
@@ -516,9 +587,222 @@ function NewLabelWizard({config,map,setMap}){
               <div className="result-icon">&#10007;</div>
               <div className="result-title">Something went wrong</div>
               <div className="alert alert-error mt-3">{result.error}</div>
-              <button className="btn btn-ghost mt-4" onClick={()=>setStep(4)}>&larr; Try again</button>
+              <button className="btn btn-ghost mt-4" onClick={()=>setStep(5)}>&larr; Try again</button>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+function Information({config,map}){
+  const [selected,setSelected]=useState(null);
+  const [search,setSearch]=useState('');
+  const [colors,setColors]=useState({});
+  const [transFiles,setTransFiles]=useState([]);
+  const [assets,setAssets]=useState({});
+  const [fileType,setFileType]=useState('all');
+  const [showWip,setShowWip]=useState('all');
+  useEffect(()=>{
+    api.getColors().then(r=>setColors(r.colors||{}));
+    api.listTranslations().then(r=>{if(r?.files)setTransFiles(r.files);});
+    api.checkAssets().then(r=>{if(r&&!r.error)setAssets(r);});
+  },[]);
+  const enabledProds=(config?.products??[]).filter(p=>p.enabled);
+  const filteredProds=search?enabledProds.filter(p=>p.name.toLowerCase().includes(search.toLowerCase())):enabledProds;
+  const prodCfg=selected?(config?.products??[]).find(p=>p.name===selected):null;
+  const dimKey=prodCfg?(prodCfg.category==='PAM'?(prodCfg.acidic?'PAM_acidic':'PAM_normal'):'MO'):null;
+  const swatches=selected?(colors[selected]||Array(6).fill('#808080')):[];
+  const allFiles=map?.files??[];
+  const prodFiles=allFiles.filter(f=>f.product===selected);
+  const filteredFiles=prodFiles.filter(f=>{
+    if(fileType==='indd')return f.extension==='.indd'&&!f.print_file;
+    if(fileType==='idml')return f.extension==='.idml';
+    if(fileType==='print')return f.print_file;
+    return true;
+  }).filter(f=>showWip==='wip'?f.wip:showWip==='done'?!f.wip:true);
+  const prodTrans=transFiles.filter(f=>f.product===selected);
+  const prodAssets=selected?(assets[selected]||{}):{};
+  const dimRows=[['PAM_normal','PAM Normal','var(--pam)'],['PAM_acidic','PAM Acidic','#f5a623'],['MO','MO','var(--mo)']];
+  return(
+    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
+      {/* Product search + list */}
+      <div style={{flexShrink:0,marginBottom:12}}>
+        <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
+          <div className="search-wrap" style={{flex:1}}>
+            <span className="search-icon">&#128269;</span>
+            <input className="input" placeholder="Search products..." value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
+          </div>
+          {selected&&(
+            <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--accent-dim)',border:'1px solid var(--accent)',borderRadius:'var(--radius-sm)',padding:'5px 10px',flexShrink:0,maxWidth:200}}>
+              <span style={{fontSize:12,color:'var(--accent)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selected}</span>
+              <button onClick={()=>{setSelected(null);setSearch('');}} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:14,padding:0,lineHeight:1,flexShrink:0}}>✕</button>
+            </div>
+          )}
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:3,maxHeight:136,overflowY:'auto',paddingRight:4}}>
+          {filteredProds.map(p=>(
+            <button key={p.name} onClick={()=>setSelected(selected===p.name?null:p.name)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:'var(--radius-sm)',border:'1px solid '+(selected===p.name?'var(--accent)':'var(--border2)'),background:selected===p.name?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',textAlign:'left',transition:'all .15s',flexShrink:0}}>
+              <span style={{flex:1,fontSize:12,fontWeight:selected===p.name?500:400,color:selected===p.name?'var(--accent)':'var(--text)'}}>{p.name}</span>
+              <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 5px',borderRadius:2,background:p.category==='PAM'?'rgba(255,159,71,.15)':'rgba(75,191,255,.15)',color:p.category==='PAM'?'var(--pam)':'var(--mo)'}}>{p.category}{p.acidic?' / acidic':''}</span>
+            </button>
+          ))}
+          {filteredProds.length===0&&<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>No products match.</div>}
+        </div>
+      </div>
+      {!selected?(
+        /* Size reference + box packaging shown when no product selected */
+        <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
+          <p className="section-title">Label Size Reference</p>
+          {dimRows.map(([key,label,clr])=>(
+            <div key={key} style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:clr,marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:'.05em'}}>{label}</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                {Object.entries(config?.dimensions?.[key]??{}).map(([sz,dims])=>(
+                  <div key={sz} style={{background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 12px',textAlign:'center',minWidth:72}}>
+                    <div style={{fontSize:13,fontWeight:600,fontFamily:"'Syne',sans-serif",color:'var(--text)'}}>{sz}</div>
+                    <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:2}}>{dims}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <p className="section-title" style={{marginTop:8}}>Box Packaging Reference</p>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+            {Object.entries(config?.boxMultipliers??{}).map(([sz,box])=>(
+              <div key={sz} style={{background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 12px',textAlign:'center',minWidth:72}}>
+                <div style={{fontSize:13,fontWeight:600,fontFamily:"'Syne',sans-serif",color:'var(--text)'}}>{sz}</div>
+                <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:2}}>{box}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ):(
+        <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
+          {/* Gradient header bar */}
+          <div style={{height:52,borderRadius:'var(--radius-sm)',marginBottom:10,background:`linear-gradient(135deg, ${swatches.map(c=>c||'#808080').join(', ')})`,border:'1px solid var(--border2)',boxShadow:'0 2px 16px rgba(0,0,0,.35)',display:'flex',alignItems:'center',paddingLeft:16,gap:10}}>
+            <span style={{fontWeight:600,fontSize:15,color:'#fff',textShadow:'0 1px 4px rgba(0,0,0,.5)',fontFamily:"'Syne',sans-serif"}}>{selected}</span>
+            {prodCfg&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.75)',background:'rgba(0,0,0,.25)',padding:'2px 8px',borderRadius:3}}>{prodCfg.category}{prodCfg.acidic?' · acidic':''}</span>}
+            <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.6)',paddingRight:16}}>{prodFiles.length} files</span>
+          </div>
+          {/* Swatch row */}
+          <div style={{display:'flex',gap:5,marginBottom:12}}>
+            {swatches.map((c,i)=>(
+              <div key={i} title={`Brand${i+1}: ${c||'#808080'}`} style={{flex:1,height:14,borderRadius:3,background:c||'#808080',border:'1px solid var(--border2)'}}/>
+            ))}
+          </div>
+          {/* 2-column: label sizes (left) | assets + translations (right) */}
+          <div style={{display:'grid',gridTemplateColumns:'55% 1fr',gap:12,marginBottom:14,alignItems:'start'}}>
+            {/* Left: label sizes with dimming */}
+            <div>
+              <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Label sizes</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {dimRows.map(([key,label,clr])=>{
+                  const isActive=dimKey===key;
+                  const entries=Object.entries(config?.dimensions?.[key]??{});
+                  return(
+                    <div key={key} style={{opacity:isActive?1:.35,transition:'opacity .2s'}}>
+                      <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:isActive?clr:'var(--text3)',marginBottom:5,fontWeight:isActive?600:400,textTransform:'uppercase',letterSpacing:'.04em'}}>{label}</div>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                        {entries.map(([sz,dims])=>(
+                          <div key={sz} style={{background:isActive?'var(--surface2)':'var(--surface3)',border:'1px solid '+(isActive?clr:'var(--border2)'),borderRadius:5,padding:'5px 10px',textAlign:'center',minWidth:60}}>
+                            <div style={{fontSize:12,fontWeight:600,fontFamily:"'Syne',sans-serif",color:isActive?'var(--text)':'var(--text3)'}}>{sz}</div>
+                            <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:1}}>{dims}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Right: assets + translations stacked */}
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <div className="card" style={{padding:'12px 14px'}}>
+                <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>Assets</div>
+                {[['QR Code',prodAssets.qr,'qrcodes'],['Logo',prodAssets.logo,'logos']].map(([label,ok,dirKey])=>(
+                  <div key={label} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <span style={{width:8,height:8,borderRadius:'50%',background:ok?'var(--success)':'var(--danger)',flexShrink:0}}/>
+                    <span style={{fontSize:12,flex:1,color:ok?'var(--text)':'var(--text3)'}}>{label}</span>
+                    <button className="btn btn-folder btn-sm" title="Open folder" onClick={()=>api.getResourceDirs().then(d=>api.openFile(d[dirKey]))}><Icon.Folder/></button>
+                  </div>
+                ))}
+              </div>
+              <div className="card" style={{padding:'12px 14px'}}>
+                <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>
+                  Translations <span style={{color:'var(--accent)',fontFamily:"'DM Mono',monospace"}}>{prodTrans.length}</span>
+                </div>
+                {prodTrans.length===0?(
+                  <div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>None found</div>
+                ):(
+                  prodTrans.map(f=>(
+                    <div key={f.path} style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
+                      <span style={{fontSize:15}}>{f.flag}</span>
+                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--accent)',width:26,flexShrink:0}}>{f.code}</span>
+                      <span style={{fontSize:11,color:'var(--text2)'}}>{f.name}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+          {/* Box packaging – full width */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Box packaging</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+              {Object.entries(config?.boxMultipliers??{}).map(([sz,box])=>(
+                <div key={sz} style={{background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:5,padding:'5px 10px',textAlign:'center',minWidth:60}}>
+                  <div style={{fontSize:12,fontWeight:600,fontFamily:"'Syne',sans-serif",color:'var(--text)'}}>{sz}</div>
+                  <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:1}}>{box}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* File browser – full width */}
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+              <span style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em'}}>
+                Files <span style={{color:'var(--text2)',fontFamily:"'DM Mono',monospace"}}>{filteredFiles.length}/{prodFiles.length}</span>
+              </span>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginLeft:'auto'}}>
+                {[['all','All'],['indd','INDD'],['idml','IDML'],['print','Print']].map(([v,l])=>(
+                  <button key={v} className={'filter-chip '+(fileType===v?'active':'')} onClick={()=>setFileType(v)}>{l}</button>
+                ))}
+                <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
+                <button className={'filter-chip '+(showWip==='wip'?'active-wip':'')} onClick={()=>setShowWip(showWip==='wip'?'all':'wip')}>WIP</button>
+              </div>
+            </div>
+            {filteredFiles.length===0?(
+              <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'12px 0'}}>No files match.</div>
+            ):(
+              <div className="card" style={{padding:0,overflow:'hidden'}}>
+                <table className="files-table">
+                  <thead><tr><th>Filename</th><th>Langs</th><th>Size</th><th>Date</th><th>Type</th><th></th></tr></thead>
+                  <tbody>
+                    {filteredFiles.map(f=>(
+                      <tr key={f.filename+f.path}>
+                        <td className="path-cell" title={f.path}>{f.filename}</td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11}}>{f.languages?.join('·')??'--'}</td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
+                        <td><div style={{display:'flex',gap:4,alignItems:'center'}}>
+                          {f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
+                          {f.print_file?<span className="topbar-badge" style={{background:'rgba(255,255,255,.07)',color:'var(--text)'}}>Print</span>
+                            :f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(100,180,255,.15)',color:'#64B4FF'}}>IDML</span>
+                            :<span className="topbar-badge" style={{background:'rgba(224,64,160,.15)',color:'#E040A0'}}>INDD</span>}
+                          {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
+                        </div></td>
+                        <td><div className="file-actions">
+                          <button className="btn btn-ghost btn-indesign btn-sm" onClick={()=>api.openFile(f.path)}><Icon.Open/></button>
+                          <button className="btn btn-folder btn-sm" onClick={()=>api.revealFile(f.path)}><Icon.Folder/></button>
+                        </div></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -531,6 +815,7 @@ function LabelsBrowser({map,config}){
   const [filterFileType,setFilterFileType]=useState('all');
   const [filterSize,setFilterSize]=useState('all');
   const [filterWip,setFilterWip]=useState('all');
+  const [filterUnsorted,setFilterUnsorted]=useState(false);
   const [filterLangs,setFilterLangs]=useState([]);
   const [langOpen,setLangOpen]=useState(false);
   const toggleLang=lang=>{
@@ -553,9 +838,11 @@ function LabelsBrowser({map,config}){
     if(filterCat!=='all'&&getCategory(f.product)!==filterCat)return false;
     if(filterLabelType==='label'&&f.deze)return false;
     if(filterLabelType==='box'&&!f.deze)return false;
-    if(filterFileType==='indesign'&&f.print_file)return false;
+    if(filterFileType==='indd'&&f.extension!=='.indd')return false;
+    if(filterFileType==='idml'&&f.extension!=='.idml')return false;
     if(filterFileType==='print'&&!f.print_file)return false;
     if(filterWip==='wip'&&!f.wip)return false;
+    if(filterUnsorted&&f.sorted)return false;
     if(!sizeMatch(f))return false;
     if(filterLangs.length>0&&!filterLangs.every(l=>(f.languages??[]).includes(l)))return false;
     return true;
@@ -578,7 +865,7 @@ function LabelsBrowser({map,config}){
             <button key={v} className={'filter-chip '+(filterLabelType===v?(cls||'active'):'')} onClick={()=>setFilterLabelType(v)}>{lbl}</button>
           ))}
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-          {[['all','All',null],['indesign','InDesign','active-indesign'],['print','Print','active-print']].map(([v,lbl,cls])=>(
+          {[['all','All',null],['indd','InDesign','active-indesign'],['idml','IDML','active-mo'],['print','Print','active-print']].map(([v,lbl,cls])=>(
             <button key={v} className={'filter-chip '+(filterFileType===v?(cls||'active'):'')} onClick={()=>setFilterFileType(v)}>{lbl}</button>
           ))}
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
@@ -587,6 +874,7 @@ function LabelsBrowser({map,config}){
           ))}
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
           <button className={'filter-chip '+(filterWip==='wip'?'active-wip':'')} onClick={()=>setFilterWip(filterWip==='wip'?'all':'wip')}>WIP only</button>
+          <button className={'filter-chip '+(filterUnsorted?'active-wip':'')} onClick={()=>setFilterUnsorted(o=>!o)}>Unsorted</button>
           <span style={{marginLeft:'auto',fontSize:12,color:'var(--text3)',fontFamily:"'DM Mono',monospace",alignSelf:'center'}}>{filtered.length} files</span>
         </div>
         {(config?.languages??[]).filter(l=>l.enabled).length>0&&(
@@ -712,33 +1000,6 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
             <button className="btn btn-danger" onClick={resetToDefaults} disabled={resetting}>
               {resetting?<><div className="spinner"/>Resetting...</>:'Reset to factory defaults'}
             </button>
-          </div>
-          <p className="section-title">Dimensions reference</p>
-          <div className="card mb-3" style={{fontSize:13}}>
-            {['PAM_normal','PAM_acidic','MO'].map(key=>(
-              <div key={key} style={{marginBottom:16}}>
-                <div style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:'var(--text2)',marginBottom:8,textTransform:'uppercase',letterSpacing:'.05em'}}>{key.replace('_',' - ')}</div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                  {Object.entries(cfg.dimensions?.[key]??{}).map(([sz,dims])=>(
-                    <div key={sz} style={{background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 12px',textAlign:'center'}}>
-                      <div style={{fontSize:14,fontWeight:600,fontFamily:"'Syne',sans-serif"}}>{sz}</div>
-                      <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:2}}>{dims}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="section-title">Box packaging reference</p>
-          <div className="card" style={{fontSize:13}}>
-            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-              {[['1kg','1kgx10'],['5kg','5kgx2'],['0.5kg','0.5kgx20'],['0.25kg','0.25kgx40'],['1L','1Lx12'],['5L','5Lx4'],['0.25L','0.25Lx32']].map(([sz,box])=>(
-                <div key={sz} style={{background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 12px',textAlign:'center'}}>
-                  <div style={{fontSize:14,fontWeight:600,fontFamily:"'Syne',sans-serif"}}>{sz}</div>
-                  <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:2}}>{box}</div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       )}

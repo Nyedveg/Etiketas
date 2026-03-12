@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "product": "BioNPK Powder S",
+    "code": "DE",
+    "flag": "🇩🇪",
+    "file": "BioNPK_Powder_S_DE.json"
+  },
+  "lang1": {
+    "header": "DE | NPK Bio-Stimulans",
+    "bullet1": "F\u00fcr Wurzelentwicklung und Pflanzenwachstum",
+    "bullet2": "F\u00fcr verbesserte N\u00e4hrstoffaufnahme",
+    "bullet3": "F\u00fcr erh\u00f6hten Ernteertrag und -qualit\u00e4t",
+    "bullet4": "F\u00fcr bessere Bodengesundheit"
+  },
+  "composition": {
+    "label": "Zusammensetzung:",
+    "value": "Azospirillum brasilense, Bacillus subtilis, Bacillus amyloliquefaciens, Trichoderma harzianum. Gesamtkonzentration — nicht weniger als 1 x 10\u2079 KBE/g."
+  },
+  "carriers": {
+    "label": "Tr\u00e4gerstoffe:",
+    "value": "Dextrose."
+  },
+  "form": {
+    "label": "Produktform:",
+    "value": "Pulver."
+  },
+  "usage": {
+    "label": "Anwendungsrate:",
+    "value": "0,5–1 kg/ha. F\u00fcr weitere Informationen scannen Sie den QR-Code."
+  },
+  "preparation": {
+    "label": "Zubereitung:",
+    "value": "Die erforderliche Menge BioNPK Powder S mit 200–400 l Wasser mischen und spr\u00fchen/bew\u00e4ssern. Vor der Zugabe in den Spr\u00fcher wird empfohlen, die ben\u00f6tigte Menge BioNPK Powder S in einem separaten Beh\u00e4lter mit Wasser aufzul\u00f6sen und diese L\u00f6sung dann in den Spr\u00fcher zu gie\u00dfen. BioNPK Powder S wird zuletzt in den Spr\u00fcher gegeben."
+  },
+  "storage": {
+    "label": "Lagerbedingungen:",
+    "value": "Das Produkt kann in fest verschlossener Originalverpackung, in trockenen, gut bel\u00fcfteten, vor direkter Sonneneinstrahlung gesch\u00fctzten R\u00e4umen 18 Monate bei +5 – +30 \u00b0C gelagert werden."
+  },
+  "box_section": {
+    "header": "DE | NPK Bio-Stimulans"
+  },
+  "origin": {
+    "label": "Ursprungsland:",
+    "value": "Litauen."
+  },
+  "manufacturer": {
+    "label": "Hersteller:",
+    "value": "UAB \"Nando\", Europos av. 39, LT-46329 Kaunas, Litauen"
+  },
+  "footer": {
+    "sku_label": "Artikelnummer",
+    "mfg_date_label": "Herstellungsdatum",
+    "batch_label": "Chargennr.",
+    "exp_date_label": "Mindesthaltbar bis",
+    "exp_date_value": "18 Monate",
+    "manufacturer_label": "Hersteller"
+  }
+}

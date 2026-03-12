@@ -5,7 +5,7 @@ Run with:  python etiketas.py
 Opens at:  http://localhost:7842
 """
 
-import ctypes, io, json, mimetypes, os, re, shutil, threading, webbrowser, subprocess, zipfile
+import ctypes, html, io, json, mimetypes, os, re, shutil, threading, webbrowser, subprocess, zipfile
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -15,8 +15,9 @@ from urllib.parse import urlparse
 BASE_DIR   = Path(__file__).parent
 STATIC_DIR = BASE_DIR / "static"
 LABELS_DIR = Path.home() / "Documents" / "Etiketas"
-QR_DIR       = BASE_DIR / "qrcodes"
-TEMPLATE_DIR = BASE_DIR / "templates"
+QR_DIR          = BASE_DIR / "qrcodes"
+TEMPLATE_DIR    = BASE_DIR / "templates"
+TRANSLATIONS_DIR = BASE_DIR / "translations"
 MAP_FILE   = LABELS_DIR / "labels_map.json"
 CFG_FILE     = LABELS_DIR / "app_config.json"
 COLORS_FILE  = LABELS_DIR / "colors_config.json"
@@ -159,6 +160,9 @@ def score_template_detail(entry, target, products):
     is_box = target.get("deze", False)
     if not is_box and entry.get("dimensions") != target.get("dimensions"):
         return -1, []
+    # For labels: reject if template packaging explicitly doesn't match (e.g. 5kg template ≠ 0.25kg request)
+    if not is_box and entry.get("packaging") and target.get("packaging") and entry.get("packaging") != target.get("packaging"):
+        return -1, []
     s = 0
     # Templates store lang_count directly; regular files use len(languages)
     e_langs = entry.get("lang_count") or len(entry.get("languages") or [])
@@ -296,8 +300,135 @@ def apply_brand_colors(idml_path: Path, colors: list) -> bool:
     idml_path.write_bytes(buf.getvalue())
     return True
 
+# ── Language translation ────────────────────────────────────────────────────────
+_FIELD_KEYS = ['composition', 'carriers', 'form', 'usage', 'preparation', 'storage']
+
+def _replace_story_contents(xml_text, replacements):
+    """Replace non-whitespace <Content> values in order with replacements list.
+    Extra content nodes beyond len(replacements) are cleared."""
+    idx = [0]
+    def repl(m):
+        if m.group(1).strip():
+            val = html.escape(replacements[idx[0]]) if idx[0] < len(replacements) else ''
+            idx[0] += 1
+            return f'<Content>{val}</Content>'
+        return m.group(0)
+    return re.sub(r'<Content>(.*?)</Content>', repl, xml_text, flags=re.DOTALL)
+
+def _get_story_replacements(story_title, trans):
+    """Return ordered replacement strings for a story given its StoryTitle."""
+    if story_title.endswith('_HEADER'):
+        header = trans.get('lang1', {}).get('header', '')
+        if ' | ' in header:
+            prefix, subtitle = header.split(' | ', 1)
+            return [prefix + ' | ', subtitle]
+        return [header, '']
+    if story_title.endswith('_BOX_SECTION'):
+        return [
+            trans.get('box_section', {}).get('header', ''),
+            trans.get('storage', {}).get('label', ''),
+            trans.get('storage', {}).get('value', ''),
+            trans.get('origin', {}).get('label', ''),
+            trans.get('origin', {}).get('value', ''),
+        ]
+    for key in _FIELD_KEYS:
+        if story_title.upper().endswith(f'_FIELD_{key.upper()}'):
+            f = trans.get(key, {})
+            return [f.get('label', ''), f.get('value', '')]
+    for n in range(1, 5):
+        if story_title.endswith(f'_BULLET{n}'):
+            return [trans.get('lang1', {}).get(f'bullet{n}', '')]
+    return None
+
+def apply_footer_content(idml_path: Path, translations: list, footer_values: dict) -> bool:
+    """Write combined footer labels (joined across translations) and user values to FOOTER_* stories.
+    translations: list of translation dicts (may contain None for skipped slots).
+    footer_values: dict with keys sku, mfg_date, batch, exp_date, manufacturer_value.
+    """
+    def combined_label(section_key, field_key):
+        parts = []
+        for t in translations:
+            if t:
+                v = t.get(section_key, {}).get(field_key, '')
+                if v:
+                    parts.append(v)
+        return ' / '.join(parts)
+
+    story_content = {
+        'FOOTER_SKU_LABEL':          [combined_label('footer', 'sku_label')],
+        'FOOTER_SKU_VALUE':          [footer_values.get('sku', '')],
+        'FOOTER_MFG_DATE_LABEL':     [combined_label('footer', 'mfg_date_label')],
+        'FOOTER_MFG_DATE_VALUE':     [''],
+        'FOOTER_BATCH_LABEL':        [combined_label('footer', 'batch_label')],
+        'FOOTER_BATCH_VALUE':        [''],
+        'FOOTER_EXP_DATE_LABEL':     [combined_label('footer', 'exp_date_label')],
+        'FOOTER_EXP_DATE_VALUE':     [combined_label('footer', 'exp_date_value')],
+        'FOOTER_MANUFACTURER_LABEL': [combined_label('footer', 'manufacturer_label')],
+        'FOOTER_MANUFACTURER_VALUE': [footer_values.get('manufacturer_value', '')],
+    }
+
+    buf = io.BytesIO()
+    try:
+        with zipfile.ZipFile(str(idml_path), 'r') as zin:
+            with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+                    if item.filename.startswith('Stories/'):
+                        xml = data.decode('utf-8')
+                        m = re.search(r'StoryTitle="([^"]+)"', xml)
+                        if m and m.group(1) in story_content:
+                            xml = _replace_story_contents(xml, story_content[m.group(1)])
+                        data = xml.encode('utf-8')
+                    zout.writestr(item, data)
+    except Exception:
+        return False
+    idml_path.write_bytes(buf.getvalue())
+    return True
+
+def apply_lang_translation(idml_path: Path, slot: int, trans: dict) -> bool:
+    """Replace LANG{slot}_* story contents in an IDML file with translated text."""
+    prefix = f'LANG{slot}_'
+    buf = io.BytesIO()
+    try:
+        with zipfile.ZipFile(str(idml_path), 'r') as zin:
+            with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+                    if item.filename.startswith('Stories/'):
+                        xml = data.decode('utf-8')
+                        m = re.search(r'StoryTitle="([^"]+)"', xml)
+                        if m and m.group(1).startswith(prefix):
+                            texts = _get_story_replacements(m.group(1), trans)
+                            if texts is not None:
+                                xml = _replace_story_contents(xml, texts)
+                        data = xml.encode('utf-8')
+                    zout.writestr(item, data)
+    except Exception:
+        return False
+    idml_path.write_bytes(buf.getvalue())
+    return True
+
+def list_translations():
+    files = []
+    if not TRANSLATIONS_DIR.exists():
+        return files
+    for f in sorted(TRANSLATIONS_DIR.rglob("*.json")):
+        try:
+            meta = load_json(f, {}).get('meta', {})
+            files.append({
+                "filename": f.name,
+                "path":     str(f),
+                "code":     meta.get('code', f.stem),
+                "name":     meta.get('name', f.stem),
+                "flag":     meta.get('flag', ''),
+                "product":  meta.get('product', None),
+            })
+        except Exception:
+            files.append({"filename": f.name, "path": str(f), "code": f.stem, "name": f.stem, "flag": ""})
+    return files
+
 # ── Label creation ─────────────────────────────────────────────────────────────
-def create_label(product, languages, packaging_size, config, label_template_path=None, box_template_path=None):
+def create_label(product, languages, packaging_size, config, label_template_path=None, box_template_path=None, lang_files=None, footer_values=None):
     prods    = config.get("products", [])
     prod_cfg = next((p for p in prods if p["name"]==product), None)
     if not prod_cfg:
@@ -322,7 +453,7 @@ def create_label(product, languages, packaging_size, config, label_template_path
     else:
         label_tmpl, label_score = find_template(all_files,
             {"product":product,"category":category,"dimensions":dims,
-             "lang_count":len(languages),"deze":False}, prods)
+             "lang_count":len(languages),"deze":False,"packaging":packaging_size}, prods)
     if box_template_path:
         box_tmpl  = next((f for f in all_pool if f.get("path") == box_template_path), None)
         box_score = 0
@@ -349,13 +480,17 @@ def create_label(product, languages, packaging_size, config, label_template_path
     prod_colors = load_json(COLORS_FILE, {}).get(product, [])
     qr_path     = find_qr_for_product(product)
     logo_path   = find_logo_for_product(product)
+    # Pre-load translation data for each slot (None = skip)
+    translations = []
+    for lf in (lang_files or []):
+        translations.append(load_json(lf) if lf else None)
 
     def make_file(tmpl, dest_dir, dest_name, apply_qr=False):
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_path = dest_dir / dest_name
         if dest_path.exists():
             raise FileExistsError(f"File already exists: {dest_path}")
-        ops = {"colors": None, "qr": None, "logo": None}
+        ops = {"colors": None, "qr": None, "logo": None, "translations": []}
         if tmpl:
             src_p = tmpl.get("path", "")
             src   = Path(src_p) if Path(src_p).is_absolute() else LABELS_DIR / src_p
@@ -367,6 +502,14 @@ def create_label(product, languages, packaging_size, config, label_template_path
                     ops["qr"] = patch_qr_in_idml(dest_path, qr_path)
                 if logo_path:
                     ops["logo"] = patch_logo_in_idml(dest_path, logo_path)
+                for slot_idx, trans in enumerate(translations):
+                    if trans:
+                        ok = apply_lang_translation(dest_path, slot_idx + 1, trans)
+                        ops["translations"].append(ok)
+                    else:
+                        ops["translations"].append(None)  # skipped
+                if apply_qr and footer_values:  # label only (apply_qr=True for label)
+                    ops["footer"] = apply_footer_content(dest_path, translations, footer_values)
         else:
             dest_path.write_bytes(b"")
         return dest_path, ops
@@ -734,6 +877,9 @@ class Handler(BaseHTTPRequestHandler):
                 result[name] = {"qr": has_qr, "logo": has_logo}
             self.send_json(result)
 
+        elif path == "/api/translations":
+            self.send_json({"files": list_translations()})
+
         elif path == "/api/resource_dirs":
             self.send_json({
                 "logos":     str(BASE_DIR / "logos"),
@@ -772,7 +918,7 @@ class Handler(BaseHTTPRequestHandler):
             map_data = load_json(MAP_FILE, {"files":[]})
             files    = map_data.get("files",[])
             box_mult = cfg.get("boxMultipliers", {}).get(size, size)
-            label_results = find_templates(files,{"product":product,"category":category,"dimensions":dims,"lang_count":len(languages),"deze":False},prods)
+            label_results = find_templates(files,{"product":product,"category":category,"dimensions":dims,"lang_count":len(languages),"deze":False,"packaging":size},prods)
             box_results   = find_templates(files,{"product":product,"category":category,"dimensions":"180x180","lang_count":len(languages),"deze":True,"packaging":box_mult},prods)
             self.send_json({
                 "labels": [{"file":f,"score":s,"reasons":r} for f,s,r in label_results],
@@ -783,9 +929,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/create":
             try:
                 cfg    = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
+                fv = body.get("footerValues")
                 result = create_label(body["product"], body["languages"], body["packagingSize"], cfg,
                                       label_template_path=body.get("labelTemplatePath"),
-                                      box_template_path=body.get("boxTemplatePath"))
+                                      box_template_path=body.get("boxTemplatePath"),
+                                      lang_files=body.get("langFiles"),
+                                      footer_values=fv if fv else None)
                 self.send_json({"success":True,**result})
             except Exception as e:
                 self.send_json({"success":False,"error":str(e)})
