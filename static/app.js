@@ -17,6 +17,7 @@ const api = {
   revealFile:      (p)   => api.post('/api/reveal', {path:p}),
   getLabelsDir:    ()    => api.get('/api/labels_dir').then(r=>r.path),
   resetConfig:     ()    => api.post('/api/config/reset', {}),
+  syncProducts:    ()    => api.post('/api/config/sync_products', {}),
   getDefaultConfig:()    => api.get('/api/config/default'),
   pickDir:         ()    => api.get('/api/pick_dir'),
   ingest:          (p)   => api.post('/api/ingest', {path:p}),
@@ -67,7 +68,7 @@ function App(){
       <Sidebar view={view} setView={setView} map={map} refreshMap={refreshMap}/>
       <div className="main">
         <Topbar view={view} map={map}/>
-        <div className="content">
+        <div className={`content${view==='resources'?' no-scroll':''}`}>
           {view==='dashboard'&&<Dashboard map={map} config={config} setView={setView} refreshMap={refreshMap}/>}
           {view==='new'&&<NewLabelWizard config={config} map={map} setMap={setMap}/>}
           {view==='browse'&&<LabelsBrowser map={map} config={config}/>}
@@ -236,10 +237,11 @@ function NewLabelWizard({config,map,setMap}){
   const [langFiles,setLangFiles]=useState([]);
   const [transFiles,setTransFiles]=useState([]);
   const [sku,setSku]=useState('');
-  const enabledProducts=(config?.products??[]).filter(p=>p.enabled);
+  const [ufi,setUfi]=useState('');
+  const enabledProducts=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
   const enabledLangs=(config?.languages??[]).filter(l=>l.enabled);
   const productCfg=product?config.products.find(p=>p.name===product):null;
-  const dimKey=productCfg?(productCfg.category==='PAM'?(productCfg.acidic?'PAM_acidic':'PAM_normal'):'MO'):null;
+  const dimKey=productCfg?(productCfg.category==='PAM'?(productCfg.acidic?'PAM_acidic':'PAM_normal'):productCfg.category==='CE'?'CE':'MO'):null;
   const sizes=dimKey?(config?.packagingSizes?.[dimKey]??[]):[];
   const filtered=enabledProducts.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
   useEffect(()=>{setLangFiles(languages.map(()=>null));},[languages.length]);
@@ -250,14 +252,15 @@ function NewLabelWizard({config,map,setMap}){
     setLoading(true);setSelectedLabel(0);setSelectedBox(0);
     api.findTemplate({product,languages,packagingSize:size}).then(info=>{setTmplInfo(info);setLoading(false);});
   },[step]);
-  const reset=()=>{setStep(1);setProduct(null);setLanguages([]);setSize(null);setTmplInfo(null);setResult(null);setSearch('');setSelectedLabel(0);setSelectedBox(0);setReviewTab('template');setLangFiles([]);setTransFiles([]);setSku('');};
+  const reset=()=>{setStep(1);setProduct(null);setLanguages([]);setSize(null);setTmplInfo(null);setResult(null);setSearch('');setSelectedLabel(0);setSelectedBox(0);setReviewTab('template');setLangFiles([]);setTransFiles([]);setSku('');setUfi('');};
   const toggleLang=code=>setLanguages(prev=>prev.includes(code)?prev.filter(c=>c!==code):prev.length<3?[...prev,code]:prev);
   const handleCreate=async()=>{
     setLoading(true);
     const cfg=await api.loadConfig();
     const labelPath=tmplInfo?.labels?.[selectedLabel]?.file?.path??null;
     const boxPath=tmplInfo?.boxes?.[selectedBox]?.file?.path??null;
-    const footerValues=sku?{sku,manufacturer_value:''}:null;
+    const isPAM=productCfg?.category==='PAM';
+  const footerValues=(sku||ufi)?{sku,ufi:isPAM?ufi:'',manufacturer_value:''}:null;
     const res=await api.createLabel({product,languages,packagingSize:size,config:cfg,labelTemplatePath:labelPath,boxTemplatePath:boxPath,langFiles,footerValues});
     if(res.success&&res.results?.length){const m=await api.loadMap();setMap(m);}
     setResult(res);setLoading(false);setStep(6);
@@ -332,7 +335,7 @@ function NewLabelWizard({config,map,setMap}){
                 onDoubleClick={()=>{setProduct(p.name);setStep(2);}}>
                 <div className="product-name">{p.name}</div>
                 <div style={{display:'flex',gap:6,marginTop:4}}>
-                  <span style={{padding:'1px 7px',borderRadius:3,fontSize:10,fontFamily:"'DM Mono',monospace",background:p.category==='PAM'?'rgba(255,159,71,.15)':'rgba(75,191,255,.15)',color:p.category==='PAM'?'var(--pam)':'var(--mo)'}}>{p.category}</span>
+                  <span style={{padding:'1px 7px',borderRadius:3,fontSize:10,fontFamily:"'DM Mono',monospace",background:p.category==='PAM'?'rgba(255,159,71,.15)':p.category==='CE'?'rgba(80,200,140,.15)':'rgba(75,191,255,.15)',color:p.category==='PAM'?'var(--pam)':p.category==='CE'?'#3dbf7a':'var(--mo)'}}>{p.category}</span>
                   {p.acidic&&<span className="acidic-badge">acidic</span>}
                 </div>
               </button>
@@ -422,23 +425,34 @@ function NewLabelWizard({config,map,setMap}){
               <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>
                 Label details <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--text3)'}}>— optional, written to FOOTER_* stories</span>
               </div>
-              <div>
-                <div style={{fontSize:11,color:'var(--text2)',marginBottom:4}}>SKU code</div>
-                <input className="input" type="text" value={sku} onChange={e=>setSku(e.target.value)} placeholder="e.g. BNS-5KG-001" style={{width:'100%',boxSizing:'border-box'}}/>
+              <div style={{display:'grid',gridTemplateColumns:productCfg?.category==='PAM'?'1fr 1fr':'1fr',gap:10}}>
+                <div>
+                  <div style={{fontSize:11,color:'var(--text2)',marginBottom:4}}>SKU code</div>
+                  <input className="input" type="text" value={sku} onChange={e=>setSku(e.target.value)} placeholder="e.g. FNS-1L-001" style={{width:'100%',boxSizing:'border-box'}}/>
+                </div>
+                {productCfg?.category==='PAM'&&(
+                  <div>
+                    <div style={{fontSize:11,color:'var(--text2)',marginBottom:4}}>UFI code</div>
+                    <input className="input" type="text" value={ufi} onChange={e=>setUfi(e.target.value)} placeholder="e.g. XXXX-XXXX-XXXX-XXXX" style={{width:'100%',boxSizing:'border-box'}}/>
+                  </div>
+                )}
               </div>
             </div>
           </div>
           <div className="flex mt-4 gap-2" style={{flexShrink:0,alignItems:'center'}}>
             <button className="btn btn-ghost" onClick={()=>setStep(2)}>&larr; Back</button>
-            {!sku&&<span style={{fontSize:11,color:'var(--warn,#d97706)',marginLeft:'auto',marginRight:8}}>&#9888; No SKU provided</span>}
-            <button className="btn btn-primary" style={sku?{marginLeft:'auto'}:{}} onClick={()=>setStep(4)}>Next &rarr;</button>
+            {(()=>{
+              const missing=[...(!sku?['SKU']:[]),...(productCfg?.category==='PAM'&&!ufi?['UFI']:[])];
+              return missing.length>0&&<span style={{fontSize:11,color:'var(--warn,#d97706)',marginLeft:'auto',marginRight:8}}>&#9888; No {missing.join(' or ')} provided</span>;
+            })()}
+            <button className="btn btn-primary" style={(sku&&(productCfg?.category!=='PAM'||ufi))?{marginLeft:'auto'}:{}} onClick={()=>setStep(4)}>Next &rarr;</button>
           </div>
         </div>
       )}
       {step===4&&(
         <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
           <div style={{flexShrink:0,marginBottom:12,fontSize:13,color:'var(--text2)'}}>
-            {productCfg?.category==='PAM'?'PAM (Adjuvant)':'MO (Biostimulant)'}
+            {productCfg?.category==='PAM'?'PAM (Adjuvant)':productCfg?.category==='CE'?'CE (Crop Enhancement)':'MO (Biostimulant)'}
             {productCfg?.acidic&&<span className="acidic-badge" style={{marginLeft:8}}>acidic sizing</span>}
           </div>
           <div className="size-grid" style={{flexShrink:0}}>
@@ -603,15 +617,18 @@ function Information({config,map}){
   const [assets,setAssets]=useState({});
   const [fileType,setFileType]=useState('all');
   const [showWip,setShowWip]=useState('all');
+  const [catFilter,setCatFilter]=useState('all');
   useEffect(()=>{
     api.getColors().then(r=>setColors(r.colors||{}));
     api.listTranslations().then(r=>{if(r?.files)setTransFiles(r.files);});
     api.checkAssets().then(r=>{if(r&&!r.error)setAssets(r);});
   },[]);
-  const enabledProds=(config?.products??[]).filter(p=>p.enabled);
-  const filteredProds=search?enabledProds.filter(p=>p.name.toLowerCase().includes(search.toLowerCase())):enabledProds;
+  const enabledProds=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
+  const filteredProds=enabledProds
+    .filter(p=>catFilter==='all'||p.category===catFilter)
+    .filter(p=>!search||p.name.toLowerCase().includes(search.toLowerCase()));
   const prodCfg=selected?(config?.products??[]).find(p=>p.name===selected):null;
-  const dimKey=prodCfg?(prodCfg.category==='PAM'?(prodCfg.acidic?'PAM_acidic':'PAM_normal'):'MO'):null;
+  const dimKey=prodCfg?(prodCfg.category==='PAM'?(prodCfg.acidic?'PAM_acidic':'PAM_normal'):prodCfg.category==='CE'?'CE':'MO'):null;
   const swatches=selected?(colors[selected]||Array(6).fill('#808080')):[];
   const allFiles=map?.files??[];
   const prodFiles=allFiles.filter(f=>f.product===selected);
@@ -623,7 +640,7 @@ function Information({config,map}){
   }).filter(f=>showWip==='wip'?f.wip:showWip==='done'?!f.wip:true);
   const prodTrans=transFiles.filter(f=>f.product===selected);
   const prodAssets=selected?(assets[selected]||{}):{};
-  const dimRows=[['PAM_normal','PAM Normal','var(--pam)'],['PAM_acidic','PAM Acidic','#f5a623'],['MO','MO','var(--mo)']];
+  const dimRows=[['PAM_normal','PAM Normal','var(--pam)'],['PAM_acidic','PAM Acidic','#f5a623'],['MO','MO','var(--mo)'],['CE','CE','#3dbf7a']];
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
       {/* Product search + list */}
@@ -636,15 +653,23 @@ function Information({config,map}){
           {selected&&(
             <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--accent-dim)',border:'1px solid var(--accent)',borderRadius:'var(--radius-sm)',padding:'5px 10px',flexShrink:0,maxWidth:200}}>
               <span style={{fontSize:12,color:'var(--accent)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selected}</span>
-              <button onClick={()=>{setSelected(null);setSearch('');}} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:14,padding:0,lineHeight:1,flexShrink:0}}>✕</button>
+              <button onClick={()=>{setSelected(null);setSearch('');setCatFilter('all');}} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:14,padding:0,lineHeight:1,flexShrink:0}}>✕</button>
             </div>
           )}
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:3,maxHeight:136,overflowY:'auto',paddingRight:4}}>
+        <div style={{display:'flex',gap:5,marginBottom:6,flexWrap:'wrap'}}>
+          {[['all','All'],['MO','MO'],['PAM','PAM'],['CE','CE']].map(([v,l])=>(
+            <button key={v} onClick={()=>{setCatFilter(v);setSelected(null);}}
+              style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'2px 9px',borderRadius:10,border:'1px solid '+(catFilter===v?(v==='PAM'?'var(--pam)':v==='CE'?'#3dbf7a':'var(--mo)'):'var(--border2)'),background:catFilter===v?(v==='PAM'?'rgba(255,159,71,.15)':v==='CE'?'rgba(80,200,140,.15)':'rgba(75,191,255,.15)'):'transparent',color:catFilter===v?(v==='PAM'?'var(--pam)':v==='CE'?'#3dbf7a':'var(--mo)'):'var(--text3)',cursor:'pointer',transition:'all .15s'}}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:3,maxHeight:120,overflowY:'auto',paddingRight:4}}>
           {filteredProds.map(p=>(
             <button key={p.name} onClick={()=>setSelected(selected===p.name?null:p.name)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:'var(--radius-sm)',border:'1px solid '+(selected===p.name?'var(--accent)':'var(--border2)'),background:selected===p.name?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',textAlign:'left',transition:'all .15s',flexShrink:0}}>
               <span style={{flex:1,fontSize:12,fontWeight:selected===p.name?500:400,color:selected===p.name?'var(--accent)':'var(--text)'}}>{p.name}</span>
-              <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 5px',borderRadius:2,background:p.category==='PAM'?'rgba(255,159,71,.15)':'rgba(75,191,255,.15)',color:p.category==='PAM'?'var(--pam)':'var(--mo)'}}>{p.category}{p.acidic?' / acidic':''}</span>
+              <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 5px',borderRadius:2,background:p.category==='PAM'?'rgba(255,159,71,.15)':p.category==='CE'?'rgba(80,200,140,.15)':'rgba(75,191,255,.15)',color:p.category==='PAM'?'var(--pam)':p.category==='CE'?'#3dbf7a':'var(--mo)'}}>{p.category}{p.acidic?' / acidic':''}</span>
             </button>
           ))}
           {filteredProds.length===0&&<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>No products match.</div>}
@@ -857,7 +882,7 @@ function LabelsBrowser({map,config}){
           <span className="search-icon">&#128269;</span>
           <input className="input" placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)}/>
         </div>
-        {[['all','All',null],['PAM','PAM','active-pam'],['MO','MO','active-mo']].map(([v,lbl,cls])=>(
+        {[['all','All',null],['PAM','PAM','active-pam'],['MO','MO','active-mo'],['CE','CE','active-ce']].map(([v,lbl,cls])=>(
           <button key={v} className={'filter-chip '+(filterCat===v?(cls||'active'):'')} onClick={()=>setFilterCat(v)}>{lbl}</button>
         ))}
         <div style={{width:'100%',display:'flex',gap:8,flexWrap:'wrap',marginTop:6}}>
@@ -1021,6 +1046,7 @@ function Resources({config,saveConfig}){
   const [colorsSaved,setColorsSaved]=useState(false);
   const [swatchEdit,setSwatchEdit]=useState(null);
   const swatchPopRef=useRef(null);
+  const saveTimerRef=useRef(null);
   useEffect(()=>{
     if(!swatchEdit)return;
     const h=e=>{if(swatchPopRef.current&&!swatchPopRef.current.contains(e.target))setSwatchEdit(null);};
@@ -1029,143 +1055,172 @@ function Resources({config,saveConfig}){
   },[swatchEdit]);
   const [resDirs,setResDirs]=useState(null);
   const [assets,setAssets]=useState({});
-  const [newProd,setNewProd]=useState({name:'',category:'MO',acidic:false});
   useEffect(()=>{
     api.getColors().then(r=>setColors(r.colors||{}));
     api.getResourceDirs().then(r=>setResDirs(r));
     api.checkAssets().then(r=>{if(r&&!r.error)setAssets(r);});
   },[]);
   const save=async()=>{await saveConfig(cfg);setSaved(true);setTimeout(()=>setSaved(false),2000);};
-  const saveColorsFn=async()=>{await api.saveColors(colors);setColorsSaved(true);setTimeout(()=>setColorsSaved(false),2000);};
+  const [syncing,setSyncing]=useState(false);
+  const [syncMsg,setSyncMsg]=useState('');
+  const syncFromDefault=async()=>{
+    setSyncing(true);
+    const r=await api.syncProducts();
+    setSyncing(false);
+    if(r.ok){
+      setCfg(r.config);
+      const added=r.added?.length??0, updated=r.updated?.length??0;
+      setSyncMsg(added||updated?`Added ${added}, updated ${updated}`:'Already up to date');
+      setTimeout(()=>setSyncMsg(''),3000);
+    }
+  };
   const updP=(i,k,v)=>{const p=[...cfg.products];p[i]={...p[i],[k]:v};setCfg({...cfg,products:p});};
   const remP=i=>setCfg({...cfg,products:cfg.products.filter((_,j)=>j!==i)});
-  const addP=()=>{if(!newProd.name.trim())return;setCfg({...cfg,products:[...cfg.products,{...newProd,enabled:true}]});setNewProd({name:'',category:'MO',acidic:false});};
   const setColor=(name,idx,hex)=>{
     const curr=((colors||{})[name]||Array(6).fill('#808080')).slice();
     curr[idx]=hex;
-    setColors({...colors,[name]:curr});
+    const newColors={...colors,[name]:curr};
+    setColors(newColors);
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current=setTimeout(()=>{api.saveColors(newColors);setColorsSaved(true);setTimeout(()=>setColorsSaved(false),2000);},900);
   };
-  const moProds=(cfg?.products??[]).filter(p=>p.category==='MO');
-  const pamProds=(cfg?.products??[]).filter(p=>p.category==='PAM');
+  const exportConfig=()=>{
+    fetch('/api/export').then(r=>r.blob()).then(blob=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='etiketas_export.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  };
+  const moProds=(cfg?.products??[]).filter(p=>p.category==='MO').sort((a,b)=>a.name.localeCompare(b.name));
+  const pamProds=(cfg?.products??[]).filter(p=>p.category==='PAM').sort((a,b)=>a.name.localeCompare(b.name));
+  const ceProds=(cfg?.products??[]).filter(p=>p.category==='CE').sort((a,b)=>a.name.localeCompare(b.name));
   return(
-    <div>
-      <p className="section-title">Directories</p>
-      <div className="flex gap-3" style={{marginBottom:24}}>
-        {[['logos','Logos'],['qrcodes','QR Codes'],['templates','Templates']].map(([key,label])=>(
-          <button key={key} className="btn btn-folder" onClick={()=>resDirs&&api.openFile(resDirs[key])}>
-            <Icon.Folder/>{label}
+    <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
+      <div style={{flexShrink:0}}>
+        <div className="flex gap-3" style={{marginBottom:16,alignItems:'center'}}>
+          {[['logos','Logos'],['qrcodes','QR Codes'],['templates','Templates']].map(([key,label])=>(
+            <button key={key} className="btn btn-folder" onClick={()=>resDirs&&api.openFile(resDirs[key])}>
+              <Icon.Folder/>{label}
+            </button>
+          ))}
+          <button className="btn btn-ghost" style={{marginLeft:'auto'}} onClick={exportConfig} title="Download current product list and colors as a JSON file">
+            ↓ Export config
           </button>
-        ))}
-      </div>
-      <div className="settings-tabs">
-        {['products','colors'].map(t=>(
-          <button key={t} className={`settings-tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>
-            {t.charAt(0).toUpperCase()+t.slice(1)}
-          </button>
-        ))}
+        </div>
+        <div className="settings-tabs" style={{marginBottom:0}}>
+          {['products','colors'].map(t=>(
+            <button key={t} className={`settings-tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>
+              {t.charAt(0).toUpperCase()+t.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
       {tab==='products'&&(
-        <div>
-          <p className="section-title">Product list</p>
-          <div style={{maxHeight:460,overflowY:'auto',paddingRight:4}}>
-            {cfg.products.map((p,i)=>(
-              <div key={p.name+i} className="product-list-item">
-                <label className="toggle"><input type="checkbox" checked={p.enabled} onChange={e=>updP(i,'enabled',e.target.checked)}/><span className="toggle-slider"/></label>
-                <span style={{flex:1,fontSize:13,fontWeight:500,color:p.enabled?'var(--text)':'var(--text3)'}}>{p.name}</span>
-                {(()=>{const a=assets[p.name]||{};return(<div style={{display:'flex',gap:4}}>
-                  {[['QR',a.qr],['Logo',a.logo]].map(([lbl,ok])=>(
-                    <span key={lbl} title={ok?lbl+' found':lbl+' missing'} style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'2px 6px',borderRadius:10,background:ok?'rgba(108,181,113,.15)':'rgba(255,255,255,.05)',color:ok?'var(--success)':'var(--text3)',border:'1px solid '+(ok?'rgba(108,181,113,.3)':'var(--border2)')}}>{lbl}</span>
-                  ))}
-                </div>);})()}
-                {p.category==='PAM'&&(
-                  <label className="flex items-center gap-2" style={{cursor:'pointer',fontSize:12,color:'var(--text3)'}}>
-                    <input type="checkbox" checked={p.acidic} onChange={e=>updP(i,'acidic',e.target.checked)} style={{accentColor:'var(--pam)'}}/>acidic
-                  </label>
-                )}
-                <div className="pill-toggle">
-                  {['PAM','MO'].map(cat=>(
-                    <button key={cat} className={`pill-btn ${p.category===cat?'active-'+cat.toLowerCase():'inactive'}`} onClick={()=>updP(i,'category',cat)}>{cat}</button>
-                  ))}
+        <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
+          <p className="section-title" style={{flexShrink:0}}>Product list</p>
+          <div style={{flex:1,overflowY:'auto',paddingRight:4,minHeight:0}}>
+            {(()=>{
+              const indexed=[...cfg.products.map((p,i)=>({...p,_i:i}))];
+              const renderItem=p=>{const i=p._i;return(
+                <div key={p.name+i} className="product-list-item">
+                  <label className="toggle"><input type="checkbox" checked={p.enabled} onChange={e=>updP(i,'enabled',e.target.checked)}/><span className="toggle-slider"/></label>
+                  <span style={{flex:1,fontSize:13,fontWeight:500,color:p.enabled?'var(--text)':'var(--text3)'}}>{p.name}</span>
+                  {(()=>{const a=assets[p.name]||{};return(<div style={{display:'flex',gap:4}}>
+                    {[['QR',a.qr],['Logo',a.logo]].map(([lbl,ok])=>(
+                      <span key={lbl} title={ok?lbl+' found':lbl+' missing'} style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'2px 6px',borderRadius:10,background:ok?'rgba(108,181,113,.15)':'rgba(255,255,255,.05)',color:ok?'var(--success)':'var(--text3)',border:'1px solid '+(ok?'rgba(108,181,113,.3)':'var(--border2)')}}>{lbl}</span>
+                    ))}
+                  </div>);})()}
+                  {p.category==='PAM'&&(
+                    <label className="flex items-center gap-2" style={{cursor:'pointer',fontSize:12,color:'var(--text3)'}}>
+                      <input type="checkbox" checked={p.acidic} onChange={e=>updP(i,'acidic',e.target.checked)} style={{accentColor:'var(--pam)'}}/>acidic
+                    </label>
+                  )}
+                  <div className="pill-toggle">
+                    {['PAM','MO','CE'].map(cat=>(
+                      <button key={cat} className={`pill-btn ${p.category===cat?'active-'+cat.toLowerCase():'inactive'}`} onClick={()=>updP(i,'category',cat)}>{cat}</button>
+                    ))}
+                  </div>
+                  <button className="btn btn-danger btn-sm" onClick={()=>remP(i)}>x</button>
                 </div>
-                <button className="btn btn-danger btn-sm" onClick={()=>remP(i)}>x</button>
-              </div>
-            ))}
+              );};
+              const catColor=cat=>cat==='PAM'?'var(--pam)':cat==='CE'?'#3dbf7a':'var(--mo)';
+              return [['MO',indexed.filter(p=>p.category==='MO')],['PAM',indexed.filter(p=>p.category==='PAM')],['CE',indexed.filter(p=>p.category==='CE')]].map(([cat,prods])=>(
+                <div key={cat} style={{marginBottom:16}}>
+                  <div style={{fontSize:11,fontWeight:500,color:catColor(cat),textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
+                  {prods.sort((a,b)=>a.name.localeCompare(b.name)).map(renderItem)}
+                </div>
+              ));
+            })()}
           </div>
-          <div className="divider"/>
-          <p className="section-title">Add product</p>
-          <div className="flex gap-2 items-center">
-            <input className="input" placeholder="Product name" value={newProd.name} onChange={e=>setNewProd({...newProd,name:e.target.value})} style={{flex:1}}/>
-            <div className="pill-toggle">
-              {['PAM','MO'].map(cat=>(
-                <button key={cat} className={`pill-btn ${newProd.category===cat?'active-'+cat.toLowerCase():'inactive'}`} onClick={()=>setNewProd({...newProd,category:cat})}>{cat}</button>
-              ))}
-            </div>
-            <button className="btn btn-primary" onClick={addP}>Add</button>
-          </div>
-          <div className="flex mt-4 gap-2 items-center">
-            <button className="btn btn-primary" onClick={save}>Save changes</button>
+          <div className="flex gap-2 items-center" style={{flexShrink:0,paddingTop:12}}>
+            <button className="btn btn-ghost" onClick={syncFromDefault} disabled={syncing} title="Add new products from default_config.json without changing existing ones or your colors">
+              {syncing?<><div className="spinner" style={{width:12,height:12}}/>Syncing...</>:'↻ Sync from default'}
+            </button>
+            {syncMsg&&<span style={{fontSize:12,color:'var(--success)'}}>{syncMsg}</span>}
+            <button className="btn btn-primary" style={{marginLeft:'auto'}} onClick={save}>Save changes</button>
             {saved&&<span style={{fontSize:12,color:'var(--success)'}}>Saved</span>}
           </div>
         </div>
       )}
       {tab==='colors'&&(
-        <div>
-          <p className="section-title">Color schemes</p>
-          <p style={{fontSize:12,color:'var(--text3)',marginBottom:16}}>Click a swatch to change its color. Up to 6 per product — will be used to apply swatches in IDML files.</p>
+        <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
+          <p className="section-title" style={{flexShrink:0,marginBottom:4}}>Color schemes</p>
+          <p style={{fontSize:12,color:'var(--text3)',marginBottom:12,flexShrink:0}}>Click a swatch to change its color. Colors save automatically. Up to 6 per product.</p>
           {colors===null?(
             <div className="spinner" style={{width:20,height:20}}/>
           ):(
             <>
-              {[['MO',moProds],['PAM',pamProds]].map(([cat,prods])=>(
-                <div key={cat} style={{marginBottom:24}}>
-                  <div style={{fontSize:11,fontWeight:500,color:cat==='PAM'?'var(--pam)':'var(--mo)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
-                  {prods.map(p=>{
-                    const swatches=(colors[p.name]||Array(6).fill('#808080'));
-                    return(
-                      <div key={p.name} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,padding:'8px 12px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)'}}>
-                        <span style={{flex:1,fontSize:13,fontWeight:500}}>{p.name}</span>
-                        <div style={{display:'flex',gap:6}}>
-                          {Array.from({length:6},(_,idx)=>{
-                            const hex=swatches[idx]||'#808080';
-                            const isEd=swatchEdit?.prod===p.name&&swatchEdit?.idx===idx;
-                            return(
-                              <div key={idx} style={{position:'relative',flexShrink:0}}>
-                                <div
-                                  title={'Swatch '+(idx+1)+': '+hex}
-                                  onClick={()=>setSwatchEdit(isEd?null:{prod:p.name,idx,val:hex})}
-                                  style={{width:28,height:28,borderRadius:5,background:hex,border:'2px solid '+(isEd?'var(--accent)':'var(--border2)'),cursor:'pointer'}}
-                                />
-                                {isEd&&(
-                                  <div ref={swatchPopRef} style={{position:'absolute',bottom:36,left:'50%',transform:'translateX(-50%)',zIndex:200,background:'var(--surface3)',border:'1px solid var(--border2)',borderRadius:8,padding:10,display:'flex',flexDirection:'column',gap:8,boxShadow:'0 4px 20px rgba(0,0,0,.5)',minWidth:130}}>
-                                    <input type="color" value={swatchEdit.val}
-                                      onChange={e=>{const v=e.target.value;setSwatchEdit(s=>({...s,val:v}));setColor(p.name,idx,v);}}
-                                      style={{width:'100%',height:36,border:'1px solid var(--border2)',borderRadius:4,cursor:'pointer',padding:2,background:'var(--surface2)'}}
-                                    />
-                                    <input type="text" className="input"
-                                      value={swatchEdit.val}
-                                      style={{fontFamily:"'DM Mono',monospace",fontSize:12,padding:'5px 8px',textTransform:'uppercase',textAlign:'center'}}
-                                      onChange={e=>{
-                                        let v=e.target.value;
-                                        if(v&&!v.startsWith('#'))v='#'+v;
-                                        setSwatchEdit(s=>({...s,val:v}));
-                                        if(/^#[0-9A-Fa-f]{6}$/.test(v))setColor(p.name,idx,v);
-                                      }}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+              <div style={{flex:1,overflowY:'auto',paddingRight:4,minHeight:0}}>
+                {[['MO',moProds],['PAM',pamProds]].map(([cat,prods])=>(
+                  <div key={cat} style={{marginBottom:24}}>
+                    <div style={{fontSize:11,fontWeight:500,color:cat==='PAM'?'var(--pam)':'var(--mo)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
+                    {prods.map(p=>{
+                      const swatches=(colors[p.name]||Array(6).fill('#808080'));
+                      return(
+                        <div key={p.name} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,padding:'8px 12px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)'}}>
+                          <span style={{flex:1,fontSize:13,fontWeight:500}}>{p.name}</span>
+                          <div style={{display:'flex',gap:6}}>
+                            {Array.from({length:6},(_,idx)=>{
+                              const hex=swatches[idx]||'#808080';
+                              const isEd=swatchEdit?.prod===p.name&&swatchEdit?.idx===idx;
+                              return(
+                                <div key={idx} style={{position:'relative',flexShrink:0}}>
+                                  <div
+                                    title={'Swatch '+(idx+1)+': '+hex}
+                                    onClick={()=>setSwatchEdit(isEd?null:{prod:p.name,idx,val:hex})}
+                                    style={{width:28,height:28,borderRadius:5,background:hex,border:'2px solid '+(isEd?'var(--accent)':'var(--border2)'),cursor:'pointer'}}
+                                  />
+                                  {isEd&&(
+                                    <div ref={swatchPopRef} style={{position:'absolute',bottom:36,left:'50%',transform:'translateX(-50%)',zIndex:200,background:'var(--surface3)',border:'1px solid var(--border2)',borderRadius:8,padding:10,display:'flex',flexDirection:'column',gap:8,boxShadow:'0 4px 20px rgba(0,0,0,.5)',minWidth:130}}>
+                                      <input type="color" value={swatchEdit.val}
+                                        onChange={e=>{const v=e.target.value;setSwatchEdit(s=>({...s,val:v}));setColor(p.name,idx,v);}}
+                                        style={{width:'100%',height:36,border:'1px solid var(--border2)',borderRadius:4,cursor:'pointer',padding:2,background:'var(--surface2)'}}
+                                      />
+                                      <input type="text" className="input"
+                                        value={swatchEdit.val}
+                                        style={{fontFamily:"'DM Mono',monospace",fontSize:12,padding:'5px 8px',textTransform:'uppercase',textAlign:'center'}}
+                                        onChange={e=>{
+                                          let v=e.target.value;
+                                          if(v&&!v.startsWith('#'))v='#'+v;
+                                          setSwatchEdit(s=>({...s,val:v}));
+                                          if(/^#[0-9A-Fa-f]{6}$/.test(v))setColor(p.name,idx,v);
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-              <div className="flex mt-4 gap-2 items-center">
-                <button className="btn btn-primary" onClick={saveColorsFn}>Save colors</button>
-                {colorsSaved&&<span style={{fontSize:12,color:'var(--success)'}}>Saved</span>}
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
+              {colorsSaved&&<span style={{fontSize:12,color:'var(--success)',flexShrink:0,paddingTop:8}}>Colors saved</span>}
             </>
           )}
         </div>

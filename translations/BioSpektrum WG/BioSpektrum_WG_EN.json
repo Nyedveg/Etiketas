@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "product": "BioSpektrum WG",
+    "code": "EN",
+    "flag": "🇬🇧",
+    "file": "BioSpektrum_WG_EN.json"
+  },
+  "lang1": {
+    "header": "EN | Plant biostimulant",
+    "bullet1": "Transforms main nutritional elements to plant accessible forms (microbiological fixation and release), as well as improves their absorption.",
+    "bullet2": "Biostimulation – plants grow faster, become stronger, which results in optimal yield.",
+    "bullet3": "Improves plant resistance to drought and other stress factors.",
+    "bullet4": "Improves soil microbiological activity."
+  },
+  "composition": {
+    "label": "Product composition:",
+    "value": "Paenibacillus azotofixans, Bacillus megaterium, Bacillus mucilaginous, Bacillus mycoides, Mycorrhizal fungus (Serendipita indica), vitamins. Total concentration – no less than 1.0 × 10⁹ CFU/g."
+  },
+  "carriers": {
+    "label": "Carrier material:",
+    "value": "dextrose."
+  },
+  "form": {
+    "label": "Product form:",
+    "value": "powder."
+  },
+  "usage": {
+    "label": "Application rate:",
+    "value": "0.25 – 1 kg/ha. For more specific information scan the QR code."
+  },
+  "preparation": {
+    "label": "Preparation of the solution:",
+    "value": "Mix the required amount of BioSpektrum WG with 200–400 l of water and spray / water the soil. We recommend that you dissolve the required amount of BioSpektrum WG in a separate container with water before filling into the sprayer."
+  },
+  "storage": {
+    "label": "Storage conditions:",
+    "value": "The product, in tightly closed, original packaging, can be stored for 24 months at a temperature of +5 – +30 °C in a dry, well-ventilated place, protected from direct sunlight."
+  },
+  "box_section": {
+    "header": "EN | Plant biostimulant"
+  },
+  "origin": {
+    "label": "Country of origin:",
+    "value": "Lithuania."
+  },
+  "manufacturer": {
+    "label": "Manufacturer:",
+    "value": "UAB \"Nando\", Europos av. 39, LT-46329 Kaunas, Lithuania"
+  },
+  "footer": {
+    "sku_label": "SKU code",
+    "mfg_date_label": "Date of manufacture",
+    "batch_label": "Batch number",
+    "exp_date_label": "Shelf life",
+    "exp_date_value": "24 months since manufacturing date",
+    "manufacturer_label": "Manufacturer"
+  }
+}

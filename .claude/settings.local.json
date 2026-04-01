@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(python3 -c \"import os; print\\(os.path.exists\\(r''C:\\\\Users\\\\DanieliusNiedzviegas\\\\OneDrive - Nando, UAB\\\\Documents\\\\Coders\\\\Etiketas''\\)\\)\")",
-      "Bash(python -u -c \":*)"
+      "Bash(python -u -c \":*)",
+      "Bash(python fix_idml_templates.py)",
+      "Bash(python3 -c \":*)",
+      "Read(//c/Windows/System32/spool/drivers/color/**)"
     ]
   }
 }

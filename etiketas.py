@@ -45,7 +45,7 @@ RE_MON  = re.compile(r'^(0[1-9]|1[0-2])$')
 RE_BLEED= re.compile(r'\+2mm', re.I)
 RE_PACK_AMT = re.compile(r'^(\d+(?:\.\d+)?)(kg|g|l|ml)', re.I)
 RE_NLANG    = re.compile(r'^(\d+)LANG$', re.I)
-RE_TMPL     = re.compile(r'^(MO|PAM)_TEMPLATE_', re.I)
+RE_TMPL     = re.compile(r'^(MO|PAM|CE)_TEMPLATE_', re.I)
 
 def parse_stem(stem):
     clean = RE_BLEED.sub('', stem)
@@ -161,7 +161,7 @@ def score_template_detail(entry, target, products):
     if not is_box and entry.get("dimensions") != target.get("dimensions"):
         return -1, []
     # For labels: reject if template packaging explicitly doesn't match (e.g. 5kg template ≠ 0.25kg request)
-    if not is_box and entry.get("packaging") and target.get("packaging") and entry.get("packaging") != target.get("packaging"):
+    if not is_box and entry.get("packaging") and target.get("packaging") and entry.get("packaging").lower() != target.get("packaging").lower():
         return -1, []
     s = 0
     # Templates store lang_count directly; regular files use len(languages)
@@ -257,27 +257,87 @@ def scan_labels():
     return files
 
 # ── Brand color application ────────────────────────────────────────────────────
-def _hex_to_rgb(hex_color: str):
+
+# ICC-based sRGB → CMYK transform (Coated FOGRA39, relative colorimetric).
+# Built once at import time; falls back to None if Pillow/lcms2 is unavailable.
+_ICC_TRANSFORM = None
+def _get_icc_transform():
+    global _ICC_TRANSFORM
+    if _ICC_TRANSFORM is not None:
+        return _ICC_TRANSFORM
+    try:
+        from PIL import ImageCms
+        import os
+        _PROFILE_DIRS = [
+            r"C:\Windows\System32\spool\drivers\color",
+            r"C:\Program Files\Common Files\Adobe\Color\Profiles\Recommended",
+            r"C:\Program Files\Common Files\Adobe\Color\Profiles",
+        ]
+        srgb_path  = next((os.path.join(d, f) for d in _PROFILE_DIRS
+                           for f in ("sRGB Color Space Profile.icm", "sRGB.icc")
+                           if os.path.exists(os.path.join(d, f))), None)
+        fogra_path = next((os.path.join(d, "CoatedFOGRA39.icc") for d in _PROFILE_DIRS
+                           if os.path.exists(os.path.join(d, "CoatedFOGRA39.icc"))), None)
+        if srgb_path and fogra_path:
+            _ICC_TRANSFORM = ImageCms.buildTransform(
+                srgb_path, fogra_path, "RGB", "CMYK",
+                renderingIntent=ImageCms.Intent.RELATIVE_COLORIMETRIC,
+            )
+    except Exception:
+        pass
+    return _ICC_TRANSFORM
+
+def _hex_to_cmyk(hex_color: str):
+    """Convert sRGB hex to CMYK using the Coated FOGRA39 ICC profile (the same
+    profile InDesign uses by default for European print work).  This ensures
+    the values round-trip correctly when InDesign converts the swatch back to
+    RGB.  Falls back to a gamma-corrected mathematical conversion if the ICC
+    profiles are not available on the system."""
     h = hex_color.lstrip('#')
-    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    r_int, g_int, b_int = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+    transform = _get_icc_transform()
+    if transform is not None:
+        try:
+            from PIL import Image, ImageCms
+            img  = Image.new("RGB", (1, 1), (r_int, g_int, b_int))
+            cmyk = ImageCms.applyTransform(img, transform).getpixel((0, 0))
+            return tuple(round(v / 255 * 100, 2) for v in cmyk)
+        except Exception:
+            pass
+
+    # Fallback: gamma-corrected mathematical conversion
+    def linearize(v: int) -> float:
+        c = v / 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    rl, gl, bl = linearize(r_int), linearize(g_int), linearize(b_int)
+    c_raw, m_raw, y_raw = 1.0 - rl, 1.0 - gl, 1.0 - bl
+    k = min(c_raw, m_raw, y_raw)
+    if k >= 1.0:
+        return 0.0, 0.0, 0.0, 100.0
+    d = 1.0 - k
+    return (round((c_raw - k) / d * 100, 2),
+            round((m_raw - k) / d * 100, 2),
+            round((y_raw - k) / d * 100, 2),
+            round(k * 100, 2))
 
 def _update_graphic_xml(xml_text: str, colors: list) -> str:
     """Replace ColorValue/Space for Brand1–Brand6 swatches in Graphic.xml content."""
-    def make_replacer(r, g, b):
-        def replacer(m):
-            s = m.group(0)
-            s = re.sub(r'\bColorValue="[^"]*"', f'ColorValue="{r} {g} {b}"', s)
-            s = re.sub(r'\bSpace="[^"]*"', 'Space="RGB"', s)
+    def make_replacer(c, m, y, k):
+        def replacer(match):
+            s = match.group(0)
+            s = re.sub(r'\bColorValue="[^"]*"', f'ColorValue="{c} {m} {y} {k}"', s)
+            s = re.sub(r'\bSpace="[^"]*"', 'Space="CMYK"', s)
             return s
         return replacer
     for i, hex_color in enumerate(colors[:6], 1):
         try:
-            r, g, b = _hex_to_rgb(hex_color)
+            c, m, y, k = _hex_to_cmyk(hex_color)
         except Exception:
             continue
         xml_text = re.sub(
             r'<Color\b[^>]*\bName="Brand' + str(i) + r'"[^>]*/?>',
-            make_replacer(r, g, b),
+            make_replacer(c, m, y, k),
             xml_text,
         )
     return xml_text
@@ -357,6 +417,8 @@ def apply_footer_content(idml_path: Path, translations: list, footer_values: dic
     story_content = {
         'FOOTER_SKU_LABEL':          [combined_label('footer', 'sku_label')],
         'FOOTER_SKU_VALUE':          [footer_values.get('sku', '')],
+        'FOOTER_UFI_LABEL':          [combined_label('footer', 'ufi_label')],
+        'FOOTER_UFI_VALUE':          [footer_values.get('ufi', '')],
         'FOOTER_MFG_DATE_LABEL':     [combined_label('footer', 'mfg_date_label')],
         'FOOTER_MFG_DATE_VALUE':     [''],
         'FOOTER_BATCH_LABEL':        [combined_label('footer', 'batch_label')],
@@ -436,7 +498,12 @@ def create_label(product, languages, packaging_size, config, label_template_path
 
     category = prod_cfg["category"]
     acidic   = prod_cfg.get("acidic", False)
-    dim_key  = ("PAM_acidic" if acidic else "PAM_normal") if category=="PAM" else "MO"
+    if category == "PAM":
+        dim_key = "PAM_acidic" if acidic else "PAM_normal"
+    elif category == "CE":
+        dim_key = "CE"
+    else:
+        dim_key = "MO"
     dims     = config["dimensions"].get(dim_key, {}).get(packaging_size)
     if not dims:
         raise ValueError(f"No dimensions for {dim_key}/{packaging_size}")
@@ -805,6 +872,30 @@ class Handler(BaseHTTPRequestHandler):
             if not cfg:
                 cfg = load_json(DEFAULT_CFG_FILE, {})
                 save_json(CFG_FILE, cfg)
+            else:
+                # Merge any new products/languages/dimensions/sizes from default that are missing in saved cfg
+                default = load_json(DEFAULT_CFG_FILE, {})
+                default_prod_map = {p["name"]: p for p in default.get("products", [])}
+                saved_names = {p["name"] for p in cfg.get("products", [])}
+                new_prods = [p for p in default.get("products", []) if p["name"] not in saved_names]
+                if new_prods:
+                    cfg["products"] = cfg.get("products", []) + new_prods
+                # Sync category/acidic for existing products if they differ from default
+                for p in cfg.get("products", []):
+                    dp = default_prod_map.get(p["name"])
+                    if dp:
+                        if p.get("category") != dp.get("category"):
+                            p["category"] = dp["category"]
+                        if p.get("acidic") != dp.get("acidic"):
+                            p["acidic"] = dp["acidic"]
+                saved_lang_codes = {l["code"] for l in cfg.get("languages", [])}
+                new_langs = [l for l in default.get("languages", []) if l["code"] not in saved_lang_codes]
+                if new_langs:
+                    cfg["languages"] = cfg.get("languages", []) + new_langs
+                for key in ("dimensions", "packagingSizes", "boxMultipliers"):
+                    for k, v in default.get(key, {}).items():
+                        if k not in cfg.get(key, {}):
+                            cfg.setdefault(key, {})[k] = v
             self.send_json(cfg)
 
         elif path == "/api/map":
@@ -890,6 +981,17 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/config/default":
             self.send_json(load_json(DEFAULT_CFG_FILE, load_json(DEFAULT_CFG_FILE, {})))
 
+        elif path == "/api/export":
+            cfg    = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
+            colors = load_json(COLORS_FILE, {})
+            payload = json.dumps({"config": cfg, "colors": colors}, ensure_ascii=False, indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition", 'attachment; filename="etiketas_export.json"')
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
         else:
             self.send_response(404); self.end_headers()
 
@@ -913,7 +1015,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"labels":[],"boxes":[],"dimensions":None}); return
             category = prod_cfg["category"]
             acidic   = prod_cfg.get("acidic",False)
-            dim_key  = ("PAM_acidic" if acidic else "PAM_normal") if category=="PAM" else "MO"
+            if category == "PAM":
+                dim_key = "PAM_acidic" if acidic else "PAM_normal"
+            elif category == "CE":
+                dim_key = "CE"
+            else:
+                dim_key = "MO"
             dims     = cfg["dimensions"].get(dim_key,{}).get(size)
             map_data = load_json(MAP_FILE, {"files":[]})
             files    = map_data.get("files",[])
@@ -967,6 +1074,28 @@ class Handler(BaseHTTPRequestHandler):
             default = load_json(DEFAULT_CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
             save_json(CFG_FILE, default)
             self.send_json({"ok": True, "config": default})
+
+        elif path == "/api/config/sync_products":
+            default = load_json(DEFAULT_CFG_FILE, {})
+            current = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
+            current_names = {p["name"] for p in current.get("products", [])}
+            added = []
+            for p in default.get("products", []):
+                if p["name"] not in current_names:
+                    current["products"].append(p)
+                    added.append(p["name"])
+            # Also apply any name/category corrections for existing entries
+            updated = []
+            default_map = {p["name"]: p for p in default.get("products", [])}
+            for p in current.get("products", []):
+                if p["name"] in default_map:
+                    canonical = default_map[p["name"]]
+                    if p.get("category") != canonical.get("category") or p.get("acidic") != canonical.get("acidic"):
+                        p["category"] = canonical["category"]
+                        p["acidic"]   = canonical["acidic"]
+                        updated.append(p["name"])
+            save_json(CFG_FILE, current)
+            self.send_json({"ok": True, "config": current, "added": added, "updated": updated})
 
         elif path == "/api/apply_qr":
             try:
