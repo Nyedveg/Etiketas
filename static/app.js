@@ -15,6 +15,7 @@ const api = {
   createLabel:  (p)   => api.post('/api/create', p),
   openFile:        (p)   => api.post('/api/open',   {path:p}),
   revealFile:      (p)   => api.post('/api/reveal', {path:p}),
+  trashFile:       (p)   => api.post('/api/trash',  {path:p}),
   getLabelsDir:    ()    => api.get('/api/labels_dir').then(r=>r.path),
   resetConfig:     ()    => api.post('/api/config/reset', {}),
   syncProducts:    ()    => api.post('/api/config/sync_products', {}),
@@ -33,6 +34,7 @@ const api = {
 
 const scoreLabel = s => s>=75?{label:'Perfect',cls:'score-high'}:s>=50?{label:'Good',cls:'score-med'}:{label:'Fallback',cls:'score-low'};
 
+
 const Icon = {
   Dashboard:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>,
   New:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm1 6h2a1 1 0 010 2H9v2a1 1 0 01-2 0V9H5a1 1 0 010-2h2V5a1 1 0 012 0v2z"/></svg>,
@@ -44,13 +46,38 @@ const Icon = {
   Check:()=><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M13.3 3.3a1 1 0 00-1.4 0L6 9.2 4.1 7.3a1 1 0 00-1.4 1.4l2.6 2.6a1 1 0 001.4 0l6.6-6.6a1 1 0 000-1.4z"/></svg>,
   Resources:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.2 0-1.1.9-2 2-2h2a3 3 0 000-6A7 7 0 008 1zM5 8a1 1 0 110-2 1 1 0 010 2zm0-3a1 1 0 110-2 1 1 0 010 2zm3-2a1 1 0 110-2 1 1 0 010 2zm3 2a1 1 0 110-2 1 1 0 010 2z"/></svg>,
   Info:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zM7.25 6.5h1.5v1h-1.5v-1zm0 2h1.5v3.5h-1.5V8.5z"/></svg>,
+  Trash:()=><svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M6 2a1 1 0 00-1 1H3.5a.5.5 0 000 1H4v8a1 1 0 001 1h6a1 1 0 001-1V4h.5a.5.5 0 000-1H11a1 1 0 00-1-1H6zm0 1h4v1H6V3zM5 5h6v7H5V5zm1.5 1a.5.5 0 00-.5.5v4a.5.5 0 001 0v-4a.5.5 0 00-.5-.5zm3 0a.5.5 0 00-.5.5v4a.5.5 0 001 0v-4a.5.5 0 00-.5-.5z"/></svg>,
 };
+
+function FileActions({path, onDeleted}){
+  const handleDelete=async()=>{
+    if(!window.confirm('Do you REALLY want to delete this file?\n\nIt will be moved to the Recycle Bin.'))return;
+    const r=await api.trashFile(path);
+    if(r.ok){if(onDeleted)onDeleted(path);}
+    else alert('Could not delete file:\n'+(r.error||'Unknown error'));
+  };
+  return(
+    <div className="file-actions">
+      <button className="btn btn-ghost btn-indesign btn-sm" title="Open file" onClick={()=>api.openFile(path)}><Icon.Open/></button>
+      <button className="btn btn-folder btn-sm" title="Show in Explorer" onClick={()=>api.revealFile(path)}><Icon.Folder/></button>
+      <button className="btn btn-sm" title="Move to Recycle Bin" style={{background:'rgba(255,77,109,.08)',color:'var(--danger)',border:'1px solid rgba(255,77,109,.2)'}} onClick={handleDelete}><Icon.Trash/></button>
+    </div>
+  );
+}
 
 function App(){
   const [view,setView]=useState('dashboard');
   const [config,setConfig]=useState(null);
   const [map,setMap]=useState(null);
   const [loading,setLoading]=useState(true);
+  const [lightMode,setLightMode]=useState(()=>localStorage.getItem('etiketas-theme')==='light');
+  const toggleTheme=()=>setLightMode(v=>{
+    const next=!v;
+    document.documentElement.setAttribute('data-theme',next?'light':'dark');
+    if(!next)document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('etiketas-theme',next?'light':'dark');
+    return next;
+  });
   useEffect(()=>{
     Promise.all([api.loadConfig(),api.loadMap()]).then(([cfg,m])=>{setConfig(cfg);setMap(m);setLoading(false);});
   },[]);
@@ -69,12 +96,14 @@ function App(){
       <div className="main">
         <Topbar view={view} map={map}/>
         <div className={`content${view==='resources'?' no-scroll':''}`}>
-          {view==='dashboard'&&<Dashboard map={map} config={config} setView={setView} refreshMap={refreshMap}/>}
-          {view==='new'&&<NewLabelWizard config={config} map={map} setMap={setMap}/>}
-          {view==='browse'&&<LabelsBrowser map={map} config={config}/>}
-          {view==='settings'&&<Settings config={config} saveConfig={saveConfig} setConfig={setConfig} refreshMap={refreshMap}/>}
-          {view==='resources'&&<Resources config={config} saveConfig={saveConfig}/>}
-          {view==='information'&&<Information config={config} map={map}/>}
+          <div key={view} className="view-anim" style={{height:'100%'}}>
+            {view==='dashboard'&&<Dashboard map={map} setMap={setMap} config={config} setView={setView} refreshMap={refreshMap}/>}
+            {view==='new'&&<NewLabelWizard config={config} map={map} setMap={setMap}/>}
+            {view==='browse'&&<LabelsBrowser map={map} setMap={setMap} config={config}/>}
+            {view==='settings'&&<Settings config={config} saveConfig={saveConfig} setConfig={setConfig} refreshMap={refreshMap} lightMode={lightMode} toggleTheme={toggleTheme}/>}
+            {view==='resources'&&<Resources config={config} saveConfig={saveConfig}/>}
+            {view==='information'&&<Information config={config} map={map} setMap={setMap}/>}
+          </div>
         </div>
       </div>
     </div>
@@ -131,7 +160,8 @@ function Topbar({view,map}){
   );
 }
 
-function Dashboard({map,config,setView,refreshMap}){
+function Dashboard({map,setMap,config,setView,refreshMap}){
+  const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
   const [ingesting,setIngesting]=useState(false);
   const [ingestResult,setIngestResult]=useState(null);
   const [templateCount,setTemplateCount]=useState(null);
@@ -207,10 +237,7 @@ function Dashboard({map,config,setView,refreshMap}){
                       {!f.print_file&&(f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(100,180,255,.15)',color:'#64B4FF'}}>IDML</span>:<span className="topbar-badge" style={{background:'rgba(224,64,160,.15)',color:'#E040A0'}}>InDesign</span>)}
                       {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
                     </div></td>
-                    <td><div className="file-actions">
-                      <button className="btn btn-ghost btn-indesign btn-sm" title="Open in InDesign" onClick={()=>api.openFile(f.path)}><Icon.Open/></button>
-                      <button className="btn btn-folder btn-sm" title="Show in Explorer" onClick={()=>api.revealFile(f.path)}><Icon.Folder/></button>
-                    </div></td>
+                    <td><FileActions path={f.path} onDeleted={removeFile}/></td>
                   </tr>
                 ))}
               </tbody>
@@ -223,6 +250,7 @@ function Dashboard({map,config,setView,refreshMap}){
 }
 
 function NewLabelWizard({config,map,setMap}){
+  const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
   const [step,setStep]=useState(1);
   const [product,setProduct]=useState(null);
   const [languages,setLanguages]=useState([]);
@@ -241,7 +269,7 @@ function NewLabelWizard({config,map,setMap}){
   const enabledProducts=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
   const enabledLangs=(config?.languages??[]).filter(l=>l.enabled);
   const productCfg=product?config.products.find(p=>p.name===product):null;
-  const dimKey=productCfg?(productCfg.category==='PAM'?(productCfg.acidic?'PAM_acidic':'PAM_normal'):productCfg.category==='CE'?'CE':'MO'):null;
+  const dimKey=productCfg?(()=>{const{category,acidic,unit}=productCfg;const u=unit||(category==='PAM'?'L':'kg');if(category==='PAM')return acidic?'PAM_acidic':'PAM_normal';if(category==='CE')return u==='kg'?'CE_solid':'CE';return u==='L'?'MO_liquid':'MO';})():null;
   const sizes=dimKey?(config?.packagingSizes?.[dimKey]??[]):[];
   const filtered=enabledProducts.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
   useEffect(()=>{setLangFiles(languages.map(()=>null));},[languages.length]);
@@ -513,10 +541,7 @@ function NewLabelWizard({config,map,setMap}){
                           <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.languages?.join(' . ')??'--'}</td>
                           <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
                           <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
-                          <td><div className="file-actions">
-                            <button className="btn btn-ghost btn-indesign btn-sm" onClick={()=>api.openFile(f.path)}><Icon.Open/></button>
-                            <button className="btn btn-folder btn-sm" onClick={()=>api.revealFile(f.path)}><Icon.Folder/></button>
-                          </div></td>
+                          <td><FileActions path={f.path} onDeleted={removeFile}/></td>
                         </tr>
                       ))}
                     </tbody>
@@ -609,7 +634,8 @@ function NewLabelWizard({config,map,setMap}){
     </div>
   );
 }
-function Information({config,map}){
+function Information({config,map,setMap}){
+  const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
   const [selected,setSelected]=useState(null);
   const [search,setSearch]=useState('');
   const [colors,setColors]=useState({});
@@ -628,7 +654,7 @@ function Information({config,map}){
     .filter(p=>catFilter==='all'||p.category===catFilter)
     .filter(p=>!search||p.name.toLowerCase().includes(search.toLowerCase()));
   const prodCfg=selected?(config?.products??[]).find(p=>p.name===selected):null;
-  const dimKey=prodCfg?(prodCfg.category==='PAM'?(prodCfg.acidic?'PAM_acidic':'PAM_normal'):prodCfg.category==='CE'?'CE':'MO'):null;
+  const dimKey=prodCfg?(()=>{const{category,acidic,unit}=prodCfg;const u=unit||(category==='PAM'?'L':'kg');if(category==='PAM')return acidic?'PAM_acidic':'PAM_normal';if(category==='CE')return u==='kg'?'CE_solid':'CE';return u==='L'?'MO_liquid':'MO';})():null;
   const swatches=selected?(colors[selected]||Array(6).fill('#808080')):[];
   const allFiles=map?.files??[];
   const prodFiles=allFiles.filter(f=>f.product===selected);
@@ -640,7 +666,7 @@ function Information({config,map}){
   }).filter(f=>showWip==='wip'?f.wip:showWip==='done'?!f.wip:true);
   const prodTrans=transFiles.filter(f=>f.product===selected);
   const prodAssets=selected?(assets[selected]||{}):{};
-  const dimRows=[['PAM_normal','PAM Normal','var(--pam)'],['PAM_acidic','PAM Acidic','#f5a623'],['MO','MO','var(--mo)'],['CE','CE','#3dbf7a']];
+  const dimRows=[['PAM_normal','PAM Normal','var(--pam)'],['PAM_acidic','PAM Acidic','#f5a623'],['MO','MO','var(--mo)'],['MO_liquid','MO Liquid','var(--mo)'],['CE','CE','#3dbf7a'],['CE_solid','CE Solid','#3dbf7a']];
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
       {/* Product search + list */}
@@ -670,6 +696,7 @@ function Information({config,map}){
             <button key={p.name} onClick={()=>setSelected(selected===p.name?null:p.name)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:'var(--radius-sm)',border:'1px solid '+(selected===p.name?'var(--accent)':'var(--border2)'),background:selected===p.name?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',textAlign:'left',transition:'all .15s',flexShrink:0}}>
               <span style={{flex:1,fontSize:12,fontWeight:selected===p.name?500:400,color:selected===p.name?'var(--accent)':'var(--text)'}}>{p.name}</span>
               <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 5px',borderRadius:2,background:p.category==='PAM'?'rgba(255,159,71,.15)':p.category==='CE'?'rgba(80,200,140,.15)':'rgba(75,191,255,.15)',color:p.category==='PAM'?'var(--pam)':p.category==='CE'?'#3dbf7a':'var(--mo)'}}>{p.category}{p.acidic?' / acidic':''}</span>
+              {p.unit&&<span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 5px',borderRadius:2,background:'rgba(255,255,255,.05)',color:'var(--text3)'}}>{p.unit}</span>}
             </button>
           ))}
           {filteredProds.length===0&&<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>No products match.</div>}
@@ -703,34 +730,35 @@ function Information({config,map}){
           </div>
         </div>
       ):(
-        <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
-          {/* Gradient header bar */}
-          <div style={{height:52,borderRadius:'var(--radius-sm)',marginBottom:10,background:`linear-gradient(135deg, ${swatches.map(c=>c||'#808080').join(', ')})`,border:'1px solid var(--border2)',boxShadow:'0 2px 16px rgba(0,0,0,.35)',display:'flex',alignItems:'center',paddingLeft:16,gap:10}}>
-            <span style={{fontWeight:600,fontSize:15,color:'#fff',textShadow:'0 1px 4px rgba(0,0,0,.5)',fontFamily:"'Syne',sans-serif"}}>{selected}</span>
-            {prodCfg&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.75)',background:'rgba(0,0,0,.25)',padding:'2px 8px',borderRadius:3}}>{prodCfg.category}{prodCfg.acidic?' · acidic':''}</span>}
-            <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.6)',paddingRight:16}}>{prodFiles.length} files</span>
+        <div key={selected} style={{flex:1,overflowY:'auto',paddingRight:4}}>
+          {/* Gradient header bar — reveals left→right */}
+          <div className="info-gradient-bar" style={{height:56,borderRadius:'var(--radius-sm)',marginBottom:10,background:`linear-gradient(135deg, ${swatches.map(c=>c||'#808080').join(', ')})`,border:'1px solid var(--border2)',boxShadow:'0 4px 24px rgba(0,0,0,.45)',display:'flex',alignItems:'center',paddingLeft:16,gap:10,position:'relative',overflow:'hidden'}}>
+            <div className="info-bar-shimmer"/>
+            <span style={{fontWeight:700,fontSize:15,color:'#fff',textShadow:'0 1px 6px rgba(0,0,0,.6)',fontFamily:"'Syne',sans-serif",letterSpacing:'-.01em'}}>{selected}</span>
+            {prodCfg&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.8)',background:'rgba(0,0,0,.3)',padding:'2px 9px',borderRadius:10,backdropFilter:'blur(4px)'}}>{prodCfg.category}{prodCfg.acidic?' · acidic':''}{prodCfg.unit?' · '+prodCfg.unit:''}</span>}
+            <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.55)',paddingRight:16}}>{prodFiles.length} file{prodFiles.length!==1?'s':''}</span>
           </div>
-          {/* Swatch row */}
+          {/* Swatch row — staggered pop-in */}
           <div style={{display:'flex',gap:5,marginBottom:12}}>
             {swatches.map((c,i)=>(
-              <div key={i} title={`Brand${i+1}: ${c||'#808080'}`} style={{flex:1,height:14,borderRadius:3,background:c||'#808080',border:'1px solid var(--border2)'}}/>
+              <div key={i} title={`Brand${i+1}: ${c||'#808080'}`} className="info-swatch" style={{flex:1,height:16,borderRadius:4,background:c||'#808080',border:'1px solid rgba(255,255,255,.08)',animationDelay:`${i*45}ms`,boxShadow:`0 2px 8px ${(c||'#808080')}55`}}/>
             ))}
           </div>
           {/* 2-column: label sizes (left) | assets + translations (right) */}
           <div style={{display:'grid',gridTemplateColumns:'55% 1fr',gap:12,marginBottom:14,alignItems:'start'}}>
             {/* Left: label sizes with dimming */}
-            <div>
+            <div className="info-card" style={{animationDelay:'80ms'}}>
               <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Label sizes</div>
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {dimRows.map(([key,label,clr])=>{
+                {dimRows.map(([key,label,clr],ri)=>{
                   const isActive=dimKey===key;
                   const entries=Object.entries(config?.dimensions?.[key]??{});
                   return(
-                    <div key={key} style={{opacity:isActive?1:.35,transition:'opacity .2s'}}>
+                    <div key={key} style={{opacity:isActive?1:.3,transition:'opacity .25s',animation:`fadeSlideUp .3s ease ${120+ri*40}ms both`}}>
                       <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:isActive?clr:'var(--text3)',marginBottom:5,fontWeight:isActive?600:400,textTransform:'uppercase',letterSpacing:'.04em'}}>{label}</div>
                       <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
                         {entries.map(([sz,dims])=>(
-                          <div key={sz} style={{background:isActive?'var(--surface2)':'var(--surface3)',border:'1px solid '+(isActive?clr:'var(--border2)'),borderRadius:5,padding:'5px 10px',textAlign:'center',minWidth:60}}>
+                          <div key={sz} className="dim-badge" style={{background:isActive?'var(--surface2)':'var(--surface3)',border:'1px solid '+(isActive?clr:'var(--border2)'),borderRadius:5,padding:'5px 10px',textAlign:'center',minWidth:60,transition:'all .2s',boxShadow:isActive?`0 0 0 0 ${clr}00`:'none'}}>
                             <div style={{fontSize:12,fontWeight:600,fontFamily:"'Syne',sans-serif",color:isActive?'var(--text)':'var(--text3)'}}>{sz}</div>
                             <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:1}}>{dims}</div>
                           </div>
@@ -743,7 +771,7 @@ function Information({config,map}){
             </div>
             {/* Right: assets + translations stacked */}
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
-              <div className="card" style={{padding:'12px 14px'}}>
+              <div className="card info-card" style={{padding:'12px 14px',animationDelay:'140ms'}}>
                 <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>Assets</div>
                 {[['QR Code',prodAssets.qr,'qrcodes'],['Logo',prodAssets.logo,'logos']].map(([label,ok,dirKey])=>(
                   <div key={label} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
@@ -753,7 +781,7 @@ function Information({config,map}){
                   </div>
                 ))}
               </div>
-              <div className="card" style={{padding:'12px 14px'}}>
+              <div className="card info-card" style={{padding:'12px 14px',animationDelay:'200ms'}}>
                 <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>
                   Translations <span style={{color:'var(--accent)',fontFamily:"'DM Mono',monospace"}}>{prodTrans.length}</span>
                 </div>
@@ -784,7 +812,7 @@ function Information({config,map}){
             </div>
           </div>
           {/* File browser – full width */}
-          <div>
+          <div className="info-card" style={{animationDelay:'260ms'}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
               <span style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em'}}>
                 Files <span style={{color:'var(--text2)',fontFamily:"'DM Mono',monospace"}}>{filteredFiles.length}/{prodFiles.length}</span>
@@ -818,8 +846,7 @@ function Information({config,map}){
                           {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
                         </div></td>
                         <td><div className="file-actions">
-                          <button className="btn btn-ghost btn-indesign btn-sm" onClick={()=>api.openFile(f.path)}><Icon.Open/></button>
-                          <button className="btn btn-folder btn-sm" onClick={()=>api.revealFile(f.path)}><Icon.Folder/></button>
+                          <FileActions path={f.path} onDeleted={removeFile}/>
                         </div></td>
                       </tr>
                     ))}
@@ -833,7 +860,8 @@ function Information({config,map}){
     </div>
   );
 }
-function LabelsBrowser({map,config}){
+function LabelsBrowser({map,setMap,config}){
+  const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
   const [search,setSearch]=useState('');
   const [filterCat,setFilterCat]=useState('all');
   const [filterLabelType,setFilterLabelType]=useState('all');
@@ -852,10 +880,11 @@ function LabelsBrowser({map,config}){
     if(filterSize==='all')return true;
     const p=(f.packaging??'').toLowerCase();
     if(!p)return filterSize==='other';
-    if(filterSize==='1kg-1l')return p.startsWith('1kg')||p.startsWith('1l');
-    if(filterSize==='5kg-5l')return p.startsWith('5kg')||p.startsWith('5l');
-    if(filterSize==='0.25')return p.startsWith('0.25');
-    if(filterSize==='other')return !p.startsWith('1kg')&&!p.startsWith('1l')&&!p.startsWith('5kg')&&!p.startsWith('5l')&&!p.startsWith('0.25');
+    if(filterSize==='1kg-1l')return p.startsWith('1kg')||p.toLowerCase().startsWith('1l');
+    if(filterSize==='5kg-5l')return p.startsWith('5kg')||p.toLowerCase().startsWith('5l');
+    if(filterSize==='250g')return p.startsWith('250g');
+    if(filterSize==='500g')return p.startsWith('500g');
+    if(filterSize==='other')return !p.startsWith('1kg')&&!p.toLowerCase().startsWith('1l')&&!p.startsWith('5kg')&&!p.toLowerCase().startsWith('5l')&&!p.startsWith('250g')&&!p.startsWith('500g');
     return true;
   };
   const filtered=files.filter(f=>{
@@ -894,7 +923,7 @@ function LabelsBrowser({map,config}){
             <button key={v} className={'filter-chip '+(filterFileType===v?(cls||'active'):'')} onClick={()=>setFilterFileType(v)}>{lbl}</button>
           ))}
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-          {[['all','All sizes',null],['1kg-1l','1kg / 1L',null],['5kg-5l','5kg / 5L',null],['0.25','0.25kg / 0.25L',null],['other','Other',null]].map(([v,lbl])=>(
+          {[['all','All sizes',null],['1kg-1l','1kg / 1L',null],['5kg-5l','5kg / 5L',null],['250g','250g',null],['500g','500g',null],['other','Other',null]].map(([v,lbl])=>(
             <button key={v} className={'filter-chip '+(filterSize===v?'active':'')} onClick={()=>setFilterSize(v)}>{lbl}</button>
           ))}
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
@@ -931,7 +960,7 @@ function LabelsBrowser({map,config}){
                   <tr key={f.filename+f.path}>
                     <td className="path-cell" title={f.path}>{f.filename}</td>
                     <td style={{fontSize:13}}>{f.product??<span style={{color:'var(--text3)'}}>--</span>}</td>
-                    <td>{cat!=='?'&&<span className="topbar-badge" style={{background:cat==='PAM'?'rgba(255,159,71,.15)':'rgba(75,191,255,.15)',color:cat==='PAM'?'var(--pam)':'var(--mo)'}}>{cat}</span>}</td>
+                    <td>{cat!=='?'&&<span className="topbar-badge" style={{background:cat==='PAM'?'rgba(255,159,71,.15)':cat==='CE'?'rgba(80,200,140,.15)':'rgba(75,191,255,.15)',color:cat==='PAM'?'var(--pam)':cat==='CE'?'#3dbf7a':'var(--mo)'}}>{cat}</span>}</td>
                     <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.languages?.join(' . ')??'--'}</td>
                     <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
                     <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
@@ -940,10 +969,7 @@ function LabelsBrowser({map,config}){
                       {!f.print_file&&(f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(100,180,255,.15)',color:'#64B4FF'}}>IDML</span>:<span className="topbar-badge" style={{background:'rgba(224,64,160,.15)',color:'#E040A0'}}>InDesign</span>)}
                       {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
                     </div></td>
-                    <td><div className="file-actions">
-                      <button className="btn btn-ghost btn-indesign btn-sm" title="Open in InDesign" onClick={()=>api.openFile(f.path)}><Icon.Open/></button>
-                      <button className="btn btn-folder btn-sm" title="Show in Explorer" onClick={()=>api.revealFile(f.path)}><Icon.Folder/></button>
-                    </div></td>
+                    <td><FileActions path={f.path} onDeleted={removeFile}/></td>
                   </tr>
                 );
               })}
@@ -954,7 +980,7 @@ function LabelsBrowser({map,config}){
     </div>
   );
 }
-function Settings({config,saveConfig,setConfig,refreshMap}){
+function Settings({config,saveConfig,setConfig,refreshMap,lightMode,toggleTheme}){
   const [tab,setTab]=useState('languages');
   const [cfg,setCfg]=useState(config);
   const [saved,setSaved]=useState(false);
@@ -983,7 +1009,7 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
         ))}
       </div>
       {tab==='languages'&&(
-        <div>
+        <div className="view-anim">
           <p className="section-title">Language list</p>
           <div style={{maxHeight:440,overflowY:'auto',paddingRight:4}}>
             {cfg.languages.map((l,i)=>(
@@ -1007,7 +1033,18 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
         </div>
       )}
       {tab==='general'&&(
-        <div>
+        <div className="view-anim">
+          <p className="section-title">Appearance</p>
+          <div className="card mb-3" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div>
+              <div style={{fontSize:13,color:'var(--text)',fontWeight:500,marginBottom:2}}>Light mode</div>
+              <div style={{fontSize:12,color:'var(--text3)'}}>Switch between dark and light interface theme</div>
+            </div>
+            <label className="toggle" style={{flexShrink:0}}>
+              <input type="checkbox" checked={lightMode} onChange={toggleTheme}/>
+              <span className="toggle-slider"/>
+            </label>
+          </div>
           <p className="section-title">File Map</p>
           <div className="card mb-3">
             <p style={{fontSize:13,color:'var(--text2)',marginBottom:12}}>
@@ -1118,7 +1155,7 @@ function Resources({config,saveConfig}){
         </div>
       </div>
       {tab==='products'&&(
-        <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
+        <div className="view-anim" style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
           <p className="section-title" style={{flexShrink:0}}>Product list</p>
           <div style={{flex:1,overflowY:'auto',paddingRight:4,minHeight:0}}>
             {(()=>{
@@ -1137,6 +1174,11 @@ function Resources({config,saveConfig}){
                       <input type="checkbox" checked={p.acidic} onChange={e=>updP(i,'acidic',e.target.checked)} style={{accentColor:'var(--pam)'}}/>acidic
                     </label>
                   )}
+                  <div className="pill-toggle">
+                    {['L','kg'].map(u=>(
+                      <button key={u} className={`pill-btn ${p.unit===u?'active-mo':'inactive'}`} onClick={()=>updP(i,'unit',u)}>{u}</button>
+                    ))}
+                  </div>
                   <div className="pill-toggle">
                     {['PAM','MO','CE'].map(cat=>(
                       <button key={cat} className={`pill-btn ${p.category===cat?'active-'+cat.toLowerCase():'inactive'}`} onClick={()=>updP(i,'category',cat)}>{cat}</button>
@@ -1165,7 +1207,7 @@ function Resources({config,saveConfig}){
         </div>
       )}
       {tab==='colors'&&(
-        <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
+        <div className="view-anim" style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
           <p className="section-title" style={{flexShrink:0,marginBottom:4}}>Color schemes</p>
           <p style={{fontSize:12,color:'var(--text3)',marginBottom:12,flexShrink:0}}>Click a swatch to change its color. Colors save automatically. Up to 6 per product.</p>
           {colors===null?(
@@ -1173,9 +1215,9 @@ function Resources({config,saveConfig}){
           ):(
             <>
               <div style={{flex:1,overflowY:'auto',paddingRight:4,minHeight:0}}>
-                {[['MO',moProds],['PAM',pamProds]].map(([cat,prods])=>(
+                {[['MO',moProds],['PAM',pamProds],['CE',ceProds]].map(([cat,prods])=>prods.length===0?null:(
                   <div key={cat} style={{marginBottom:24}}>
-                    <div style={{fontSize:11,fontWeight:500,color:cat==='PAM'?'var(--pam)':'var(--mo)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
+                    <div style={{fontSize:11,fontWeight:500,color:cat==='PAM'?'var(--pam)':cat==='CE'?'#3dbf7a':'var(--mo)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
                     {prods.map(p=>{
                       const swatches=(colors[p.name]||Array(6).fill('#808080'));
                       return(

@@ -44,6 +44,7 @@ RE_YEAR = re.compile(r'^(19|20)\d{2}$')
 RE_MON  = re.compile(r'^(0[1-9]|1[0-2])$')
 RE_BLEED= re.compile(r'\+2mm', re.I)
 RE_PACK_AMT = re.compile(r'^(\d+(?:\.\d+)?)(kg|g|l|ml)', re.I)
+RE_DIMS_MM  = re.compile(r'^(\d+x\d+)(?:mm)?$', re.I)
 RE_NLANG    = re.compile(r'^(\d+)LANG$', re.I)
 RE_TMPL     = re.compile(r'^(MO|PAM|CE)_TEMPLATE_', re.I)
 
@@ -104,8 +105,10 @@ def parse_template_stem(stem):
     lang_count = int(RE_NLANG.match(parts[lang_idx]).group(1))
     idx = lang_idx + 1
     dims = None
-    if idx < len(parts) and RE_DIMS.match(parts[idx]):
-        dims = parts[idx]; idx += 1
+    if idx < len(parts):
+        dm = RE_DIMS_MM.match(parts[idx])
+        if dm:
+            dims = dm.group(1); idx += 1
     date = None
     if idx < len(parts) and RE_YEAR.match(parts[idx]):
         yr = parts[idx]; idx += 1
@@ -115,6 +118,21 @@ def parse_template_stem(stem):
             date = yr
     return {"category": category, "packaging": packaging, "lang_count": lang_count,
             "dimensions": dims, "date": date, "deze": deze}
+
+
+def _norm_packaging(p: str) -> str:
+    """Normalise packaging to kg/L so 250g==0.25kg, 500ml==0.5L, etc."""
+    if not p:
+        return ''
+    m = RE_PACK_AMT.match(p.strip())
+    if not m:
+        return p.lower().strip()
+    amt, unit = float(m.group(1)), m.group(2).lower()
+    if unit == 'g':
+        return f"{amt/1000:g}kg"
+    if unit == 'ml':
+        return f"{amt/1000:g}l"
+    return f"{amt:g}{unit}"
 
 def scan_templates():
     """Scan ~/template for IDML files using the template naming convention."""
@@ -161,7 +179,7 @@ def score_template_detail(entry, target, products):
     if not is_box and entry.get("dimensions") != target.get("dimensions"):
         return -1, []
     # For labels: reject if template packaging explicitly doesn't match (e.g. 5kg template ≠ 0.25kg request)
-    if not is_box and entry.get("packaging") and target.get("packaging") and entry.get("packaging").lower() != target.get("packaging").lower():
+    if not is_box and entry.get("packaging") and target.get("packaging") and _norm_packaging(entry["packaging"]) != _norm_packaging(target["packaging"]):
         return -1, []
     s = 0
     # Templates store lang_count directly; regular files use len(languages)
@@ -498,10 +516,13 @@ def create_label(product, languages, packaging_size, config, label_template_path
 
     category = prod_cfg["category"]
     acidic   = prod_cfg.get("acidic", False)
+    unit     = prod_cfg.get("unit", "L" if category == "PAM" else "kg")
     if category == "PAM":
         dim_key = "PAM_acidic" if acidic else "PAM_normal"
     elif category == "CE":
-        dim_key = "CE"
+        dim_key = "CE_solid" if unit == "kg" else "CE"
+    elif category == "MO":
+        dim_key = "MO_liquid" if unit == "L" else "MO"
     else:
         dim_key = "MO"
     dims     = config["dimensions"].get(dim_key, {}).get(packaging_size)
@@ -820,6 +841,31 @@ def reveal_path(p):
     else:
         subprocess.Popen(["xdg-open", str(Path(p).parent)])
 
+def trash_path(p):
+    """Move a file to the system Recycle Bin / Trash (non-destructive delete)."""
+    path = Path(p)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {p}")
+    if os.name == "nt":
+        # Use VB FileSystem via PowerShell — always available on Windows
+        ps_cmd = (
+            "Add-Type -AssemblyName Microsoft.VisualBasic; "
+            f"[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile("
+            f"'{str(path)}', 'OnlyErrorDialogs', 'SendToRecycleBin')"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "Trash failed")
+    elif os.uname().sysname == "Darwin":
+        subprocess.run(["osascript", "-e",
+            f'tell app "Finder" to delete POSIX file "{path}"'], check=True)
+    else:
+        # freedesktop trash-cli fallback
+        subprocess.run(["gio", "trash", str(path)], check=True)
+
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -1015,10 +1061,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"labels":[],"boxes":[],"dimensions":None}); return
             category = prod_cfg["category"]
             acidic   = prod_cfg.get("acidic",False)
+            unit     = prod_cfg.get("unit","L" if category=="PAM" else "kg")
             if category == "PAM":
                 dim_key = "PAM_acidic" if acidic else "PAM_normal"
             elif category == "CE":
-                dim_key = "CE"
+                dim_key = "CE_solid" if unit=="kg" else "CE"
+            elif category == "MO":
+                dim_key = "MO_liquid" if unit=="L" else "MO"
             else:
                 dim_key = "MO"
             dims     = cfg["dimensions"].get(dim_key,{}).get(size)
@@ -1065,6 +1114,20 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok":True})
             except Exception as e:
                 self.send_json({"ok":False,"error":str(e)})
+
+        elif path == "/api/trash":
+            try:
+                p = body.get("path", "")
+                if p and not Path(p).is_absolute():
+                    p = str(LABELS_DIR / p)
+                trash_path(p)
+                # Remove from map if present
+                map_data = load_json(MAP_FILE, {"files": []})
+                map_data["files"] = [f for f in map_data.get("files", []) if f.get("path") != p]
+                save_json(MAP_FILE, map_data)
+                self.send_json({"ok": True})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)})
 
         elif path == "/api/colors/save":
             save_json(COLORS_FILE, body)
