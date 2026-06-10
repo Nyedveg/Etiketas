@@ -18,9 +18,10 @@ LABELS_DIR = Path.home() / "Documents" / "Etiketas"
 QR_DIR          = BASE_DIR / "qrcodes"
 TEMPLATE_DIR    = BASE_DIR / "templates"
 TRANSLATIONS_DIR = BASE_DIR / "translations"
-MAP_FILE   = LABELS_DIR / "labels_map.json"
+MAP_FILE     = LABELS_DIR / "labels_map.json"
 CFG_FILE     = LABELS_DIR / "app_config.json"
 COLORS_FILE  = LABELS_DIR / "colors_config.json"
+HISTORY_FILE = LABELS_DIR / "creation_history.json"
 DEFAULT_CFG_FILE = BASE_DIR / "default_config.json"
 PORT       = 7842
 
@@ -35,6 +36,13 @@ def load_json(p, fallback=None):
 def save_json(p, data):
     Path(p).parent.mkdir(parents=True, exist_ok=True)
     Path(p).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def append_history(entry):
+    history = load_json(HISTORY_FILE, [])
+    history.insert(0, entry)
+    if len(history) > 200:
+        history = history[:200]
+    save_json(HISTORY_FILE, history)
 
 # ── Filename parser ────────────────────────────────────────────────────────────
 RE_PACK = re.compile(r'^\d+(\.\d+)?(kg|g|l|ml)(x\d+)?$', re.I)
@@ -508,7 +516,7 @@ def list_translations():
     return files
 
 # ── Label creation ─────────────────────────────────────────────────────────────
-def create_label(product, languages, packaging_size, config, label_template_path=None, box_template_path=None, lang_files=None, footer_values=None):
+def create_label(product, languages, packaging_size, config, label_template_path=None, box_template_path=None, lang_files=None, footer_values=None, skip_label=False, skip_box=False):
     prods    = config.get("products", [])
     prod_cfg = next((p for p in prods if p["name"]==product), None)
     if not prod_cfg:
@@ -535,14 +543,19 @@ def create_label(product, languages, packaging_size, config, label_template_path
 
     # Resolve templates before computing names (templates may be absolute-path entries)
     all_pool = all_files + scan_templates()
-    if label_template_path:
+    if skip_label:
+        label_tmpl, label_score = None, 0
+    elif label_template_path:
         label_tmpl  = next((f for f in all_pool if f.get("path") == label_template_path), None)
         label_score = 0
     else:
         label_tmpl, label_score = find_template(all_files,
             {"product":product,"category":category,"dimensions":dims,
              "lang_count":len(languages),"deze":False,"packaging":packaging_size}, prods)
-    if box_template_path:
+
+    if skip_box:
+        box_tmpl, box_score = None, 0
+    elif box_template_path:
         box_tmpl  = next((f for f in all_pool if f.get("path") == box_template_path), None)
         box_score = 0
     else:
@@ -602,57 +615,59 @@ def create_label(product, languages, packaging_size, config, label_template_path
             dest_path.write_bytes(b"")
         return dest_path, ops
 
-    label_path, label_ops = make_file(label_tmpl, label_dir, label_name, apply_qr=True)
-    results.append({
-        "type":      "packaging_label",
-        "path":      str(label_path),
-        "rel_path":  str(label_path.relative_to(LABELS_DIR)),
-        "filename":  label_name,
-        "template":  label_tmpl["filename"] if label_tmpl else None,
-        "score":     label_score,
-        "ops":       label_ops,
-    })
-    new_entries.append({
-        "filename":  label_name,
-        "path":      str(label_path.relative_to(LABELS_DIR)),
-        "file_type": "packaging_label",
-        "extension": label_ext,
-        "product":   product,
-        "packaging": packaging_size,
-        "languages": languages,
-        "dimensions":dims,
-        "date":      date_str.replace("_","-"),
-        "deze":      False,
-        "print_file":False,
-        "sorted":    True,
-        "wip":       True,
-    })
+    if not skip_label:
+        label_path, label_ops = make_file(label_tmpl, label_dir, label_name, apply_qr=True)
+        results.append({
+            "type":      "packaging_label",
+            "path":      str(label_path),
+            "rel_path":  str(label_path.relative_to(LABELS_DIR)),
+            "filename":  label_name,
+            "template":  label_tmpl["filename"] if label_tmpl else None,
+            "score":     label_score,
+            "ops":       label_ops,
+        })
+        new_entries.append({
+            "filename":  label_name,
+            "path":      str(label_path.relative_to(LABELS_DIR)),
+            "file_type": "packaging_label",
+            "extension": label_ext,
+            "product":   product,
+            "packaging": packaging_size,
+            "languages": languages,
+            "dimensions":dims,
+            "date":      date_str.replace("_","-"),
+            "deze":      False,
+            "print_file":False,
+            "sorted":    True,
+            "wip":       True,
+        })
 
-    box_path, box_ops = make_file(box_tmpl, box_dir, box_name, apply_qr=False)
-    results.append({
-        "type":      "box_label",
-        "path":      str(box_path),
-        "rel_path":  str(box_path.relative_to(LABELS_DIR)),
-        "filename":  box_name,
-        "template":  box_tmpl["filename"] if box_tmpl else None,
-        "score":     box_score,
-        "ops":       box_ops,
-    })
-    new_entries.append({
-        "filename":  box_name,
-        "path":      str(box_path.relative_to(LABELS_DIR)),
-        "file_type": "box_label",
-        "extension": box_ext,
-        "product":   product,
-        "packaging": box_mult,
-        "languages": languages,
-        "dimensions":"180x180",
-        "date":      date_str.replace("_","-"),
-        "deze":      True,
-        "print_file":False,
-        "sorted":    True,
-        "wip":       True,
-    })
+    if not skip_box:
+        box_path, box_ops = make_file(box_tmpl, box_dir, box_name, apply_qr=False)
+        results.append({
+            "type":      "box_label",
+            "path":      str(box_path),
+            "rel_path":  str(box_path.relative_to(LABELS_DIR)),
+            "filename":  box_name,
+            "template":  box_tmpl["filename"] if box_tmpl else None,
+            "score":     box_score,
+            "ops":       box_ops,
+        })
+        new_entries.append({
+            "filename":  box_name,
+            "path":      str(box_path.relative_to(LABELS_DIR)),
+            "file_type": "box_label",
+            "extension": box_ext,
+            "product":   product,
+            "packaging": box_mult,
+            "languages": languages,
+            "dimensions":"180x180",
+            "date":      date_str.replace("_","-"),
+            "deze":      True,
+            "print_file":False,
+            "sorted":    True,
+            "wip":       True,
+        })
 
     # Update map
     idx_map = {f["filename"]: f for f in all_files}
@@ -661,6 +676,17 @@ def create_label(product, languages, packaging_size, config, label_template_path
     map_data["files"]     = sorted(idx_map.values(), key=lambda x: x["path"])
     map_data["generated"] = datetime.now().isoformat()
     save_json(MAP_FILE, map_data)
+
+    append_history({
+        "timestamp":    datetime.now().isoformat(),
+        "product":      product,
+        "languages":    languages,
+        "packagingSize": packaging_size,
+        "files": [
+            {"type": r["type"], "filename": r["filename"], "path": r["path"]}
+            for r in results
+        ],
+    })
 
     return {"results": results}
 
@@ -989,6 +1015,9 @@ class Handler(BaseHTTPRequestHandler):
             t = scan_templates()
             self.send_json({"templates": t, "count": len(t)})
 
+        elif path == "/api/history":
+            self.send_json({"history": load_json(HISTORY_FILE, [])})
+
         elif path == "/api/colors":
             colors = load_json(COLORS_FILE, {})
             cfg = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
@@ -1090,7 +1119,9 @@ class Handler(BaseHTTPRequestHandler):
                                       label_template_path=body.get("labelTemplatePath"),
                                       box_template_path=body.get("boxTemplatePath"),
                                       lang_files=body.get("langFiles"),
-                                      footer_values=fv if fv else None)
+                                      footer_values=fv if fv else None,
+                                      skip_label=body.get("skipLabel", False),
+                                      skip_box=body.get("skipBox", False))
                 self.send_json({"success":True,**result})
             except Exception as e:
                 self.send_json({"success":False,"error":str(e)})

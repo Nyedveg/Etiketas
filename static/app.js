@@ -25,6 +25,7 @@ const api = {
   listQrCodes:     ()    => api.get('/api/qrcodes'),
   applyQr:         (indd_path, qr_path) => api.post('/api/apply_qr', {indd_path, qr_path}),
   getTemplates:    ()    => api.get('/api/templates'),
+  getHistory:      ()    => api.get('/api/history'),
   getColors:       ()    => api.get('/api/colors'),
   saveColors:      (c)   => api.post('/api/colors/save', c),
   getResourceDirs: ()    => api.get('/api/resource_dirs'),
@@ -95,7 +96,7 @@ function App(){
       <Sidebar view={view} setView={setView} map={map} refreshMap={refreshMap}/>
       <div className="main">
         <Topbar view={view} map={map}/>
-        <div className={`content${view==='resources'?' no-scroll':''}`}>
+        <div className={`content${['resources','settings','information','dashboard'].includes(view)?' no-scroll':''}`}>
           <div key={view} className="view-anim" style={{height:'100%'}}>
             {view==='dashboard'&&<Dashboard map={map} setMap={setMap} config={config} setView={setView} refreshMap={refreshMap}/>}
             {view==='new'&&<NewLabelWizard config={config} map={map} setMap={setMap}/>}
@@ -164,14 +165,15 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
   const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
   const [ingesting,setIngesting]=useState(false);
   const [ingestResult,setIngestResult]=useState(null);
-  const [templateCount,setTemplateCount]=useState(null);
-  useEffect(()=>{api.getTemplates().then(r=>setTemplateCount(r.count??0)).catch(()=>{});},[]);
+  const [templates,setTemplates]=useState([]);
+  const [history,setHistory]=useState([]);
+  useEffect(()=>{
+    api.getTemplates().then(r=>setTemplates(r.templates??[])).catch(()=>{});
+    api.getHistory().then(r=>setHistory(r.history??[])).catch(()=>{});
+  },[]);
   const files=map?.files??[];
   const total=files.length, indd=files.filter(f=>f.extension==='.indd').length;
   const wip=files.filter(f=>f.wip).length, unsorted=files.filter(f=>!f.sorted).length;
-  const recent=[...files]
-    .sort((a,b)=>{const ta=a.added_at??'',tb=b.added_at??'';return tb>ta?1:tb<ta?-1:0;})
-    .slice(0,12);
   const handleReadFiles=async()=>{
     const pick=await api.pickDir();
     if(!pick.ok||!pick.path)return;
@@ -181,70 +183,100 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
     if(res.ok&&res.copied>0)await refreshMap();
     setIngesting(false);
   };
+  const grouped={};
+  for(const t of templates){const c=t.category||'Other';if(!grouped[c])grouped[c]=[];grouped[c].push(t);}
+  const catColors={'MO':'var(--mo)','PAM':'var(--pam)','CE':'var(--accent)'};
+  const fmtTime=ts=>{if(!ts)return'';try{const d=new Date(ts);return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});}catch{return ts.slice(0,16).replace('T',' ');}};
   return(
-    <div>
-      <div className="stats-grid">
-        {[
-          {label:'Total files',   value:total,                  color:null},
-          {label:'InDesign',      value:indd,                   color:'#E040A0'},
-          {label:'WIP labels',    value:wip,                    color:'#00DCC8'},
-          {label:'Unsorted',      value:unsorted,               color:'var(--danger)'},
-          {label:'Templates',     value:templateCount??'—',     color:'var(--accent)'},
-        ].map(({label,value,color})=>(
-          <div key={label} className="stat-card">
-            <div className="stat-value" style={color?{color}:{}}>{value}</div>
-            <div className="stat-label">{label}</div>
-          </div>
-        ))}
-      </div>
-      <div className="flex gap-3" style={{alignItems:'center',flexWrap:'wrap',marginBottom:24}}>
-        <button className="btn btn-primary" onClick={handleReadFiles} disabled={ingesting}>
-          {ingesting?<><div className="spinner" style={{width:14,height:14}}/>Reading files...</>:'Read files from folder'}
-        </button>
-        {ingestResult&&(
-          <span style={{fontSize:13,color:ingestResult.ok?'var(--success)':'var(--danger)'}}>
-            {ingestResult.ok
-              ?`${ingestResult.copied} file(s) copied, ${ingestResult.skipped} already existed${ingestResult.errors?` (${ingestResult.errors} errors)`:''}`
-              :ingestResult.error}
-          </span>
-        )}
-      </div>
-      {total===0?(
-        <div className="card">
-          <div className="empty-state">
-            <div className="icon">📂</div>
-            <p>No labels found yet</p>
-            <span>Run the organizer script first, then click Rescan.</span>
-            <div className="mt-3">
-              <button className="btn btn-primary" onClick={()=>setView('new')}>Create first label</button>
+    <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
+      <div style={{flexShrink:0}}>
+        <div className="stats-grid" style={{marginBottom:12}}>
+          {[
+            {label:'Total files',value:total,color:null},
+            {label:'InDesign',value:indd,color:'#E040A0'},
+            {label:'WIP labels',value:wip,color:'#00DCC8'},
+            {label:'Unsorted',value:unsorted,color:'var(--danger)'},
+            {label:'Templates',value:templates.length,color:'var(--accent)'},
+          ].map(({label,value,color})=>(
+            <div key={label} className="stat-card">
+              <div className="stat-value" style={color?{color}:{}}>{value}</div>
+              <div className="stat-label">{label}</div>
             </div>
+          ))}
+        </div>
+        <div className="flex gap-3" style={{alignItems:'center',flexWrap:'wrap',marginBottom:12}}>
+          <button className="btn btn-primary" onClick={handleReadFiles} disabled={ingesting}>
+            {ingesting?<><div className="spinner" style={{width:14,height:14}}/>Reading files...</>:'Read files from folder'}
+          </button>
+          <button className="btn btn-ghost" onClick={()=>setView('new')}>+ New Label</button>
+          {ingestResult&&(
+            <span style={{fontSize:13,color:ingestResult.ok?'var(--success)':'var(--danger)'}}>
+              {ingestResult.ok
+                ?`${ingestResult.copied} file(s) copied, ${ingestResult.skipped} already existed${ingestResult.errors?` (${ingestResult.errors} errors)`:''}`
+                :ingestResult.error}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{display:'flex',gap:14,flex:1,minHeight:0}}>
+        <div style={{flex:'0 0 55%',display:'flex',flexDirection:'column',minWidth:0}}>
+          <p className="section-title" style={{flexShrink:0,marginBottom:6}}>Creation History</p>
+          <div className="card" style={{flex:1,overflowY:'auto',padding:0,minHeight:0}}>
+            {history.length===0?(
+              <div style={{padding:'32px 16px',textAlign:'center',color:'var(--text3)',fontSize:13}}>No labels created yet</div>
+            ):(
+              <table className="files-table">
+                <thead><tr><th>Time</th><th>Product</th><th>Size</th><th>Languages</th><th>Files</th></tr></thead>
+                <tbody>
+                  {history.map((h,i)=>(
+                    <tr key={i}>
+                      <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)',whiteSpace:'nowrap'}}>{fmtTime(h.timestamp)}</td>
+                      <td style={{fontWeight:500}}>{h.product}</td>
+                      <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{h.packagingSize}</td>
+                      <td style={{fontFamily:"'DM Mono',monospace",fontSize:11}}>{(h.languages??[]).join(' · ')}</td>
+                      <td>
+                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                          {(h.files??[]).map((f,j)=>(
+                            <button key={j} className="btn btn-sm" title={f.filename}
+                              style={{padding:'2px 7px',fontSize:11,background:'rgba(255,255,255,.05)',border:'1px solid var(--border2)',color:'var(--text2)'}}
+                              onClick={()=>api.openFile(f.path)}>
+                              <Icon.Open/>{f.type==='box_label'?'Box':'Label'}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
-      ):(
-        <>
-          <p className="section-title">Recently Added</p>
-          <div className="card" style={{padding:0,overflow:'hidden'}}>
-            <table className="files-table">
-              <thead><tr><th>Filename</th><th>Product</th><th>Languages</th><th>Type</th><th></th></tr></thead>
-              <tbody>
-                {recent.map(f=>(
-                  <tr key={f.filename+f.path}>
-                    <td className="path-cell" title={f.path}>{f.filename}</td>
-                    <td>{f.product??<span style={{color:'var(--text3)'}}>--</span>}</td>
-                    <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.languages?f.languages.join(' . '):'--'}</td>
-                    <td><div style={{display:'flex',gap:4,alignItems:'center'}}>
-                      {f.print_file?<span className="topbar-badge" style={{background:'rgba(255,255,255,.07)',color:'var(--text)'}}>Print</span>:f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
-                      {!f.print_file&&(f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(100,180,255,.15)',color:'#64B4FF'}}>IDML</span>:<span className="topbar-badge" style={{background:'rgba(224,64,160,.15)',color:'#E040A0'}}>InDesign</span>)}
-                      {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
-                    </div></td>
-                    <td><FileActions path={f.path} onDeleted={removeFile}/></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div style={{flex:'0 0 calc(45% - 14px)',display:'flex',flexDirection:'column',minWidth:0}}>
+          <p className="section-title" style={{flexShrink:0,marginBottom:6}}>Available Templates</p>
+          <div className="card" style={{flex:1,overflowY:'auto',padding:0,minHeight:0}}>
+            {templates.length===0?(
+              <div style={{padding:'32px 16px',textAlign:'center',color:'var(--text3)',fontSize:13}}>No templates found</div>
+            ):(
+              Object.entries(grouped).sort().map(([cat,tmplList])=>(
+                <div key={cat}>
+                  <div style={{padding:'7px 14px 4px',fontSize:11,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:catColors[cat]??'var(--text3)',borderBottom:'1px solid var(--border2)',background:'rgba(255,255,255,.02)',position:'sticky',top:0}}>
+                    {cat} <span style={{fontWeight:400,opacity:.6}}>({tmplList.length})</span>
+                  </div>
+                  {tmplList.map((t,i)=>(
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 14px',borderBottom:'1px solid rgba(255,255,255,.04)',fontSize:12}}>
+                      <span style={{flex:1,fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={t.filename}>{t.filename.replace(/\.idml$/i,'')}</span>
+                      <span style={{flexShrink:0,fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)'}}>{t.dimensions}</span>
+                      {t.deze?<span className="topbar-badge badge-pam" style={{fontSize:9}}>Box</span>:<span className="topbar-badge badge-ok" style={{fontSize:9}}>Label</span>}
+                      <button className="btn btn-sm" style={{padding:'2px 6px',flexShrink:0}} title="Reveal in Explorer" onClick={()=>api.revealFile(t.path)}><Icon.Folder/></button>
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -285,11 +317,13 @@ function NewLabelWizard({config,map,setMap}){
   const handleCreate=async()=>{
     setLoading(true);
     const cfg=await api.loadConfig();
-    const labelPath=tmplInfo?.labels?.[selectedLabel]?.file?.path??null;
-    const boxPath=tmplInfo?.boxes?.[selectedBox]?.file?.path??null;
+    const skipLabel=selectedLabel===null;
+    const skipBox=selectedBox===null;
+    const labelPath=skipLabel?null:(tmplInfo?.labels?.[selectedLabel]?.file?.path??null);
+    const boxPath=skipBox?null:(tmplInfo?.boxes?.[selectedBox]?.file?.path??null);
     const isPAM=productCfg?.category==='PAM';
-  const footerValues=(sku||ufi)?{sku,ufi:isPAM?ufi:'',manufacturer_value:''}:null;
-    const res=await api.createLabel({product,languages,packagingSize:size,config:cfg,labelTemplatePath:labelPath,boxTemplatePath:boxPath,langFiles,footerValues});
+    const footerValues=(sku||ufi)?{sku,ufi:isPAM?ufi:'',manufacturer_value:''}:null;
+    const res=await api.createLabel({product,languages,packagingSize:size,config:cfg,labelTemplatePath:labelPath,boxTemplatePath:boxPath,langFiles,footerValues,skipLabel,skipBox});
     if(res.success&&res.results?.length){const m=await api.loadMap();setMap(m);}
     setResult(res);setLoading(false);setStep(6);
   };
@@ -309,12 +343,15 @@ function NewLabelWizard({config,map,setMap}){
       :{background:'rgba(255,255,255,.06)',color:'var(--text3)'};
     return <span key={i} style={{...s,fontSize:10,padding:'1px 6px',borderRadius:3,fontFamily:"'DM Mono',monospace",whiteSpace:'nowrap'}}>{r.text}</span>;
   };
-  const TemplatePicker=({items,selected,onSelect,title,newName})=>(
-    <div style={{marginBottom:14}}>
-      <div style={{fontSize:11,fontWeight:500,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>{title}</div>
+  const TemplatePicker=({items,selected,onSelect,title,newName,skipped})=>(
+    <div style={{marginBottom:14,opacity:skipped?.5:1,transition:'opacity .2s'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:500,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'.06em'}}>{title}</div>
+        {skipped&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'1px 7px',borderRadius:10,background:'rgba(255,179,64,.15)',color:'var(--warning)',border:'1px solid rgba(255,179,64,.3)'}}>skipped</span>}
+      </div>
       {items&&items.length>0?(
         items.map((item,idx)=>(
-          <div key={idx} onClick={()=>onSelect(idx)} style={{background:selected===idx?'var(--accent-dim)':'var(--surface2)',border:'1px solid '+(selected===idx?'var(--accent)':'var(--border2)'),borderRadius:'var(--radius-sm)',padding:'10px 12px',marginBottom:6,cursor:'pointer',transition:'all .15s'}}>
+          <div key={idx} onClick={()=>onSelect(selected===idx?null:idx)} style={{background:selected===idx?'var(--accent-dim)':'var(--surface2)',border:'1px solid '+(selected===idx?'var(--accent)':'var(--border2)'),borderRadius:'var(--radius-sm)',padding:'10px 12px',marginBottom:6,cursor:'pointer',transition:'all .15s'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
               <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:selected===idx?'var(--accent)':'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,marginRight:8}}>{item.file.filename}</span>
               <span className={'match-score '+scoreLabel(item.score).cls}>{scoreLabel(item.score).label} ({item.score}pts)</span>
@@ -327,7 +364,7 @@ function NewLabelWizard({config,map,setMap}){
       ):(
         <div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>No template found -- empty file will be created</div>
       )}
-      <div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Will be saved as: <span style={{fontFamily:"'DM Mono',monospace",color:'var(--accent)'}}>{newName}</span></div>
+      {!skipped&&<div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Will be saved as: <span style={{fontFamily:"'DM Mono',monospace",color:'var(--accent)'}}>{newName}</span></div>}
     </div>
   );
   return(
@@ -523,8 +560,14 @@ function NewLabelWizard({config,map,setMap}){
             </div>
           ):reviewTab==='template'?(
             <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
-              <TemplatePicker items={tmplInfo?.labels} selected={selectedLabel} onSelect={setSelectedLabel} title="Packaging Label Template" newName={prevLabel}/>
-              <TemplatePicker items={tmplInfo?.boxes} selected={selectedBox} onSelect={setSelectedBox} title="Box Label Template" newName={prevBox}/>
+              <TemplatePicker items={tmplInfo?.labels} selected={selectedLabel} onSelect={setSelectedLabel} title="Packaging Label Template" newName={prevLabel} skipped={selectedLabel===null}/>
+              <TemplatePicker items={tmplInfo?.boxes} selected={selectedBox} onSelect={setSelectedBox} title="Box Label Template" newName={prevBox} skipped={selectedBox===null}/>
+              {(selectedLabel===null)!==(selectedBox===null)&&(
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:'var(--radius-sm)',background:'rgba(255,179,64,.1)',border:'1px solid rgba(255,179,64,.25)',fontSize:12,color:'var(--warning)',marginTop:4}}>
+                  <span style={{fontSize:14}}>⚠</span>
+                  {selectedLabel===null?'Only the box label will be created — packaging label is skipped.':'Only the packaging label will be created — box label is skipped.'}
+                </div>
+              )}
             </div>
           ):(
             <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
@@ -552,8 +595,8 @@ function NewLabelWizard({config,map,setMap}){
           )}
           <div className="flex mt-4 gap-2" style={{flexShrink:0}}>
             <button className="btn btn-ghost" onClick={()=>setStep(4)}>&larr; Back</button>
-            <button className="btn btn-primary ml-auto btn-lg" disabled={loading} onClick={handleCreate}>
-              {loading?<><div className="spinner"/>Creating...</>:'Create Labels'}
+            <button className="btn btn-primary ml-auto btn-lg" disabled={loading||( selectedLabel===null&&selectedBox===null)} onClick={handleCreate}>
+              {loading?<><div className="spinner"/>Creating...</>:selectedLabel===null&&selectedBox===null?'Nothing selected':selectedLabel===null?'Create Box Only':selectedBox===null?'Create Label Only':'Create Labels'}
             </button>
           </div>
         </div>
@@ -644,6 +687,9 @@ function Information({config,map,setMap}){
   const [fileType,setFileType]=useState('all');
   const [showWip,setShowWip]=useState('all');
   const [catFilter,setCatFilter]=useState('all');
+  const [tab,setTab]=useState('files');
+  const [showAllSizes,setShowAllSizes]=useState(false);
+  const [sizeRefOpen,setSizeRefOpen]=useState(false);
   useEffect(()=>{
     api.getColors().then(r=>setColors(r.colors||{}));
     api.listTranslations().then(r=>{if(r?.files)setTransFiles(r.files);});
@@ -667,196 +713,208 @@ function Information({config,map,setMap}){
   const prodTrans=transFiles.filter(f=>f.product===selected);
   const prodAssets=selected?(assets[selected]||{}):{};
   const dimRows=[['PAM_normal','PAM Normal','var(--pam)'],['PAM_acidic','PAM Acidic','#f5a623'],['MO','MO','var(--mo)'],['MO_liquid','MO Liquid','var(--mo)'],['CE','CE','#3dbf7a'],['CE_solid','CE Solid','#3dbf7a']];
-  return(
-    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
-      {/* Product search + list */}
-      <div style={{flexShrink:0,marginBottom:12}}>
-        <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
-          <div className="search-wrap" style={{flex:1}}>
-            <span className="search-icon">&#128269;</span>
-            <input className="input" placeholder="Search products..." value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
-          </div>
-          {selected&&(
-            <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--accent-dim)',border:'1px solid var(--accent)',borderRadius:'var(--radius-sm)',padding:'5px 10px',flexShrink:0,maxWidth:200}}>
-              <span style={{fontSize:12,color:'var(--accent)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selected}</span>
-              <button onClick={()=>{setSelected(null);setSearch('');setCatFilter('all');}} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:14,padding:0,lineHeight:1,flexShrink:0}}>✕</button>
-            </div>
-          )}
-        </div>
-        <div style={{display:'flex',gap:5,marginBottom:6,flexWrap:'wrap'}}>
-          {[['all','All'],['MO','MO'],['PAM','PAM'],['CE','CE']].map(([v,l])=>(
-            <button key={v} onClick={()=>{setCatFilter(v);setSelected(null);}}
-              style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'2px 9px',borderRadius:10,border:'1px solid '+(catFilter===v?(v==='PAM'?'var(--pam)':v==='CE'?'#3dbf7a':'var(--mo)'):'var(--border2)'),background:catFilter===v?(v==='PAM'?'rgba(255,159,71,.15)':v==='CE'?'rgba(80,200,140,.15)':'rgba(75,191,255,.15)'):'transparent',color:catFilter===v?(v==='PAM'?'var(--pam)':v==='CE'?'#3dbf7a':'var(--mo)'):'var(--text3)',cursor:'pointer',transition:'all .15s'}}>
-              {l}
-            </button>
-          ))}
-        </div>
-        <div style={{display:'flex',flexDirection:'column',gap:3,maxHeight:120,overflowY:'auto',paddingRight:4}}>
-          {filteredProds.map(p=>(
-            <button key={p.name} onClick={()=>setSelected(selected===p.name?null:p.name)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:'var(--radius-sm)',border:'1px solid '+(selected===p.name?'var(--accent)':'var(--border2)'),background:selected===p.name?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',textAlign:'left',transition:'all .15s',flexShrink:0}}>
-              <span style={{flex:1,fontSize:12,fontWeight:selected===p.name?500:400,color:selected===p.name?'var(--accent)':'var(--text)'}}>{p.name}</span>
-              <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 5px',borderRadius:2,background:p.category==='PAM'?'rgba(255,159,71,.15)':p.category==='CE'?'rgba(80,200,140,.15)':'rgba(75,191,255,.15)',color:p.category==='PAM'?'var(--pam)':p.category==='CE'?'#3dbf7a':'var(--mo)'}}>{p.category}{p.acidic?' / acidic':''}</span>
-              {p.unit&&<span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 5px',borderRadius:2,background:'rgba(255,255,255,.05)',color:'var(--text3)'}}>{p.unit}</span>}
-            </button>
-          ))}
-          {filteredProds.length===0&&<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>No products match.</div>}
-        </div>
-      </div>
-      {!selected?(
-        /* Size reference + box packaging shown when no product selected */
-        <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
-          <p className="section-title">Label Size Reference</p>
-          {dimRows.map(([key,label,clr])=>(
-            <div key={key} style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:clr,marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:'.05em'}}>{label}</div>
-              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                {Object.entries(config?.dimensions?.[key]??{}).map(([sz,dims])=>(
-                  <div key={sz} style={{background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 12px',textAlign:'center',minWidth:72}}>
-                    <div style={{fontSize:13,fontWeight:600,fontFamily:"'Syne',sans-serif",color:'var(--text)'}}>{sz}</div>
-                    <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:2}}>{dims}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          <p className="section-title" style={{marginTop:8}}>Box Packaging Reference</p>
-          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
-            {Object.entries(config?.boxMultipliers??{}).map(([sz,box])=>(
-              <div key={sz} style={{background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 12px',textAlign:'center',minWidth:72}}>
-                <div style={{fontSize:13,fontWeight:600,fontFamily:"'Syne',sans-serif",color:'var(--text)'}}>{sz}</div>
-                <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:2}}>{box}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ):(
-        <div key={selected} style={{flex:1,overflowY:'auto',paddingRight:4}}>
-          {/* Gradient header bar — reveals left→right */}
-          <div className="info-gradient-bar" style={{height:56,borderRadius:'var(--radius-sm)',marginBottom:10,background:`linear-gradient(135deg, ${swatches.map(c=>c||'#808080').join(', ')})`,border:'1px solid var(--border2)',boxShadow:'0 4px 24px rgba(0,0,0,.45)',display:'flex',alignItems:'center',paddingLeft:16,gap:10,position:'relative',overflow:'hidden'}}>
-            <div className="info-bar-shimmer"/>
-            <span style={{fontWeight:700,fontSize:15,color:'#fff',textShadow:'0 1px 6px rgba(0,0,0,.6)',fontFamily:"'Syne',sans-serif",letterSpacing:'-.01em'}}>{selected}</span>
-            {prodCfg&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.8)',background:'rgba(0,0,0,.3)',padding:'2px 9px',borderRadius:10,backdropFilter:'blur(4px)'}}>{prodCfg.category}{prodCfg.acidic?' · acidic':''}{prodCfg.unit?' · '+prodCfg.unit:''}</span>}
-            <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.55)',paddingRight:16}}>{prodFiles.length} file{prodFiles.length!==1?'s':''}</span>
-          </div>
-          {/* Swatch row — staggered pop-in */}
-          <div style={{display:'flex',gap:5,marginBottom:12}}>
-            {swatches.map((c,i)=>(
-              <div key={i} title={`Brand${i+1}: ${c||'#808080'}`} className="info-swatch" style={{flex:1,height:16,borderRadius:4,background:c||'#808080',border:'1px solid rgba(255,255,255,.08)',animationDelay:`${i*45}ms`,boxShadow:`0 2px 8px ${(c||'#808080')}55`}}/>
-            ))}
-          </div>
-          {/* 2-column: label sizes (left) | assets + translations (right) */}
-          <div style={{display:'grid',gridTemplateColumns:'55% 1fr',gap:12,marginBottom:14,alignItems:'start'}}>
-            {/* Left: label sizes with dimming */}
-            <div className="info-card" style={{animationDelay:'80ms'}}>
-              <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Label sizes</div>
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {dimRows.map(([key,label,clr],ri)=>{
-                  const isActive=dimKey===key;
-                  const entries=Object.entries(config?.dimensions?.[key]??{});
-                  return(
-                    <div key={key} style={{opacity:isActive?1:.3,transition:'opacity .25s',animation:`fadeSlideUp .3s ease ${120+ri*40}ms both`}}>
-                      <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:isActive?clr:'var(--text3)',marginBottom:5,fontWeight:isActive?600:400,textTransform:'uppercase',letterSpacing:'.04em'}}>{label}</div>
-                      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-                        {entries.map(([sz,dims])=>(
-                          <div key={sz} className="dim-badge" style={{background:isActive?'var(--surface2)':'var(--surface3)',border:'1px solid '+(isActive?clr:'var(--border2)'),borderRadius:5,padding:'5px 10px',textAlign:'center',minWidth:60,transition:'all .2s',boxShadow:isActive?`0 0 0 0 ${clr}00`:'none'}}>
-                            <div style={{fontSize:12,fontWeight:600,fontFamily:"'Syne',sans-serif",color:isActive?'var(--text)':'var(--text3)'}}>{sz}</div>
-                            <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:1}}>{dims}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            {/* Right: assets + translations stacked */}
-            <div style={{display:'flex',flexDirection:'column',gap:10}}>
-              <div className="card info-card" style={{padding:'12px 14px',animationDelay:'140ms'}}>
-                <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>Assets</div>
-                {[['QR Code',prodAssets.qr,'qrcodes'],['Logo',prodAssets.logo,'logos']].map(([label,ok,dirKey])=>(
-                  <div key={label} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                    <span style={{width:8,height:8,borderRadius:'50%',background:ok?'var(--success)':'var(--danger)',flexShrink:0}}/>
-                    <span style={{fontSize:12,flex:1,color:ok?'var(--text)':'var(--text3)'}}>{label}</span>
-                    <button className="btn btn-folder btn-sm" title="Open folder" onClick={()=>api.getResourceDirs().then(d=>api.openFile(d[dirKey]))}><Icon.Folder/></button>
-                  </div>
-                ))}
-              </div>
-              <div className="card info-card" style={{padding:'12px 14px',animationDelay:'200ms'}}>
-                <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>
-                  Translations <span style={{color:'var(--accent)',fontFamily:"'DM Mono',monospace"}}>{prodTrans.length}</span>
-                </div>
-                {prodTrans.length===0?(
-                  <div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>None found</div>
-                ):(
-                  prodTrans.map(f=>(
-                    <div key={f.path} style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
-                      <span style={{fontSize:15}}>{f.flag}</span>
-                      <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--accent)',width:26,flexShrink:0}}>{f.code}</span>
-                      <span style={{fontSize:11,color:'var(--text2)'}}>{f.name}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-          {/* Box packaging – full width */}
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Box packaging</div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-              {Object.entries(config?.boxMultipliers??{}).map(([sz,box])=>(
-                <div key={sz} style={{background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:5,padding:'5px 10px',textAlign:'center',minWidth:60}}>
-                  <div style={{fontSize:12,fontWeight:600,fontFamily:"'Syne',sans-serif",color:'var(--text)'}}>{sz}</div>
-                  <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:1}}>{box}</div>
+  const catColor=c=>c==='PAM'?'var(--pam)':c==='CE'?'#3dbf7a':'var(--mo)';
+  const catBg=c=>c==='PAM'?'rgba(255,159,71,.15)':c==='CE'?'rgba(80,200,140,.15)':'rgba(75,191,255,.15)';
+  const SizeTable=({showAll})=>(
+    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+      {dimRows.filter(([key])=>showAll||key===dimKey||!dimKey).map(([key,label,clr])=>{
+        const isActive=dimKey===key;
+        const entries=Object.entries(config?.dimensions?.[key]??{});
+        if(!entries.length)return null;
+        return(
+          <div key={key} style={{opacity:(!dimKey||isActive||showAll)?1:.35,transition:'opacity .2s'}}>
+            <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:isActive?clr:'var(--text3)',fontWeight:isActive?700:400,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:6}}>{label}</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+              {entries.map(([sz,dims])=>(
+                <div key={sz} style={{background:isActive?'var(--surface2)':'var(--surface3)',border:'1px solid '+(isActive?clr:'var(--border2)'),borderRadius:6,padding:'6px 11px',textAlign:'center',minWidth:64,transition:'all .2s'}}>
+                  <div style={{fontSize:12,fontWeight:600,fontFamily:"'Syne',sans-serif",color:isActive?'var(--text)':'var(--text3)'}}>{sz}</div>
+                  <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:2}}>{dims}mm</div>
                 </div>
               ))}
             </div>
           </div>
-          {/* File browser – full width */}
-          <div className="info-card" style={{animationDelay:'260ms'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}>
-              <span style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em'}}>
-                Files <span style={{color:'var(--text2)',fontFamily:"'DM Mono',monospace"}}>{filteredFiles.length}/{prodFiles.length}</span>
-              </span>
-              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginLeft:'auto'}}>
-                {[['all','All'],['indd','INDD'],['idml','IDML'],['print','Print']].map(([v,l])=>(
-                  <button key={v} className={'filter-chip '+(fileType===v?'active':'')} onClick={()=>setFileType(v)}>{l}</button>
-                ))}
-                <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-                <button className={'filter-chip '+(showWip==='wip'?'active-wip':'')} onClick={()=>setShowWip(showWip==='wip'?'all':'wip')}>WIP</button>
-              </div>
+        );
+      })}
+      <div>
+        <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:6}}>Box</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+          {Object.entries(config?.boxMultipliers??{}).map(([sz,box])=>(
+            <div key={sz} style={{background:'var(--surface3)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 11px',textAlign:'center',minWidth:64}}>
+              <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)'}}>{sz}</div>
+              <div style={{fontSize:11,fontWeight:600,fontFamily:"'Syne',sans-serif",color:'var(--text)',marginTop:2}}>{box}</div>
             </div>
-            {filteredFiles.length===0?(
-              <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'12px 0'}}>No files match.</div>
-            ):(
-              <div className="card" style={{padding:0,overflow:'hidden'}}>
-                <table className="files-table">
-                  <thead><tr><th>Filename</th><th>Langs</th><th>Size</th><th>Date</th><th>Type</th><th></th></tr></thead>
-                  <tbody>
-                    {filteredFiles.map(f=>(
-                      <tr key={f.filename+f.path}>
-                        <td className="path-cell" title={f.path}>{f.filename}</td>
-                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11}}>{f.languages?.join('·')??'--'}</td>
-                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
-                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
-                        <td><div style={{display:'flex',gap:4,alignItems:'center'}}>
-                          {f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
-                          {f.print_file?<span className="topbar-badge" style={{background:'rgba(255,255,255,.07)',color:'var(--text)'}}>Print</span>
-                            :f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(100,180,255,.15)',color:'#64B4FF'}}>IDML</span>
-                            :<span className="topbar-badge" style={{background:'rgba(224,64,160,.15)',color:'#E040A0'}}>INDD</span>}
-                          {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
-                        </div></td>
-                        <td><div className="file-actions">
-                          <FileActions path={f.path} onDeleted={removeFile}/>
-                        </div></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+  return(
+    <div style={{display:'flex',height:'100%',gap:10,overflow:'hidden'}}>
+      {/* ── LEFT: product list sidebar ── */}
+      <div style={{width:188,flexShrink:0,display:'flex',flexDirection:'column',gap:7,overflow:'hidden'}}>
+        <div className="search-wrap">
+          <span className="search-icon">&#128269;</span>
+          <input className="input" placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        </div>
+        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+          {[['all','All'],['MO','MO'],['PAM','PAM'],['CE','CE']].map(([v,l])=>(
+            <button key={v} onClick={()=>{setCatFilter(v);setSelected(null);}}
+              style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'2px 8px',borderRadius:10,border:'1px solid '+(catFilter===v?catColor(v==='all'?'MO':v):'var(--border2)'),background:catFilter===v?catBg(v==='all'?'MO':v):'transparent',color:catFilter===v?catColor(v==='all'?'MO':v):'var(--text3)',cursor:'pointer',transition:'all .15s'}}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:2,paddingRight:2}}>
+          {filteredProds.map(p=>(
+            <button key={p.name} onClick={()=>{setSelected(selected===p.name?null:p.name);setTab('files');setShowAllSizes(false);}}
+              style={{display:'flex',alignItems:'center',gap:6,padding:'6px 9px',borderRadius:'var(--radius-sm)',border:'1px solid '+(selected===p.name?'var(--accent)':'var(--border2)'),background:selected===p.name?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',textAlign:'left',transition:'all .15s',flexShrink:0}}>
+              <span style={{flex:1,fontSize:12,fontWeight:selected===p.name?500:400,color:selected===p.name?'var(--accent)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+              <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 4px',borderRadius:2,background:catBg(p.category),color:catColor(p.category),flexShrink:0}}>{p.category}</span>
+            </button>
+          ))}
+          {filteredProds.length===0&&<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 4px'}}>No products match.</div>}
+        </div>
+      </div>
+
+      {/* ── RIGHT: detail panel ── */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
+        {!selected?(
+          <div style={{flex:1,display:'flex',flexDirection:'column',gap:12,overflow:'hidden'}}>
+            <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'4px 0'}}>Select a product to view details.</div>
+            {/* Collapsible size reference */}
+            <button onClick={()=>setSizeRefOpen(o=>!o)}
+              style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',borderRadius:'var(--radius-sm)',border:'1px solid var(--border2)',background:'var(--surface2)',cursor:'pointer',transition:'all .15s',flexShrink:0,textAlign:'left'}}>
+              <span style={{fontSize:12,fontWeight:500,color:'var(--text)',flex:1}}>Label & Box Size Reference</span>
+              <span style={{fontSize:11,color:'var(--text3)',fontFamily:"'DM Mono',monospace",transition:'transform .2s',display:'inline-block',transform:sizeRefOpen?'rotate(180deg)':'none'}}>▾</span>
+            </button>
+            {sizeRefOpen&&(
+              <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
+                <SizeTable showAll={true}/>
               </div>
             )}
           </div>
-        </div>
-      )}
+        ):(
+          <div key={selected} style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            {/* Gradient header */}
+            <div className="info-gradient-bar" style={{height:50,borderRadius:'var(--radius-sm)',marginBottom:8,background:`linear-gradient(135deg, ${swatches.map(c=>c||'#808080').join(', ')})`,border:'1px solid var(--border2)',boxShadow:'0 4px 20px rgba(0,0,0,.4)',display:'flex',alignItems:'center',paddingLeft:14,gap:10,position:'relative',overflow:'hidden',flexShrink:0}}>
+              <div className="info-bar-shimmer"/>
+              <span style={{fontWeight:700,fontSize:14,color:'#fff',textShadow:'0 1px 6px rgba(0,0,0,.6)',fontFamily:"'Syne',sans-serif",letterSpacing:'-.01em'}}>{selected}</span>
+              {prodCfg&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.85)',background:'rgba(0,0,0,.28)',padding:'2px 8px',borderRadius:8,backdropFilter:'blur(4px)',flexShrink:0}}>{prodCfg.category}{prodCfg.acidic?' · acidic':''}{prodCfg.unit?' · '+prodCfg.unit:''}</span>}
+              <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.5)',paddingRight:14,flexShrink:0}}>{prodFiles.length} file{prodFiles.length!==1?'s':''}</span>
+            </div>
+            {/* Swatch strip */}
+            <div style={{display:'flex',gap:4,marginBottom:8,flexShrink:0}}>
+              {swatches.map((c,i)=>(
+                <div key={i} title={`Brand${i+1}: ${c||'#808080'}`} className="info-swatch" style={{flex:1,height:12,borderRadius:3,background:c||'#808080',border:'1px solid rgba(255,255,255,.08)',animationDelay:`${i*45}ms`,boxShadow:`0 2px 6px ${(c||'#808080')}55`}}/>
+              ))}
+            </div>
+            {/* Tab strip */}
+            <div style={{display:'flex',gap:2,marginBottom:10,background:'var(--surface2)',borderRadius:'var(--radius-sm)',padding:3,border:'1px solid var(--border)',flexShrink:0}}>
+              {[
+                ['files',`Files${prodFiles.length?' ('+prodFiles.length+')':''}`],
+                ['translations',`Translations${prodTrans.length?' ('+prodTrans.length+')':''}`],
+                ['assets','Assets'],
+                ['sizes','Sizes'],
+              ].map(([key,label])=>(
+                <button key={key} onClick={()=>setTab(key)}
+                  style={{flex:1,padding:'5px 0',borderRadius:5,cursor:'pointer',fontSize:11,fontWeight:500,border:'none',background:tab===key?'var(--surface3)':'transparent',color:tab===key?'var(--text)':'var(--text2)',transition:'all .15s'}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Tab content */}
+            <div className="view-anim" key={tab} style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+              {tab==='files'&&(
+                <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
+                  <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8,flexShrink:0}}>
+                    {[['all','All'],['indd','INDD'],['idml','IDML'],['print','Print']].map(([v,l])=>(
+                      <button key={v} className={'filter-chip '+(fileType===v?'active':'')} onClick={()=>setFileType(v)}>{l}</button>
+                    ))}
+                    <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
+                    <button className={'filter-chip '+(showWip==='wip'?'active-wip':'')} onClick={()=>setShowWip(showWip==='wip'?'all':'wip')}>WIP</button>
+                    <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)',alignSelf:'center'}}>{filteredFiles.length}/{prodFiles.length}</span>
+                  </div>
+                  {filteredFiles.length===0?(
+                    <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'12px 0'}}>No files match.</div>
+                  ):(
+                    <div style={{flex:1,overflowY:'auto'}}>
+                      <div className="card" style={{padding:0,overflow:'hidden'}}>
+                        <table className="files-table">
+                          <thead><tr><th>Filename</th><th>Langs</th><th>Size</th><th>Date</th><th>Type</th><th></th></tr></thead>
+                          <tbody>
+                            {filteredFiles.map(f=>(
+                              <tr key={f.filename+f.path}>
+                                <td className="path-cell" title={f.path}>{f.filename}</td>
+                                <td style={{fontFamily:"'DM Mono',monospace",fontSize:11}}>{f.languages?.join('·')??'--'}</td>
+                                <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
+                                <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
+                                <td><div style={{display:'flex',gap:4,alignItems:'center'}}>
+                                  {f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
+                                  {f.print_file?<span className="topbar-badge" style={{background:'rgba(255,255,255,.07)',color:'var(--text)'}}>Print</span>
+                                    :f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(100,180,255,.15)',color:'#64B4FF'}}>IDML</span>
+                                    :<span className="topbar-badge" style={{background:'rgba(224,64,160,.15)',color:'#E040A0'}}>INDD</span>}
+                                  {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
+                                </div></td>
+                                <td><FileActions path={f.path} onDeleted={removeFile}/></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {tab==='translations'&&(
+                <div style={{overflowY:'auto',flex:1}}>
+                  {prodTrans.length===0?(
+                    <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'12px 0'}}>No translation files found for {selected}.</div>
+                  ):(
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                      {prodTrans.map(f=>(
+                        <div key={f.path} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:'var(--radius-sm)',background:'var(--surface2)',border:'1px solid var(--border2)'}}>
+                          <span style={{fontSize:18,lineHeight:1}}>{f.flag}</span>
+                          <span style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:'var(--accent)',width:28,flexShrink:0}}>{f.code}</span>
+                          <span style={{fontSize:12,color:'var(--text2)',flex:1}}>{f.name}</span>
+                          <span style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:160}} title={f.path}>{f.filename}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {tab==='assets'&&(
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {[['QR Code',prodAssets.qr,'qrcodes'],['Logo',prodAssets.logo,'logos']].map(([label,ok,dirKey])=>(
+                    <div key={label} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:'var(--radius-sm)',background:'var(--surface2)',border:'1px solid '+(ok?'rgba(108,181,113,.25)':'rgba(255,77,109,.2)')}}>
+                      <span style={{width:10,height:10,borderRadius:'50%',background:ok?'var(--success)':'var(--danger)',flexShrink:0,boxShadow:`0 0 6px ${ok?'var(--success)':'var(--danger)'}`}}/>
+                      <span style={{fontSize:13,fontWeight:500,flex:1,color:ok?'var(--text)':'var(--text3)'}}>{label}</span>
+                      <span style={{fontSize:11,color:ok?'var(--success)':'var(--danger)',fontFamily:"'DM Mono',monospace"}}>{ok?'found':'missing'}</span>
+                      <button className="btn btn-folder btn-sm" title="Open folder" onClick={()=>api.getResourceDirs().then(d=>api.openFile(d[dirKey]))}><Icon.Folder/></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {tab==='sizes'&&(
+                <div style={{display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,flexShrink:0}}>
+                    <span style={{fontSize:11,color:'var(--text3)',fontFamily:"'DM Mono',monospace"}}>
+                      Active: <span style={{color:'var(--accent)',fontWeight:600}}>{dimKey??'—'}</span>
+                    </span>
+                    <button onClick={()=>setShowAllSizes(v=>!v)}
+                      style={{fontSize:11,fontFamily:"'DM Mono',monospace",padding:'3px 10px',borderRadius:8,border:'1px solid var(--border2)',background:showAllSizes?'var(--accent-dim)':'var(--surface2)',color:showAllSizes?'var(--accent)':'var(--text3)',cursor:'pointer',transition:'all .15s'}}>
+                      {showAllSizes?'Active only':'Show all sizes'}
+                    </button>
+                  </div>
+                  <div style={{overflowY:'auto',flex:1}}>
+                    <SizeTable showAll={showAllSizes}/>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -987,6 +1045,8 @@ function Settings({config,saveConfig,setConfig,refreshMap,lightMode,toggleTheme}
   const [newLang,setNewLang]=useState({code:'',name:'',flag:''});
   const [scanning,setScanning]=useState(false);
   const [resetting,setResetting]=useState(false);
+  const [resDirs,setResDirs]=useState(null);
+  useEffect(()=>{api.getResourceDirs().then(r=>setResDirs(r));api.get('/api/paths').then(r=>setResDirs(d=>({...d,...r})));},[]);
   const save=async()=>{await saveConfig(cfg);setSaved(true);setTimeout(()=>setSaved(false),2000);};
   const resetToDefaults=async()=>{
     if(!window.confirm('Reset all settings to factory defaults? This cannot be undone.'))return;
@@ -999,78 +1059,106 @@ function Settings({config,saveConfig,setConfig,refreshMap,lightMode,toggleTheme}
   const remL=i=>setCfg({...cfg,languages:cfg.languages.filter((_,j)=>j!==i)});
   const addL=()=>{if(!newLang.code.trim()||!newLang.name.trim())return;setCfg({...cfg,languages:[...cfg.languages,{...newLang,enabled:true}]});setNewLang({code:'',name:'',flag:''});};
   const handleScan=async()=>{setScanning(true);await refreshMap();setScanning(false);};
+  const SettingCard=({title,desc,children,danger})=>(
+    <div style={{background:'var(--surface2)',border:'1px solid '+(danger?'rgba(255,77,109,.2)':'var(--border)'),borderRadius:'var(--radius-sm)',padding:'14px 16px'}}>
+      <div style={{fontSize:13,fontWeight:600,color:danger?'var(--danger)':'var(--text)',marginBottom:desc?3:10}}>{title}</div>
+      {desc&&<div style={{fontSize:12,color:'var(--text3)',marginBottom:12,lineHeight:1.5}}>{desc}</div>}
+      {children}
+    </div>
+  );
   return(
-    <div>
-      <div className="settings-tabs">
-        {['languages','general'].map(t=>(
-          <button key={t} className={`settings-tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>
-            {t.charAt(0).toUpperCase()+t.slice(1)}
-          </button>
+    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
+      {/* Tab strip */}
+      <div className="settings-tabs" style={{flexShrink:0}}>
+        {[['languages','Languages'],['general','General'],['paths','Paths']].map(([t,l])=>(
+          <button key={t} className={`settings-tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>{l}</button>
         ))}
       </div>
-      {tab==='languages'&&(
-        <div className="view-anim">
-          <p className="section-title">Language list</p>
-          <div style={{maxHeight:440,overflowY:'auto',paddingRight:4}}>
-            {cfg.languages.map((l,i)=>(
-              <div key={l.code+i} className="product-list-item">
-                <label className="toggle"><input type="checkbox" checked={l.enabled} onChange={e=>updL(i,'enabled',e.target.checked)}/><span className="toggle-slider"/></label>
-                <span style={{fontSize:18}}>{l.flag}</span>
-                <span style={{fontFamily:"'DM Mono',monospace",fontSize:13,fontWeight:500,width:32,flexShrink:0}}>{l.code}</span>
-                <span style={{flex:1,fontSize:13,color:'var(--text2)'}}>{l.name}</span>
-                <button className="btn btn-danger btn-sm" onClick={()=>remL(i)}>x</button>
-              </div>
-            ))}
-          </div>
-          <div className="divider"/>
-          <p className="section-title">Add language</p>
-          <div className="flex gap-2 items-center">
-            <input className="input" placeholder="Flag emoji" value={newLang.flag} onChange={e=>setNewLang({...newLang,flag:e.target.value})} style={{width:80}}/>
-            <input className="input" placeholder="Code" value={newLang.code} onChange={e=>setNewLang({...newLang,code:e.target.value.toUpperCase()})} style={{width:80}}/>
-            <input className="input" placeholder="Full name" value={newLang.name} onChange={e=>setNewLang({...newLang,name:e.target.value})} style={{flex:1}}/>
-            <button className="btn btn-primary" onClick={addL}>Add</button>
-          </div>
-        </div>
-      )}
-      {tab==='general'&&(
-        <div className="view-anim">
-          <p className="section-title">Appearance</p>
-          <div className="card mb-3" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div>
-              <div style={{fontSize:13,color:'var(--text)',fontWeight:500,marginBottom:2}}>Light mode</div>
-              <div style={{fontSize:12,color:'var(--text3)'}}>Switch between dark and light interface theme</div>
+
+      {/* Tab content */}
+      <div className="view-anim" key={tab} style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column',paddingTop:16}}>
+
+        {tab==='languages'&&(
+          <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
+            <div style={{flex:1,overflowY:'auto',paddingRight:4,marginBottom:10}}>
+              {cfg.languages.map((l,i)=>(
+                <div key={l.code+i} className="product-list-item">
+                  <label className="toggle"><input type="checkbox" checked={l.enabled} onChange={e=>updL(i,'enabled',e.target.checked)}/><span className="toggle-slider"/></label>
+                  <span style={{fontSize:18,lineHeight:1}}>{l.flag}</span>
+                  <span style={{fontFamily:"'DM Mono',monospace",fontSize:13,fontWeight:600,width:30,flexShrink:0,color:'var(--accent)'}}>{l.code}</span>
+                  <span style={{flex:1,fontSize:13,color:'var(--text2)'}}>{l.name}</span>
+                  <button className="btn btn-danger btn-sm" onClick={()=>remL(i)}>✕</button>
+                </div>
+              ))}
             </div>
-            <label className="toggle" style={{flexShrink:0}}>
-              <input type="checkbox" checked={lightMode} onChange={toggleTheme}/>
-              <span className="toggle-slider"/>
-            </label>
+            <div style={{flexShrink:0,borderTop:'1px solid var(--border)',paddingTop:12,display:'flex',flexDirection:'column',gap:10}}>
+              <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em'}}>Add language</div>
+              <div className="flex gap-2 items-center">
+                <input className="input" placeholder="🏳 Flag" value={newLang.flag} onChange={e=>setNewLang({...newLang,flag:e.target.value})} style={{width:72}}/>
+                <input className="input" placeholder="Code" value={newLang.code} onChange={e=>setNewLang({...newLang,code:e.target.value.toUpperCase()})} style={{width:72}}/>
+                <input className="input" placeholder="Full name" value={newLang.name} onChange={e=>setNewLang({...newLang,name:e.target.value})} style={{flex:1}}/>
+                <button className="btn btn-primary" onClick={addL}>Add</button>
+              </div>
+              <div className="flex gap-2 items-center">
+                <button className="btn btn-primary" onClick={save}>Save changes</button>
+                {saved&&<span style={{fontSize:12,color:'var(--success)'}}>✓ Saved</span>}
+                <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)'}}>{cfg.languages.filter(l=>l.enabled).length}/{cfg.languages.length} enabled</span>
+              </div>
+            </div>
           </div>
-          <p className="section-title">File Map</p>
-          <div className="card mb-3">
-            <p style={{fontSize:13,color:'var(--text2)',marginBottom:12}}>
-              Rescan the <span style={{fontFamily:"'DM Mono',monospace",color:'var(--text)'}}>~/labels</span> folder to rebuild the file map.
-            </p>
-            <button className="btn btn-ghost" onClick={handleScan} disabled={scanning}>
-              {scanning?<><div className="spinner"/>Scanning...</>:<><Icon.Refresh/>Rescan now</>}
-            </button>
+        )}
+
+        {tab==='general'&&(
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,alignContent:'start',overflowY:'auto'}}>
+            <SettingCard title="Theme" desc="Toggle between the dark and light interface.">
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <span style={{fontSize:12,color:'var(--text2)',flex:1}}>{lightMode?'Light mode':'Dark mode'}</span>
+                <label className="toggle"><input type="checkbox" checked={lightMode} onChange={toggleTheme}/><span className="toggle-slider"/></label>
+              </div>
+            </SettingCard>
+            <SettingCard title="File Map" desc="Rescan the labels folder to pick up newly added or renamed files.">
+              <button className="btn btn-ghost" onClick={handleScan} disabled={scanning} style={{width:'100%'}}>
+                {scanning?<><div className="spinner"/>Scanning...</>:<><Icon.Refresh/>Rescan labels folder</>}
+              </button>
+            </SettingCard>
+            <SettingCard title="Export config" desc="Download a snapshot of your current product list and brand colors as a JSON file.">
+              <button className="btn btn-ghost" style={{width:'100%'}} onClick={()=>fetch('/api/export').then(r=>r.blob()).then(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='etiketas_export.json';a.click();})}>
+                ↓ Download export
+              </button>
+            </SettingCard>
+            <SettingCard title="Factory reset" desc="Restore all settings to defaults. Your file map and brand colors are not affected." danger>
+              <button className="btn btn-danger" onClick={resetToDefaults} disabled={resetting} style={{width:'100%'}}>
+                {resetting?<><div className="spinner"/>Resetting...</>:'Reset to factory defaults'}
+              </button>
+            </SettingCard>
           </div>
-          <p className="section-title">Factory defaults</p>
-          <div className="card mb-3">
-            <p style={{fontSize:13,color:'var(--text2)',marginBottom:12}}>
-              Reset all settings to their original factory defaults. Your file map is not affected.
-            </p>
-            <button className="btn btn-danger" onClick={resetToDefaults} disabled={resetting}>
-              {resetting?<><div className="spinner"/>Resetting...</>:'Reset to factory defaults'}
-            </button>
+        )}
+
+        {tab==='paths'&&(
+          <div style={{display:'flex',flexDirection:'column',gap:8,overflowY:'auto'}}>
+            <p style={{fontSize:12,color:'var(--text3)',marginBottom:4}}>These are the directories the app reads from and writes to. Click a path to open it in Explorer.</p>
+            {[
+              ['labels','Labels output','Where generated label files are saved'],
+              ['templates','Templates','IDML template files used when creating labels'],
+              ['qrcodes','QR Codes','PNG QR code images matched to products'],
+              ['logos','Logos','Product logo files used in labels'],
+            ].map(([key,label,desc])=>{
+              const p=resDirs?.[key];
+              return(
+                <div key={key} style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{label}</div>
+                    <div style={{fontSize:11,color:'var(--text3)',marginBottom:4}}>{desc}</div>
+                    <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:p?'var(--accent)':'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={p||''}>{p||'—'}</div>
+                  </div>
+                  <button className="btn btn-folder btn-sm" disabled={!p} onClick={()=>p&&api.openFile(p)} title="Open in Explorer"><Icon.Folder/></button>
+                </div>
+              );
+            })}
           </div>
-        </div>
-      )}
-      {tab==='languages'&&(
-        <div className="flex mt-4 gap-2 items-center">
-          <button className="btn btn-primary" onClick={save}>Save changes</button>
-          {saved&&<span style={{fontSize:12,color:'var(--success)'}}>Saved</span>}
-        </div>
-      )}
+        )}
+
+      </div>
     </div>
   );
 }
@@ -1121,31 +1209,12 @@ function Resources({config,saveConfig}){
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current=setTimeout(()=>{api.saveColors(newColors);setColorsSaved(true);setTimeout(()=>setColorsSaved(false),2000);},900);
   };
-  const exportConfig=()=>{
-    fetch('/api/export').then(r=>r.blob()).then(blob=>{
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(blob);
-      a.download='etiketas_export.json';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-  };
   const moProds=(cfg?.products??[]).filter(p=>p.category==='MO').sort((a,b)=>a.name.localeCompare(b.name));
   const pamProds=(cfg?.products??[]).filter(p=>p.category==='PAM').sort((a,b)=>a.name.localeCompare(b.name));
   const ceProds=(cfg?.products??[]).filter(p=>p.category==='CE').sort((a,b)=>a.name.localeCompare(b.name));
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
       <div style={{flexShrink:0}}>
-        <div className="flex gap-3" style={{marginBottom:16,alignItems:'center'}}>
-          {[['logos','Logos'],['qrcodes','QR Codes'],['templates','Templates']].map(([key,label])=>(
-            <button key={key} className="btn btn-folder" onClick={()=>resDirs&&api.openFile(resDirs[key])}>
-              <Icon.Folder/>{label}
-            </button>
-          ))}
-          <button className="btn btn-ghost" style={{marginLeft:'auto'}} onClick={exportConfig} title="Download current product list and colors as a JSON file">
-            ↓ Export config
-          </button>
-        </div>
         <div className="settings-tabs" style={{marginBottom:0}}>
           {['products','colors'].map(t=>(
             <button key={t} className={`settings-tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>
