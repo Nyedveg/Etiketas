@@ -47,6 +47,7 @@
     {"name": "Spuma",              "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
     {"name": "Targetum",           "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
     {"name": "TerraFol",           "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
+    {"name": "TerraLyze",          "category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
     {"name": "TerraOil",           "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
     {"name": "Borron pH",          "category": "CE",  "unit": "L",  "acidic": false, "enabled": true},
     {"name": "Expert Ca",          "category": "CE",  "unit": "kg", "acidic": false, "enabled": true},

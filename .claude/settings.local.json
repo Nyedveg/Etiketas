@@ -5,7 +5,11 @@
       "Bash(python -u -c \":*)",
       "Bash(python fix_idml_templates.py)",
       "Bash(python3 -c \":*)",
-      "Read(//c/Windows/System32/spool/drivers/color/**)"
+      "Read(//c/Windows/System32/spool/drivers/color/**)",
+      "Read(//c/Users/DanieliusNiedzviegas/Documents/Etiketas/**)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\DanieliusNiedzviegas\\Documents\\Etiketas"
     ]
   }
 }
