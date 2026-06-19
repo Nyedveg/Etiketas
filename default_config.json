@@ -29,7 +29,7 @@
     {"name": "Glutenum",           "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
     {"name": "GlyphoSmart",        "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
     {"name": "Lignum",             "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
-    {"name": "Lignum Plus",        "category": "CE",  "unit": "L",  "acidic": false, "enabled": true},
+    {"name": "Lignum Plus",        "category": "PAM", "unit": "L",  "acidic": true,  "enabled": true},
     {"name": "Lignum S",           "category": "CE",  "unit": "L",  "acidic": false, "enabled": true},
     {"name": "Opti Oil",           "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
     {"name": "Perifolis",          "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},

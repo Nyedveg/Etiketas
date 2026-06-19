@@ -186,7 +186,7 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
   const grouped={};
   for(const t of templates){const c=t.category||'Other';if(!grouped[c])grouped[c]=[];grouped[c].push(t);}
   const catColors={'MO':'var(--mo)','PAM':'var(--pam)','CE':'var(--accent)'};
-  const fmtTime=ts=>{if(!ts)return'';try{const d=new Date(ts);return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});}catch{return ts.slice(0,16).replace('T',' ');}};
+  const fmtTime=ts=>{if(!ts)return'';try{const d=new Date(ts);return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});}catch(e){return ts.slice(0,16).replace('T',' ');}};
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
       <div style={{flexShrink:0}}>

@@ -11,6 +11,7 @@
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>Babel.registerPreset('app',{presets:[[Babel.availablePresets['react'],{runtime:'classic'}],Babel.availablePresets['env']]});</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -164,6 +165,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel" src="/static/app.js"></script>
+<script type="text/babel" data-presets="app" src="/static/app.js"></script>
 </body>
 </html>

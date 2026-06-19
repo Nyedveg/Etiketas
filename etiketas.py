@@ -54,7 +54,7 @@ RE_BLEED= re.compile(r'\+2mm', re.I)
 RE_PACK_AMT = re.compile(r'^(\d+(?:\.\d+)?)(kg|g|l|ml)', re.I)
 RE_DIMS_MM  = re.compile(r'^(\d+x\d+)(?:mm)?$', re.I)
 RE_NLANG    = re.compile(r'^(\d+)LANG$', re.I)
-RE_TMPL     = re.compile(r'^(MO|PAM|CE)_TEMPLATE_', re.I)
+RE_TMPL     = re.compile(r'^(MO|PAM|CE)(_PH)?_TEMPLATE_', re.I)
 
 def parse_stem(stem):
     clean = RE_BLEED.sub('', stem)
@@ -101,6 +101,7 @@ def parse_template_stem(stem):
     if not m:
         return None
     category = m.group(1).upper()
+    acidic   = m.group(2) is not None  # True when _PH_ present (e.g. PAM_PH_TEMPLATE_)
     rest = stem[m.end():]
     deze = rest.upper().endswith('_BOX')
     if deze:
@@ -124,8 +125,8 @@ def parse_template_stem(stem):
             date = f"{yr}-{parts[idx]}"
         else:
             date = yr
-    return {"category": category, "packaging": packaging, "lang_count": lang_count,
-            "dimensions": dims, "date": date, "deze": deze}
+    return {"category": category, "acidic": acidic, "packaging": packaging,
+            "lang_count": lang_count, "dimensions": dims, "date": date, "deze": deze}
 
 
 def _norm_packaging(p: str) -> str:
@@ -168,6 +169,7 @@ def scan_templates():
                 "dimensions": info["dimensions"],
                 "date":       info["date"],
                 "deze":       info["deze"],
+                "acidic":     info["acidic"],
                 "print_file": False,
                 "category":   info["category"],
                 "is_template": True,
@@ -184,6 +186,8 @@ def score_template_detail(entry, target, products):
     if entry.get("print_file"):           return -1, []
     if entry.get("deze") != target.get("deze", False): return -1, []
     is_box = target.get("deze", False)
+    if not is_box and entry.get("acidic", False) != target.get("acidic", False):
+        return -1, []
     if not is_box and entry.get("dimensions") != target.get("dimensions"):
         return -1, []
     # For labels: reject if template packaging explicitly doesn't match (e.g. 5kg template ≠ 0.25kg request)
@@ -551,7 +555,8 @@ def create_label(product, languages, packaging_size, config, label_template_path
     else:
         label_tmpl, label_score = find_template(all_files,
             {"product":product,"category":category,"dimensions":dims,
-             "lang_count":len(languages),"deze":False,"packaging":packaging_size}, prods)
+             "lang_count":len(languages),"deze":False,"packaging":packaging_size,
+             "acidic":acidic}, prods)
 
     if skip_box:
         box_tmpl, box_score = None, 0
@@ -1103,7 +1108,7 @@ class Handler(BaseHTTPRequestHandler):
             map_data = load_json(MAP_FILE, {"files":[]})
             files    = map_data.get("files",[])
             box_mult = cfg.get("boxMultipliers", {}).get(size, size)
-            label_results = find_templates(files,{"product":product,"category":category,"dimensions":dims,"lang_count":len(languages),"deze":False,"packaging":size},prods)
+            label_results = find_templates(files,{"product":product,"category":category,"dimensions":dims,"lang_count":len(languages),"deze":False,"packaging":size,"acidic":acidic},prods)
             box_results   = find_templates(files,{"product":product,"category":category,"dimensions":"180x180","lang_count":len(languages),"deze":True,"packaging":box_mult},prods)
             self.send_json({
                 "labels": [{"file":f,"score":s,"reasons":r} for f,s,r in label_results],
