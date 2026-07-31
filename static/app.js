@@ -413,20 +413,23 @@ function NewLabelWizard({config,map,setMap}){
       {step===2&&(
         <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
           <div style={{flexShrink:0,marginBottom:12}}>
-            <span style={{fontSize:13,color:'var(--text2)'}}>Select up to 3 languages &middot; </span>
-            <span style={{fontFamily:"'DM Mono',monospace",fontSize:13,color:'var(--accent)'}}>{languages.length}/3</span>
-            {languages.length>0&&(
-              <div className="flex gap-2 mt-2">
-                {languages.map(code=>{
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+              <span style={{fontSize:13,color:'var(--text2)'}}>Select up to 3 languages</span>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:13,color:languages.length>0?'var(--accent)':'var(--text3)'}}>{languages.length}/3</span>
+            </div>
+            <div style={{height:30,display:'flex',gap:6,alignItems:'center'}}>
+              {languages.length===0
+                ?<span style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>No languages selected yet</span>
+                :languages.map(code=>{
                   const l=enabledLangs.find(x=>x.code===code);
                   return(
-                    <span key={code} onClick={()=>toggleLang(code)} style={{background:'var(--accent-dim)',border:'1px solid var(--accent)',borderRadius:4,padding:'4px 10px',fontSize:12,fontFamily:"'DM Mono',monospace",color:'var(--accent)',cursor:'pointer'}}>
-                      {l?.flag} {code} x
+                    <span key={code} onClick={()=>toggleLang(code)} style={{background:'var(--accent-dim)',border:'1px solid var(--accent)',borderRadius:4,padding:'3px 10px',fontSize:12,fontFamily:"'DM Mono',monospace",color:'var(--accent)',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}>
+                      {l?.flag} {code} <span style={{opacity:.5}}>×</span>
                     </span>
                   );
-                })}
-              </div>
-            )}
+                })
+              }
+            </div>
           </div>
           <div className="lang-grid" style={{flex:1,maxHeight:'none',overflowY:'auto'}}>
             {enabledLangs.map(l=>{
@@ -504,13 +507,14 @@ function NewLabelWizard({config,map,setMap}){
               </div>
             </div>
           </div>
-          <div className="flex mt-4 gap-2" style={{flexShrink:0,alignItems:'center'}}>
-            <button className="btn btn-ghost" onClick={()=>setStep(2)}>&larr; Back</button>
-            {(()=>{
-              const missing=[...(!sku?['SKU']:[]),...(productCfg?.category==='PAM'&&!ufi?['UFI']:[])];
-              return missing.length>0&&<span style={{fontSize:11,color:'var(--warn,#d97706)',marginLeft:'auto',marginRight:8}}>&#9888; No {missing.join(' or ')} provided</span>;
-            })()}
-            <button className="btn btn-primary" style={(sku&&(productCfg?.category!=='PAM'||ufi))?{marginLeft:'auto'}:{}} onClick={()=>setStep(4)}>Next &rarr;</button>
+          <div style={{flexShrink:0}}>
+            <div style={{minHeight:22,display:'flex',alignItems:'center',marginBottom:6}}>
+              {(()=>{const missing=[...(!sku?['SKU']:[]),...(productCfg?.category==='PAM'&&!ufi?['UFI']:[])];return missing.length>0&&<span style={{fontSize:11,color:'var(--warn,#d97706)'}}>&#9888; No {missing.join(' or ')} provided</span>;})()}
+            </div>
+            <div className="flex gap-2">
+              <button className="btn btn-ghost" onClick={()=>setStep(2)}>&larr; Back</button>
+              <button className="btn btn-primary ml-auto" onClick={()=>setStep(4)}>Next &rarr;</button>
+            </div>
           </div>
         </div>
       )}
@@ -554,24 +558,24 @@ function NewLabelWizard({config,map,setMap}){
               ))}
             </div>
           </div>
-          {loading?(
-            <div className="flex items-center gap-3" style={{padding:'20px 0',flexShrink:0}}>
-              <div className="spinner"/><span style={{color:'var(--text2)'}}>Finding best templates...</span>
-            </div>
-          ):reviewTab==='template'?(
-            <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
-              <TemplatePicker items={tmplInfo?.labels} selected={selectedLabel} onSelect={setSelectedLabel} title="Packaging Label Template" newName={prevLabel} skipped={selectedLabel===null}/>
-              <TemplatePicker items={tmplInfo?.boxes} selected={selectedBox} onSelect={setSelectedBox} title="Box Label Template" newName={prevBox} skipped={selectedBox===null}/>
-              {(selectedLabel===null)!==(selectedBox===null)&&(
-                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:'var(--radius-sm)',background:'rgba(255,179,64,.1)',border:'1px solid rgba(255,179,64,.25)',fontSize:12,color:'var(--warning)',marginTop:4}}>
-                  <span style={{fontSize:14}}>⚠</span>
-                  {selectedLabel===null?'Only the box label will be created — packaging label is skipped.':'Only the packaging label will be created — box label is skipped.'}
-                </div>
-              )}
-            </div>
-          ):(
-            <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
-              {relatedFiles.length===0?(
+          <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
+            {loading?(
+              <div className="flex items-center gap-3" style={{padding:'20px 0'}}>
+                <div className="spinner"/><span style={{color:'var(--text2)'}}>Finding best templates...</span>
+              </div>
+            ):reviewTab==='template'?(
+              <>
+                <TemplatePicker items={tmplInfo?.labels} selected={selectedLabel} onSelect={setSelectedLabel} title="Packaging Label Template" newName={prevLabel} skipped={selectedLabel===null}/>
+                <TemplatePicker items={tmplInfo?.boxes} selected={selectedBox} onSelect={setSelectedBox} title="Box Label Template" newName={prevBox} skipped={selectedBox===null}/>
+                {(selectedLabel===null)!==(selectedBox===null)&&(
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:'var(--radius-sm)',background:'rgba(255,179,64,.1)',border:'1px solid rgba(255,179,64,.25)',fontSize:12,color:'var(--warning)',marginTop:4}}>
+                    <span style={{fontSize:14}}>⚠</span>
+                    {selectedLabel===null?'Only the box label will be created — packaging label is skipped.':'Only the packaging label will be created — box label is skipped.'}
+                  </div>
+                )}
+              </>
+            ):(
+              relatedFiles.length===0?(
                 <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'16px 0'}}>No related labels found for {product} with selected languages.</div>
               ):(
                 <div className="card" style={{padding:0,overflow:'hidden'}}>
@@ -590,9 +594,9 @@ function NewLabelWizard({config,map,setMap}){
                     </tbody>
                   </table>
                 </div>
-              )}
-            </div>
-          )}
+              )
+            )}
+          </div>
           <div className="flex mt-4 gap-2" style={{flexShrink:0}}>
             <button className="btn btn-ghost" onClick={()=>setStep(4)}>&larr; Back</button>
             <button className="btn btn-primary ml-auto btn-lg" disabled={loading||( selectedLabel===null&&selectedBox===null)} onClick={handleCreate}>

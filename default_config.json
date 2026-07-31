@@ -47,6 +47,7 @@
     {"name": "Spuma",              "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
     {"name": "Targetum",           "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
     {"name": "TerraFol",           "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
+    {"name": "TerraBreak",         "category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
     {"name": "TerraLyze",          "category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
     {"name": "TerraOil",           "category": "PAM", "unit": "L",  "acidic": false, "enabled": true},
     {"name": "Borron pH",          "category": "CE",  "unit": "L",  "acidic": false, "enabled": true},
@@ -74,28 +75,31 @@
     {"code": "GR", "name": "Greek",       "flag": "🇬🇷", "enabled": true},
     {"code": "UA", "name": "Ukrainian",   "flag": "🇺🇦", "enabled": true},
     {"code": "MK", "name": "Macedonian",  "flag": "🇲🇰", "enabled": true},
-    {"code": "AZ", "name": "Azerbaijani", "flag": "🇦🇿", "enabled": true}
+    {"code": "AZ", "name": "Azerbaijani", "flag": "🇦🇿", "enabled": true},
+    {"code": "FR", "name": "French",      "flag": "🇫🇷", "enabled": true},
+    {"code": "NL", "name": "Dutch",       "flag": "🇳🇱", "enabled": true}
   ],
   "packagingSizes": {
     "PAM_normal":  ["250ml", "1L", "5L", "20L"],
     "PAM_acidic":  ["250ml", "1L", "5L", "20L"],
-    "MO":          ["250g", "500g", "1kg", "5kg"],
+    "MO":          ["50g", "250g", "500g", "1kg", "5kg"],
     "MO_liquid":   ["250ml", "1L", "5L", "20L"],
     "CE":          ["250ml", "1L", "5L", "20L"],
-    "CE_solid":    ["250g", "500g", "1kg", "5kg"]
+    "CE_solid":    ["50g", "250g", "500g", "1kg", "5kg"]
   },
   "dimensions": {
     "PAM_normal":  {"250ml": "160x58", "1L": "255x140", "5L": "150x141", "20L": "180x200"},
     "PAM_acidic":  {"250ml": "160x58", "1L": "255x140", "5L": "140x117", "20L": "170x200"},
-    "MO":          {"250g": "100x120", "500g": "100x150", "1kg": "140x160", "5kg": "180x180"},
+    "MO":          {"50g": "60x80", "250g": "100x120", "500g": "100x150", "1kg": "140x160", "5kg": "180x180"},
     "MO_liquid":   {"250ml": "160x58", "1L": "255x140", "5L": "150x141", "20L": "180x200"},
     "CE":          {"250ml": "160x58", "1L": "255x140", "5L": "140x117", "20L": "170x200"},
-    "CE_solid":    {"250g": "100x120", "500g": "100x150", "1kg": "140x160", "5kg": "180x180"}
+    "CE_solid":    {"50g": "60x80", "250g": "100x120", "500g": "100x150", "1kg": "140x160", "5kg": "180x180"}
   },
   "boxMultipliers": {
     "1kg":   "1kgx10",
     "5kg":   "5kgx2",
     "500g":  "500gx20",
+    "50g":   "50gx100",
     "250g":  "250gx40",
     "250ml": "250mlx40",
     "1L":    "1Lx12",
