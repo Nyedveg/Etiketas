@@ -6,10 +6,38 @@
       "Bash(python fix_idml_templates.py)",
       "Bash(python3 -c \":*)",
       "Read(//c/Windows/System32/spool/drivers/color/**)",
-      "Read(//c/Users/DanieliusNiedzviegas/Documents/Etiketas/**)"
+      "Read(//c/Users/DanieliusNiedzviegas/Documents/Etiketas/**)",
+      "PowerShell(python --version)",
+      "PowerShell(py --version)",
+      "PowerShell(python -c \"import PIL; print\\('Pillow', PIL.__version__\\)\")",
+      "PowerShell(python -c \"import tkinter; print\\('tkinter OK'\\)\")",
+      "PowerShell(pip --version)",
+      "PowerShell(pip install Pillow)",
+      "PowerShell(pip install PyMuPDF)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('etiketas.py',encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(curl -s \"http://localhost:7842/api/config\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\([p['name'] for p in d['products'] if 'ion' in p['name'].lower\\(\\) or 'bion' in p['name'].lower\\(\\)]\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(netstat -ano)",
+      "Bash(powershell -NoProfile -Command \"Get-Process -Id 30916 | Select-Object Id,ProcessName,StartTime,Path\")",
+      "Bash(powershell -NoProfile -Command \"Get-Process python -ErrorAction SilentlyContinue | Select-Object Id,StartTime\")",
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 27676,30916 -Force -ErrorAction SilentlyContinue\")",
+      "Bash(command -v chromium-cli)",
+      "Bash(python -c \"import playwright; print\\('playwright python OK'\\)\")",
+      "Bash(npx --version)",
+      "Bash(where msedge *)",
+      "Bash(where chrome *)",
+      "Bash(pip install *)",
+      "Bash(python -m playwright install chromium)",
+      "Bash(python screenshot_info.py)",
+      "Bash(python debug_info.py)",
+      "Bash(curl -s \"http://localhost:7842/api/assets_check\")",
+      "Bash(python screenshot_info2.py)",
+      "Bash(rm -rf \"C:\\\\Users\\\\DanieliusNiedzviegas\\\\Documents\\\\Etiketas\\\\.cache\\\\logo_thumbs\"; rm -f \"c:\\\\Users\\\\DanieliusNiedzviegas\\\\Documents\\\\GitHub\\\\Etiketas\\\\elementa_thumb_debug.png\"; echo done)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\DanieliusNiedzviegas\\Documents\\Etiketas"
+      "C:\\Users\\DanieliusNiedzviegas\\Documents\\Etiketas",
+      "C:\\Users\\DanieliusNiedzviegas\\Documents\\Etiketas\\.cache\\logo_thumbs"
     ]
   }
 }

@@ -9,7 +9,7 @@ import ctypes, html, io, json, mimetypes, os, re, shutil, threading, webbrowser,
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR   = Path(__file__).parent
@@ -18,6 +18,7 @@ LABELS_DIR = Path.home() / "Documents" / "Etiketas"
 QR_DIR          = BASE_DIR / "qrcodes"
 TEMPLATE_DIR    = BASE_DIR / "templates"
 TRANSLATIONS_DIR = BASE_DIR / "translations"
+LOGO_THUMB_DIR = LABELS_DIR / ".cache" / "logo_thumbs"
 MAP_FILE     = LABELS_DIR / "labels_map.json"
 CFG_FILE     = LABELS_DIR / "app_config.json"
 COLORS_FILE  = LABELS_DIR / "colors_config.json"
@@ -721,6 +722,56 @@ def find_logo_for_product(product_name):
             return f
     return None
 
+def _trim_to_content(img):
+    """Crop away transparent/white padding so a logo's real ink bounds fill the frame."""
+    from PIL import ImageChops
+    bbox = img.split()[-1].getbbox()  # alpha-channel bbox — trims true transparency
+    if bbox and (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) < 0.98 * img.width * img.height:
+        return img.crop(bbox)
+    # Page had an opaque (e.g. white) background instead of transparency — trim near-white margins.
+    rgb = img.convert('RGB')
+    diff = ImageChops.difference(rgb, Image.new('RGB', rgb.size, (255, 255, 255)))
+    bbox = diff.getbbox()
+    return img.crop(bbox) if bbox else img
+
+def render_logo_thumbnail(pdf_path: Path, size: int = 240) -> bytes:
+    """Rasterize page 1 of a logo PDF into a transparent PNG thumbnail, cropped to its ink."""
+    import fitz  # PyMuPDF
+    from PIL import Image
+    doc = fitz.open(str(pdf_path))
+    try:
+        page = doc.load_page(0)
+        zoom = max(4.0, size / max(page.rect.width, page.rect.height, 1))
+        pix  = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=True)
+        img  = Image.frombytes("RGBA", (pix.width, pix.height), pix.samples)
+        img  = _trim_to_content(img)
+        img.thumbnail((size, size), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        return buf.getvalue()
+    finally:
+        doc.close()
+
+def get_logo_thumbnail(product_name: str):
+    """Return cached PNG bytes for a product's logo, rendering + caching on first request."""
+    logo_path = find_logo_for_product(product_name)
+    if not logo_path:
+        return None
+    slug  = re.sub(r'[^a-zA-Z0-9]+', '_', product_name).strip('_')
+    cache_file = LOGO_THUMB_DIR / f"{slug}_{int(logo_path.stat().st_mtime)}.png"
+    if cache_file.exists():
+        return cache_file.read_bytes()
+    try:
+        data = render_logo_thumbnail(logo_path)
+    except Exception:
+        return None
+    LOGO_THUMB_DIR.mkdir(parents=True, exist_ok=True)
+    for stale in LOGO_THUMB_DIR.glob(f"{slug}_*.png"):
+        try: stale.unlink()
+        except Exception: pass
+    cache_file.write_bytes(data)
+    return data
+
 def patch_logo_in_idml(idml_path, logo_path) -> bool:
     """Replace logo LinkResourceURI (_LOGO) in an IDML file in-place. Returns True on success."""
     logo_uri  = Path(logo_path).as_uri()
@@ -1047,6 +1098,19 @@ class Handler(BaseHTTPRequestHandler):
                             break
                 result[name] = {"qr": has_qr, "logo": has_logo}
             self.send_json(result)
+
+        elif path == "/api/logo_thumb":
+            qs      = parse_qs(urlparse(self.path).query)
+            product = (qs.get("product") or [None])[0]
+            data    = get_logo_thumbnail(product) if product else None
+            if data is None:
+                self.send_response(404); self.end_headers(); return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "public, max-age=604800")
+            self.end_headers()
+            self.wfile.write(data)
 
         elif path == "/api/translations":
             self.send_json({"files": list_translations()})

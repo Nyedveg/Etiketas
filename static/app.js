@@ -692,7 +692,6 @@ function Information({config,map,setMap}){
   const [showWip,setShowWip]=useState('all');
   const [catFilter,setCatFilter]=useState('all');
   const [tab,setTab]=useState('files');
-  const [showAllSizes,setShowAllSizes]=useState(false);
   const [sizeRefOpen,setSizeRefOpen]=useState(false);
   useEffect(()=>{
     api.getColors().then(r=>setColors(r.colors||{}));
@@ -770,7 +769,7 @@ function Information({config,map,setMap}){
         </div>
         <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:2,paddingRight:2}}>
           {filteredProds.map(p=>(
-            <button key={p.name} onClick={()=>{setSelected(selected===p.name?null:p.name);setTab('files');setShowAllSizes(false);}}
+            <button key={p.name} onClick={()=>{setSelected(selected===p.name?null:p.name);setTab('files');setSizeRefOpen(false);}}
               style={{display:'flex',alignItems:'center',gap:6,padding:'6px 9px',borderRadius:'var(--radius-sm)',border:'1px solid '+(selected===p.name?'var(--accent)':'var(--border2)'),background:selected===p.name?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',textAlign:'left',transition:'all .15s',flexShrink:0}}>
               <span style={{flex:1,fontSize:12,fontWeight:selected===p.name?500:400,color:selected===p.name?'var(--accent)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
               <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 4px',borderRadius:2,background:catBg(p.category),color:catColor(p.category),flexShrink:0}}>{p.category}</span>
@@ -800,8 +799,15 @@ function Information({config,map,setMap}){
         ):(
           <div key={selected} style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
             {/* Gradient header */}
-            <div className="info-gradient-bar" style={{height:50,borderRadius:'var(--radius-sm)',marginBottom:8,background:`linear-gradient(135deg, ${swatches.map(c=>c||'#808080').join(', ')})`,border:'1px solid var(--border2)',boxShadow:'0 4px 20px rgba(0,0,0,.4)',display:'flex',alignItems:'center',paddingLeft:14,gap:10,position:'relative',overflow:'hidden',flexShrink:0}}>
+            <div className="info-gradient-bar" style={{height:50,borderRadius:'var(--radius-sm)',marginBottom:8,background:`linear-gradient(135deg, ${swatches.map(c=>c||'#808080').join(', ')})`,border:'1px solid var(--border2)',boxShadow:'0 4px 20px rgba(0,0,0,.4)',display:'flex',alignItems:'center',paddingLeft:10,gap:10,position:'relative',overflow:'hidden',flexShrink:0}}>
               <div className="info-bar-shimmer"/>
+              <div title={prodAssets.logo?'Logo on file':'No logo found'} style={{height:32,minWidth:32,maxWidth:120,padding:'4px 8px',borderRadius:8,background:'rgba(255,255,255,.94)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,.35)'}}>
+                {prodAssets.logo?(
+                  <img src={`/api/logo_thumb?product=${encodeURIComponent(selected)}`} alt="" style={{maxWidth:'100%',maxHeight:'100%',objectFit:'contain'}}/>
+                ):(
+                  <span style={{fontSize:12,fontWeight:700,color:'#999',fontFamily:"'Syne',sans-serif"}}>{selected.slice(0,1)}</span>
+                )}
+              </div>
               <span style={{fontWeight:700,fontSize:14,color:'#fff',textShadow:'0 1px 6px rgba(0,0,0,.6)',fontFamily:"'Syne',sans-serif",letterSpacing:'-.01em'}}>{selected}</span>
               {prodCfg&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.85)',background:'rgba(0,0,0,.28)',padding:'2px 8px',borderRadius:8,backdropFilter:'blur(4px)',flexShrink:0}}>{prodCfg.category}{prodCfg.acidic?' · acidic':''}{prodCfg.unit?' · '+prodCfg.unit:''}</span>}
               <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.5)',paddingRight:14,flexShrink:0}}>{prodFiles.length} file{prodFiles.length!==1?'s':''}</span>
@@ -812,13 +818,40 @@ function Information({config,map,setMap}){
                 <div key={i} title={`Brand${i+1}: ${c||'#808080'}`} className="info-swatch" style={{flex:1,height:12,borderRadius:3,background:c||'#808080',border:'1px solid rgba(255,255,255,.08)',animationDelay:`${i*45}ms`,boxShadow:`0 2px 6px ${(c||'#808080')}55`}}/>
               ))}
             </div>
+            {/* Asset dots + size reference — inline, no separate tabs */}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:sizeRefOpen?6:8,flexShrink:0,flexWrap:'wrap'}}>
+              {[['QR',prodAssets.qr,'qrcodes'],['Logo',prodAssets.logo,'logos']].map(([label,ok,dirKey])=>(
+                <button key={label} title={`${label}: ${ok?'found':'missing'} — click to open folder`}
+                  onClick={()=>api.getResourceDirs().then(d=>api.openFile(d[dirKey]))}
+                  style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:10,border:'1px solid var(--border2)',background:'var(--surface2)',cursor:'pointer',fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',flexShrink:0}}>
+                  <span style={{width:7,height:7,borderRadius:'50%',background:ok?'var(--success)':'var(--danger)',boxShadow:`0 0 5px ${ok?'var(--success)':'var(--danger)'}`,flexShrink:0}}/>
+                  {label}
+                </button>
+              ))}
+              <div style={{width:1,alignSelf:'stretch',background:'var(--border2)',flexShrink:0}}/>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',flex:1,alignItems:'center',minWidth:0}}>
+                {Object.entries(config?.dimensions?.[dimKey]??{}).map(([sz,dims])=>(
+                  <span key={sz} style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'3px 7px',borderRadius:8,background:'var(--surface2)',border:'1px solid var(--border2)',color:'var(--text2)',whiteSpace:'nowrap',flexShrink:0}}>
+                    {sz} <span style={{color:'var(--text3)'}}>· {dims}mm</span>
+                  </span>
+                ))}
+              </div>
+              <button onClick={()=>setSizeRefOpen(o=>!o)}
+                style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'3px 4px',display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
+                All sizes
+                <span style={{display:'inline-block',transition:'transform .2s',transform:sizeRefOpen?'rotate(180deg)':'none'}}>▾</span>
+              </button>
+            </div>
+            {sizeRefOpen&&(
+              <div style={{marginBottom:8,padding:10,borderRadius:'var(--radius-sm)',background:'var(--surface2)',border:'1px solid var(--border2)',maxHeight:280,overflowY:'auto',flexShrink:0}}>
+                <SizeTable showAll={true}/>
+              </div>
+            )}
             {/* Tab strip */}
             <div style={{display:'flex',gap:2,marginBottom:10,background:'var(--surface2)',borderRadius:'var(--radius-sm)',padding:3,border:'1px solid var(--border)',flexShrink:0}}>
               {[
                 ['files',`Files${prodFiles.length?' ('+prodFiles.length+')':''}`],
                 ['translations',`Translations${prodTrans.length?' ('+prodTrans.length+')':''}`],
-                ['assets','Assets'],
-                ['sizes','Sizes'],
               ].map(([key,label])=>(
                 <button key={key} onClick={()=>setTab(key)}
                   style={{flex:1,padding:'5px 0',borderRadius:5,cursor:'pointer',fontSize:11,fontWeight:500,border:'none',background:tab===key?'var(--surface3)':'transparent',color:tab===key?'var(--text)':'var(--text2)',transition:'all .15s'}}>
@@ -885,34 +918,6 @@ function Information({config,map,setMap}){
                       ))}
                     </div>
                   )}
-                </div>
-              )}
-              {tab==='assets'&&(
-                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  {[['QR Code',prodAssets.qr,'qrcodes'],['Logo',prodAssets.logo,'logos']].map(([label,ok,dirKey])=>(
-                    <div key={label} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:'var(--radius-sm)',background:'var(--surface2)',border:'1px solid '+(ok?'rgba(108,181,113,.25)':'rgba(255,77,109,.2)')}}>
-                      <span style={{width:10,height:10,borderRadius:'50%',background:ok?'var(--success)':'var(--danger)',flexShrink:0,boxShadow:`0 0 6px ${ok?'var(--success)':'var(--danger)'}`}}/>
-                      <span style={{fontSize:13,fontWeight:500,flex:1,color:ok?'var(--text)':'var(--text3)'}}>{label}</span>
-                      <span style={{fontSize:11,color:ok?'var(--success)':'var(--danger)',fontFamily:"'DM Mono',monospace"}}>{ok?'found':'missing'}</span>
-                      <button className="btn btn-folder btn-sm" title="Open folder" onClick={()=>api.getResourceDirs().then(d=>api.openFile(d[dirKey]))}><Icon.Folder/></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {tab==='sizes'&&(
-                <div style={{display:'flex',flexDirection:'column',overflow:'hidden',height:'100%'}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,flexShrink:0}}>
-                    <span style={{fontSize:11,color:'var(--text3)',fontFamily:"'DM Mono',monospace"}}>
-                      Active: <span style={{color:'var(--accent)',fontWeight:600}}>{dimKey??'—'}</span>
-                    </span>
-                    <button onClick={()=>setShowAllSizes(v=>!v)}
-                      style={{fontSize:11,fontFamily:"'DM Mono',monospace",padding:'3px 10px',borderRadius:8,border:'1px solid var(--border2)',background:showAllSizes?'var(--accent-dim)':'var(--surface2)',color:showAllSizes?'var(--accent)':'var(--text3)',cursor:'pointer',transition:'all .15s'}}>
-                      {showAllSizes?'Active only':'Show all sizes'}
-                    </button>
-                  </div>
-                  <div style={{overflowY:'auto',flex:1}}>
-                    <SizeTable showAll={showAllSizes}/>
-                  </div>
                 </div>
               )}
             </div>
