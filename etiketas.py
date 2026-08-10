@@ -303,6 +303,8 @@ def _get_icc_transform():
             r"C:\Windows\System32\spool\drivers\color",
             r"C:\Program Files\Common Files\Adobe\Color\Profiles\Recommended",
             r"C:\Program Files\Common Files\Adobe\Color\Profiles",
+            r"C:\Program Files (x86)\Common Files\Adobe\Color\Profiles\Recommended",
+            r"C:\Program Files (x86)\Common Files\Adobe\Color\Profiles",
         ]
         srgb_path  = next((os.path.join(d, f) for d in _PROFILE_DIRS
                            for f in ("sRGB Color Space Profile.icm", "sRGB.icc")
@@ -322,7 +324,7 @@ def _hex_to_cmyk(hex_color: str):
     """Convert sRGB hex to CMYK using the Coated FOGRA39 ICC profile (the same
     profile InDesign uses by default for European print work).  This ensures
     the values round-trip correctly when InDesign converts the swatch back to
-    RGB.  Falls back to a gamma-corrected mathematical conversion if the ICC
+    RGB.  Falls back to a naive mathematical conversion if the ICC
     profiles are not available on the system."""
     h = hex_color.lstrip('#')
     r_int, g_int, b_int = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -337,12 +339,11 @@ def _hex_to_cmyk(hex_color: str):
         except Exception:
             pass
 
-    # Fallback: gamma-corrected mathematical conversion
-    def linearize(v: int) -> float:
-        c = v / 255.0
-        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-    rl, gl, bl = linearize(r_int), linearize(g_int), linearize(b_int)
-    c_raw, m_raw, y_raw = 1.0 - rl, 1.0 - gl, 1.0 - bl
+    # Fallback: naive complement on gamma-encoded sRGB (no ICC profile available).
+    # Do NOT linearize first — removing gamma before complementing crushes midtones
+    # and dumps excess ink (especially K) into colors that shouldn't have any.
+    r, g, b = r_int / 255.0, g_int / 255.0, b_int / 255.0
+    c_raw, m_raw, y_raw = 1.0 - r, 1.0 - g, 1.0 - b
     k = min(c_raw, m_raw, y_raw)
     if k >= 1.0:
         return 0.0, 0.0, 0.0, 100.0
