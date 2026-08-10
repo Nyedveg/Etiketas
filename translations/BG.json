@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "code": "BG",
+    "name": "Bulgarian",
+    "flag": "🇧🇬",
+    "product": null
+  },
+  "_todo": "Language-level base file. Labels and the constant boilerplate (storage conditions, country of origin, default shelf life, manufacturer address) are filled in. Fields left blank are product-specific and must be filled in per product before use: lang1.header subtitle (tagline), lang1.bullet1-4, composition/carriers/form/usage/preparation values. Machine-translated boilerplate text should be reviewed by a native speaker before production use, especially for regulatory-adjacent fields like storage conditions and country of origin.",
+  "lang1": {
+    "header": "BG | ",
+    "bullet1": "",
+    "bullet2": "",
+    "bullet3": "",
+    "bullet4": ""
+  },
+  "more_info": {
+    "label": "Повече информация:"
+  },
+  "composition": {
+    "label": "Състав:",
+    "value": ""
+  },
+  "carriers": {
+    "label": "Носители:",
+    "value": ""
+  },
+  "form": {
+    "label": "Форма на продукта:",
+    "value": ""
+  },
+  "usage": {
+    "label": "Норма на употреба:",
+    "value": ""
+  },
+  "preparation": {
+    "label": "Приготвяне на разтвора:",
+    "value": ""
+  },
+  "storage": {
+    "label": "Условия на съхранение:",
+    "value": "Да се съхранява в плътно затворена оригинална опаковка в продължение на 24 месеца, при температура от +5 до +30 °C, на сухо, добре проветриво място, защитено от пряка слънчева светлина."
+  },
+  "box_section": {
+    "header": "BG | "
+  },
+  "origin": {
+    "label": "Държава на произход:",
+    "value": "Литва."
+  },
+  "footer": {
+    "sku_label": "SKU код:",
+    "ufi_label": "UFI:",
+    "mfg_date_label": "Дата на производство:",
+    "batch_label": "Номер на партида:",
+    "exp_date_label": "Срок на годност:",
+    "exp_date_value": "24 месеца",
+    "manufacturer_label": "Производител:",
+    "manufacturer_company": "UAB Nando",
+    "manufacturer_address1": "Europos Ave. 39",
+    "manufacturer_address2": "LT-46329 Kaunas, Lithuania",
+    "manufacturer_phone": "Tel. +370 37 441891, ",
+    "manufacturer_email": "info@nandobio.com",
+    "manufacturer_website": "www.nandobio.com"
+  }
+}

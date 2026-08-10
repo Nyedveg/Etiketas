@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "code": "EE",
+    "name": "Estonian",
+    "flag": "🇪🇪",
+    "product": null
+  },
+  "_todo": "Language-level base file. Labels and the constant boilerplate (storage conditions, country of origin, default shelf life, manufacturer address) are filled in. Fields left blank are product-specific and must be filled in per product before use: lang1.header subtitle (tagline), lang1.bullet1-4, composition/carriers/form/usage/preparation values. Machine-translated boilerplate text should be reviewed by a native speaker before production use, especially for regulatory-adjacent fields like storage conditions and country of origin.",
+  "lang1": {
+    "header": "EE | ",
+    "bullet1": "",
+    "bullet2": "",
+    "bullet3": "",
+    "bullet4": ""
+  },
+  "more_info": {
+    "label": "Lisainfo:"
+  },
+  "composition": {
+    "label": "Koostis:",
+    "value": ""
+  },
+  "carriers": {
+    "label": "Kandeained:",
+    "value": ""
+  },
+  "form": {
+    "label": "Toote vorm:",
+    "value": ""
+  },
+  "usage": {
+    "label": "Kasutusnorm:",
+    "value": ""
+  },
+  "preparation": {
+    "label": "Lahuse valmistamine:",
+    "value": ""
+  },
+  "storage": {
+    "label": "Säilitustingimused:",
+    "value": "Säilitada tihedalt suletud originaalpakendis 24 kuud temperatuuril +5 kuni +30 °C, kuivas, hästi ventileeritavas kohas, otsese päikesevalguse eest kaitstult."
+  },
+  "box_section": {
+    "header": "EE | "
+  },
+  "origin": {
+    "label": "Päritolumaa:",
+    "value": "Leedu."
+  },
+  "footer": {
+    "sku_label": "SKU kood:",
+    "ufi_label": "UFI:",
+    "mfg_date_label": "Tootmiskuupäev:",
+    "batch_label": "Partii number:",
+    "exp_date_label": "Kõlblikkusaeg:",
+    "exp_date_value": "24 kuud",
+    "manufacturer_label": "Tootja:",
+    "manufacturer_company": "UAB Nando",
+    "manufacturer_address1": "Europos Ave. 39",
+    "manufacturer_address2": "LT-46329 Kaunas, Lithuania",
+    "manufacturer_phone": "Tel. +370 37 441891, ",
+    "manufacturer_email": "info@nandobio.com",
+    "manufacturer_website": "www.nandobio.com"
+  }
+}

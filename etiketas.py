@@ -55,6 +55,7 @@ RE_BLEED= re.compile(r'\+2mm', re.I)
 RE_PACK_AMT = re.compile(r'^(\d+(?:\.\d+)?)(kg|g|l|ml)', re.I)
 RE_DIMS_MM  = re.compile(r'^(\d+x\d+)(?:mm)?$', re.I)
 RE_NLANG    = re.compile(r'^(\d+)LANG$', re.I)
+RE_BOX_MULT = re.compile(r'^(\d+(?:\.\d+)?)(kg|g|l|ml)x(\d+)$', re.I)
 RE_TMPL     = re.compile(r'^(MO|PAM|CE)(_PH)?_TEMPLATE_', re.I)
 
 def parse_stem(stem):
@@ -109,9 +110,9 @@ def parse_template_stem(stem):
         rest = rest[:-4]
     parts = rest.split('_')
     lang_idx = next((i for i, p in enumerate(parts) if RE_NLANG.match(p)), None)
-    if lang_idx is None or lang_idx < 1:
+    if lang_idx is None:
         return None
-    packaging  = '_'.join(parts[:lang_idx])
+    packaging  = '_'.join(parts[:lang_idx]) or None  # empty = general/universal box template
     lang_count = int(RE_NLANG.match(parts[lang_idx]).group(1))
     idx = lang_idx + 1
     dims = None
@@ -211,7 +212,12 @@ def score_template_detail(entry, target, products):
     else:
         reasons.append({"text": "Product: " + str(entry.get("product")), "type": "info"})
     if is_box:
-        if target.get("packaging") and entry.get("packaging") == target.get("packaging"):
+        if entry.get("is_template") and not entry.get("packaging"):
+            # Universal box template -- pack count gets swapped in at creation time,
+            # so it outranks a same-size legacy template when both exist.
+            s += 15
+            reasons.append({"text": "Universal box template", "type": "match"})
+        elif target.get("packaging") and entry.get("packaging") == target.get("packaging"):
             s += 10
             reasons.append({"text": "Qty matches: " + str(entry.get("packaging")), "type": "match"})
         elif target.get("packaging"):
@@ -430,6 +436,30 @@ def _get_story_replacements(story_title, trans):
     for n in range(1, 5):
         if story_title.endswith(f'_BULLET{n}'):
             return [trans.get('lang1', {}).get(f'bullet{n}', '')]
+    if story_title.endswith('_MORE_INFO'):
+        return [trans.get('more_info', {}).get('label', '')]
+    if story_title.endswith('_FOOTER_SKU_BLOCK'):
+        f = trans.get('footer', {})
+        return [
+            f.get('sku_label', ''), '',  # SKU value is left blank -- not sourced from translations
+            f.get('mfg_date_label', ''),
+            f.get('batch_label', ''),
+            f.get('exp_date_label', ''), f.get('exp_date_value', ''),
+        ]
+    if story_title.endswith('_FOOTER_PRODUCER_BLOCK'):
+        f = trans.get('footer', {})
+        return [
+            f.get('manufacturer_label', ''),
+            f.get('manufacturer_company', ''),
+            f.get('manufacturer_address1', ''),
+            f.get('manufacturer_address2', ''),
+            f.get('manufacturer_phone', ''),
+            f.get('manufacturer_email', ''),
+            f.get('manufacturer_website', ''),
+        ]
+    if story_title.endswith('_BOX_DATES'):
+        f = trans.get('footer', {})
+        return [f.get('mfg_date_label', ''), f.get('batch_label', '')]
     return None
 
 def apply_footer_content(idml_path: Path, translations: list, footer_values: dict) -> bool:
@@ -495,6 +525,36 @@ def apply_lang_translation(idml_path: Path, slot: int, trans: dict) -> bool:
                             texts = _get_story_replacements(m.group(1), trans)
                             if texts is not None:
                                 xml = _replace_story_contents(xml, texts)
+                        data = xml.encode('utf-8')
+                    zout.writestr(item, data)
+    except Exception:
+        return False
+    idml_path.write_bytes(buf.getvalue())
+    return True
+
+def _format_box_weight_text(box_mult: str) -> str:
+    """Turn a boxMultiplier code like '1kgx10' into display text '1 kg x 10'."""
+    m = RE_BOX_MULT.match(box_mult or '')
+    if not m:
+        return box_mult or ''
+    amount, unit, count = m.groups()
+    return f"{amount} {unit} x {count}"
+
+def apply_box_weight_text(idml_path: Path, box_mult: str) -> bool:
+    """Set the SHARED_WEIGHT story's text to this box's pack size and count.
+    Not language-specific -- applied once per box file regardless of language slots."""
+    weight_text = _format_box_weight_text(box_mult)
+    buf = io.BytesIO()
+    try:
+        with zipfile.ZipFile(str(idml_path), 'r') as zin:
+            with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+                    if item.filename.startswith('Stories/'):
+                        xml = data.decode('utf-8')
+                        m = re.search(r'StoryTitle="([^"]+)"', xml)
+                        if m and m.group(1) == 'SHARED_WEIGHT':
+                            xml = _replace_story_contents(xml, [weight_text])
                         data = xml.encode('utf-8')
                     zout.writestr(item, data)
     except Exception:
@@ -593,7 +653,7 @@ def create_label(product, languages, packaging_size, config, label_template_path
     for lf in (lang_files or []):
         translations.append(load_json(lf) if lf else None)
 
-    def make_file(tmpl, dest_dir, dest_name, apply_qr=False):
+    def make_file(tmpl, dest_dir, dest_name, apply_qr=False, apply_weight=False):
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_path = dest_dir / dest_name
         if dest_path.exists():
@@ -610,6 +670,8 @@ def create_label(product, languages, packaging_size, config, label_template_path
                     ops["qr"] = patch_qr_in_idml(dest_path, qr_path)
                 if logo_path:
                     ops["logo"] = patch_logo_in_idml(dest_path, logo_path)
+                if apply_weight:
+                    ops["weight"] = apply_box_weight_text(dest_path, box_mult)
                 for slot_idx, trans in enumerate(translations):
                     if trans:
                         ok = apply_lang_translation(dest_path, slot_idx + 1, trans)
@@ -650,7 +712,7 @@ def create_label(product, languages, packaging_size, config, label_template_path
         })
 
     if not skip_box:
-        box_path, box_ops = make_file(box_tmpl, box_dir, box_name, apply_qr=False)
+        box_path, box_ops = make_file(box_tmpl, box_dir, box_name, apply_qr=False, apply_weight=True)
         results.append({
             "type":      "box_label",
             "path":      str(box_path),

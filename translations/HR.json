@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "code": "HR",
+    "name": "Croatian",
+    "flag": "🇭🇷",
+    "product": null
+  },
+  "_todo": "Language-level base file. Labels and the constant boilerplate (storage conditions, country of origin, default shelf life, manufacturer address) are filled in. Fields left blank are product-specific and must be filled in per product before use: lang1.header subtitle (tagline), lang1.bullet1-4, composition/carriers/form/usage/preparation values. Machine-translated boilerplate text should be reviewed by a native speaker before production use, especially for regulatory-adjacent fields like storage conditions and country of origin.",
+  "lang1": {
+    "header": "HR | ",
+    "bullet1": "",
+    "bullet2": "",
+    "bullet3": "",
+    "bullet4": ""
+  },
+  "more_info": {
+    "label": "Više informacija:"
+  },
+  "composition": {
+    "label": "Sastav:",
+    "value": ""
+  },
+  "carriers": {
+    "label": "Nosači:",
+    "value": ""
+  },
+  "form": {
+    "label": "Oblik proizvoda:",
+    "value": ""
+  },
+  "usage": {
+    "label": "Norma primjene:",
+    "value": ""
+  },
+  "preparation": {
+    "label": "Priprema otopine:",
+    "value": ""
+  },
+  "storage": {
+    "label": "Uvjeti skladištenja:",
+    "value": "Čuvati u čvrsto zatvorenom, originalnom pakiranju 24 mjeseca, na temperaturi od +5 do +30 °C, na suhom, dobro prozračenom mjestu, zaštićeno od izravne sunčeve svjetlosti."
+  },
+  "box_section": {
+    "header": "HR | "
+  },
+  "origin": {
+    "label": "Zemlja podrijetla:",
+    "value": "Litva."
+  },
+  "footer": {
+    "sku_label": "SKU kod:",
+    "ufi_label": "UFI:",
+    "mfg_date_label": "Datum proizvodnje:",
+    "batch_label": "Broj serije:",
+    "exp_date_label": "Rok trajanja:",
+    "exp_date_value": "24 mjeseca",
+    "manufacturer_label": "Proizvođač:",
+    "manufacturer_company": "UAB Nando",
+    "manufacturer_address1": "Europos Ave. 39",
+    "manufacturer_address2": "LT-46329 Kaunas, Lithuania",
+    "manufacturer_phone": "Tel. +370 37 441891, ",
+    "manufacturer_email": "info@nandobio.com",
+    "manufacturer_website": "www.nandobio.com"
+  }
+}

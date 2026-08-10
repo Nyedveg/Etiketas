@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "code": "FR",
+    "name": "French",
+    "flag": "🇫🇷",
+    "product": null
+  },
+  "_todo": "Language-level base file. Labels and the constant boilerplate (storage conditions, country of origin, default shelf life, manufacturer address) are filled in. Fields left blank are product-specific and must be filled in per product before use: lang1.header subtitle (tagline), lang1.bullet1-4, composition/carriers/form/usage/preparation values. Machine-translated boilerplate text should be reviewed by a native speaker before production use, especially for regulatory-adjacent fields like storage conditions and country of origin.",
+  "lang1": {
+    "header": "FR | ",
+    "bullet1": "",
+    "bullet2": "",
+    "bullet3": "",
+    "bullet4": ""
+  },
+  "more_info": {
+    "label": "Plus d'informations :"
+  },
+  "composition": {
+    "label": "Composition :",
+    "value": ""
+  },
+  "carriers": {
+    "label": "Vecteurs :",
+    "value": ""
+  },
+  "form": {
+    "label": "Forme du produit :",
+    "value": ""
+  },
+  "usage": {
+    "label": "Dose d'utilisation :",
+    "value": ""
+  },
+  "preparation": {
+    "label": "Préparation de la solution :",
+    "value": ""
+  },
+  "storage": {
+    "label": "Conditions de stockage :",
+    "value": "Conserver dans l'emballage d'origine bien fermé pendant 24 mois, à une température de +5 à +30 °C, dans un endroit sec et bien ventilé, à l'abri de la lumière directe du soleil."
+  },
+  "box_section": {
+    "header": "FR | "
+  },
+  "origin": {
+    "label": "Pays d'origine :",
+    "value": "Lituanie."
+  },
+  "footer": {
+    "sku_label": "Code SKU :",
+    "ufi_label": "UFI :",
+    "mfg_date_label": "Date de fabrication :",
+    "batch_label": "Numéro de lot :",
+    "exp_date_label": "Durée de conservation :",
+    "exp_date_value": "24 mois",
+    "manufacturer_label": "Fabricant :",
+    "manufacturer_company": "UAB Nando",
+    "manufacturer_address1": "Europos Ave. 39",
+    "manufacturer_address2": "LT-46329 Kaunas, Lithuania",
+    "manufacturer_phone": "Tel. +370 37 441891, ",
+    "manufacturer_email": "info@nandobio.com",
+    "manufacturer_website": "www.nandobio.com"
+  }
+}
