@@ -111,6 +111,10 @@ if (Test-Path -LiteralPath $InstallDir) {
     Copy-Item -Path (Join-Path $innerFolder.FullName '*') -Destination $InstallDir -Recurse -Force
     Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+    # These two are setup tooling, not part of the app itself -- don't leave a
+    # copy sitting inside the installed folder.
+    Remove-Item -LiteralPath (Join-Path $InstallDir 'install.bat') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $InstallDir 'install.ps1') -Force -ErrorAction SilentlyContinue
     Write-Ok "Installed to $InstallDir"
 }
 
