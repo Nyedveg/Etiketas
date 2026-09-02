@@ -19,7 +19,7 @@ $ErrorActionPreference = 'Stop'
 # ever becomes private -- this only works against a repo that's public,
 # since it's an anonymous download (no auth/token handling here).
 $RepoZipUrl     = 'https://github.com/Nyedveg/Etiketas/archive/refs/heads/main.zip'
-$InstallDir     = Join-Path $env:USERPROFILE 'Documents\GitHub\Etiketas'
+$InstallDir     = Join-Path $env:LOCALAPPDATA 'Programs\Etiketas'
 $OneDriveFolder = Join-Path $env:USERPROFILE 'OneDrive - Nando, UAB\Marketing - Etiketas'
 $LabelsDir      = Join-Path $env:USERPROFILE 'Documents\Etiketas'
 # ------------------------------------------------------------------------------
