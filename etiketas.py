@@ -5,7 +5,7 @@ Run with:  python etiketas.py
 Opens at:  http://localhost:7842
 """
 
-import ctypes, html, io, json, mimetypes, os, re, shutil, threading, webbrowser, subprocess, zipfile
+import ctypes, html, io, json, mimetypes, os, re, shutil, stat, threading, webbrowser, subprocess, zipfile
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -44,6 +44,54 @@ def append_history(entry):
     if len(history) > 200:
         history = history[:200]
     save_json(HISTORY_FILE, history)
+
+# ── Sync status (best-effort: is LABELS_DIR a link into a synced folder?) ──────
+def _onedrive_running():
+    if os.name != "nt":
+        return False
+    try:
+        r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq OneDrive.exe"],
+                            capture_output=True, text=True, timeout=5)
+        return "OneDrive.exe" in r.stdout
+    except Exception:
+        return False
+
+def get_sync_status():
+    """Best-effort read of whether LABELS_DIR is a reparse point (junction/symlink)
+    into what looks like a OneDrive-synced folder, and whether OneDrive is running.
+    This can't see live upload/download progress -- Windows doesn't expose that
+    without deep Cloud Filter API/COM integration -- so it only reports the coarse,
+    reliably-detectable states: missing, not linked, broken link, or linked."""
+    try:
+        st = os.lstat(LABELS_DIR)
+    except OSError:
+        return {"state": "missing", "path": str(LABELS_DIR), "target": None,
+                "onedrive_running": _onedrive_running()}
+
+    is_link = bool(st.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT) if os.name == "nt" else os.path.islink(LABELS_DIR)
+    if not is_link:
+        return {"state": "not_linked", "path": str(LABELS_DIR), "target": None,
+                "onedrive_running": _onedrive_running()}
+
+    try:
+        target = os.readlink(LABELS_DIR)
+    except OSError:
+        target = None
+    target_path  = Path(target) if target else None
+    onedrive_running = _onedrive_running()
+
+    if not target_path or not target_path.exists():
+        return {"state": "broken", "path": str(LABELS_DIR), "target": str(target_path) if target_path else None,
+                "onedrive_running": onedrive_running}
+
+    looks_like_onedrive = "onedrive" in str(target_path).lower()
+    return {
+        "state": "active" if onedrive_running else "onedrive_not_running",
+        "path": str(LABELS_DIR),
+        "target": str(target_path),
+        "onedrive_running": onedrive_running,
+        "looks_like_onedrive": looks_like_onedrive,
+    }
 
 # ── Filename parser ────────────────────────────────────────────────────────────
 RE_PACK = re.compile(r'^\d+(\.\d+)?(kg|g|l|ml)(x\d+)?$', re.I)
@@ -576,9 +624,12 @@ def list_translations():
                 "name":     meta.get('name', f.stem),
                 "flag":     meta.get('flag', ''),
                 "product":  meta.get('product', None),
+                # Set by Etiketas+ when it authors a file. Missing/unknown status is
+                # treated as draft -- conservative, since completeness is unverified.
+                "status":   meta.get('status') or 'draft',
             })
         except Exception:
-            files.append({"filename": f.name, "path": str(f), "code": f.stem, "name": f.stem, "flag": ""})
+            files.append({"filename": f.name, "path": str(f), "code": f.stem, "name": f.stem, "flag": "", "product": None, "status": "draft"})
     return files
 
 # ── Label creation ─────────────────────────────────────────────────────────────
@@ -1120,6 +1171,9 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/labels_dir":
             self.send_json({"path": str(LABELS_DIR)})
+
+        elif path == "/api/sync_status":
+            self.send_json(get_sync_status())
 
         elif path == "/api/qrcodes":
             files = []

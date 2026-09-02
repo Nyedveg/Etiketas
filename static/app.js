@@ -31,6 +31,7 @@ const api = {
   getResourceDirs: ()    => api.get('/api/resource_dirs'),
   checkAssets:        ()    => api.get('/api/assets_check'),
   listTranslations:   ()    => api.get('/api/translations'),
+  getSyncStatus:      ()    => api.get('/api/sync_status'),
 };
 
 const scoreLabel = s => s>=75?{label:'Perfect',cls:'score-high'}:s>=50?{label:'Good',cls:'score-med'}:{label:'Fallback',cls:'score-low'};
@@ -139,6 +140,34 @@ function Sidebar({view,setView,map,refreshMap}){
   );
 }
 
+const SYNC_STATE_INFO = {
+  missing:              {color:'var(--danger)',  label:'Labels folder missing',hint:'The labels folder could not be found on disk.'},
+  not_linked:           {color:'var(--text3)',   label:'Not shared',           hint:'This folder is a normal local folder -- it is not linked to a shared OneDrive folder. Changes here stay on this device only.'},
+  broken:               {color:'var(--danger)',  label:'Shared link broken',   hint:'This folder is linked to another location, but that location no longer exists. Re-link it (see SYNC_SETUP.md).'},
+  onedrive_not_running: {color:'var(--warning)', label:'OneDrive not running', hint:'Linked to a OneDrive folder, but OneDrive isn’t currently running -- changes will queue locally until it starts.'},
+  active:                {color:'var(--success)', label:'OneDrive active',      hint:'Linked to a OneDrive folder and OneDrive is running -- changes will sync automatically.'},
+};
+
+function SyncStatus(){
+  const [status,setStatus]=useState(null);
+  useEffect(()=>{
+    let alive=true;
+    const load=()=>api.getSyncStatus().then(r=>{if(alive)setStatus(r);}).catch(()=>{});
+    load();
+    const id=setInterval(load,30000);
+    return ()=>{alive=false;clearInterval(id);};
+  },[]);
+  if(!status)return null;
+  const info=SYNC_STATE_INFO[status.state]??{color:'var(--text3)',label:status.state,hint:''};
+  const tooltip=[info.hint,`Folder: ${status.path}`,status.target?`Linked to: ${status.target}`:null].filter(Boolean).join('\n');
+  return(
+    <div title={tooltip} style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text2)',flexShrink:0,cursor:'default'}}>
+      <span style={{width:7,height:7,borderRadius:'50%',background:info.color,boxShadow:`0 0 5px ${info.color}`,flexShrink:0}}/>
+      {info.label}
+    </div>
+  );
+}
+
 function Topbar({view,map}){
   const titles={dashboard:'Dashboard',new:'New Label',browse:'Browse',settings:'Settings',resources:'Resources',information:'Information'};
   return(
@@ -149,6 +178,7 @@ function Topbar({view,map}){
           Updated {new Date(map.generated).toLocaleString()}
         </span>
       )}
+      <SyncStatus/>
     </div>
   );
 }
@@ -288,8 +318,10 @@ function NewLabelWizard({config,map,setMap}){
   const [reviewTab,setReviewTab]=useState('template');
   const [langFiles,setLangFiles]=useState([]);
   const [transFiles,setTransFiles]=useState([]);
+  const [prodColors,setProdColors]=useState({});
   const [sku,setSku]=useState('');
   const [ufi,setUfi]=useState('');
+  useEffect(()=>{api.getColors().then(r=>{if(r?.colors)setProdColors(r.colors);});},[]);
   const enabledProducts=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
   const enabledLangs=(config?.languages??[]).filter(l=>l.enabled);
   const productCfg=product?config.products.find(p=>p.name===product):null;
@@ -397,6 +429,11 @@ function NewLabelWizard({config,map,setMap}){
                   <span style={{padding:'1px 7px',borderRadius:3,fontSize:10,fontFamily:"'DM Mono',monospace",background:p.category==='PAM'?'rgba(var(--pam-rgb),.15)':p.category==='CE'?'rgba(var(--accent-rgb),.15)':'rgba(var(--mo-rgb),.15)',color:p.category==='PAM'?'var(--pam)':p.category==='CE'?'var(--ce)':'var(--mo)'}}>{p.category}</span>
                   {p.acidic&&<span className="acidic-badge">acidic</span>}
                 </div>
+                <div style={{display:'flex',gap:3,marginTop:7}}>
+                  {(prodColors[p.name]??Array(6).fill('#808080')).map((c,i)=>(
+                    <div key={i} title={`Brand${i+1}: ${c||'#808080'}`} style={{flex:1,height:7,borderRadius:2,background:c||'#808080'}}/>
+                  ))}
+                </div>
               </button>
             ))}
           </div>
@@ -472,10 +509,11 @@ function NewLabelWizard({config,map,setMap}){
                     onChange={e=>{const v=e.target.value||null;setLangFiles(prev=>{const n=[...prev];n[i]=v;return n;})}}>
                     <option value=''>— Skip (keep template text) —</option>
                     {transFiles.map(f=>(
-                      <option key={f.path} value={f.path}>{f.flag} {f.name} ({f.code}){f.product?` — ${f.product}`:''}</option>
+                      <option key={f.path} value={f.path}>{f.flag} {f.name} ({f.code}){f.product?` — ${f.product}`:''}{f.status==='draft'?' — draft':''}</option>
                     ))}
                   </select>
                   {(()=>{const sel=transFiles.find(f=>f.path===langFiles[i]);return sel?.product&&sel.product!==product?(<div style={{marginTop:6,fontSize:11,color:'var(--warning)',display:'flex',alignItems:'center',gap:5}}><span>⚠</span><span>This file is for <strong>{sel.product}</strong>, not <strong>{product}</strong>. The text may not match.</span></div>):null;})()}
+                  {(()=>{const sel=transFiles.find(f=>f.path===langFiles[i]);return sel?.status==='draft'?(<div style={{marginTop:6,fontSize:11,color:'var(--warning)',display:'flex',alignItems:'center',gap:5}}><span>⚠</span><span>This translation is marked <strong>draft</strong> — some fields may still be blank. Check it in Etiketas+ before using it on a real label.</span></div>):null;})()}
                 </div>
               );
             })}

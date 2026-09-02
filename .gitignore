@@ -1,0 +1,22 @@
+# Python bytecode cache -- regenerated automatically, version/platform-specific
+__pycache__/
+*.pyc
+
+# Claude Code local settings -- personal/session-specific, not meant to be shared
+.claude/settings.local.json
+
+# Desktop shortcuts -- hardcode an absolute, per-machine path; regenerate per machine
+# instead of committing one that only works on the machine that made it
+*.lnk
+
+# Local run logs
+*.log
+
+# OS cruft
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Stray pip cache dir -- can land here if `pip install` is ever run with this
+# folder as the working directory (observed while testing install.ps1)
+/pip/

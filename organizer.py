@@ -98,7 +98,7 @@ def build_destination(info: dict, labels_dir: Path, products: list = None) -> Pa
     else:
         m = RE_PACK_AMT.match(info["packaging"])
         if m:
-            amount = m.group(1).rstrip('0').rstrip('.')
+            amount = f"{float(m.group(1)):g}"
             unit   = m.group(2)
             unit   = 'L' if unit.lower() == 'l' else unit.lower()
             pack_folder = f"{amount}{unit}"
