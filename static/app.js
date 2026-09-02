@@ -303,6 +303,30 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
   );
 }
 
+// Brand mark echoing the actual Nando logo chevron: exactly 3 sticks at a
+// true 45 degrees, joined by 2 rounded intersections -- 5 brand colors laid
+// out sequentially along the mark, same as the real logo's color-blocking.
+function BrandZigzag({colors,height=40,animated=false}){
+  const c=(colors&&colors.length?colors:Array(6).fill('#808080')).map(x=>x||'#808080');
+  const sw=height*0.36;             // thick stroke, matches the logo's bold strokes
+  const d=height-sw;                // vertical travel per stick -- equal to horizontal travel, so each stick is a true 45deg diagonal
+  const w=3*d+sw;
+  const half=sw/2;
+  const p0=[half,d+half], p1=[d+half,half], p2=[2*d+half,d+half], p3=[3*d+half,half];
+  // Path order matches the real logo's sequential color-blocking: stick, joint, stick, joint, stick.
+  const stickProps=delay=>animated?{pathLength:1,strokeDasharray:1,className:'zz-stick',style:{animationDelay:`${delay}ms`}}:{};
+  const jointProps=delay=>animated?{className:'zz-joint',style:{animationDelay:`${delay}ms`}}:{};
+  return(
+    <svg viewBox={`0 0 ${w} ${height}`} width="100%" height={height} style={{display:'block',overflow:'visible'}} preserveAspectRatio="xMinYMid meet">
+      <line x1={p0[0]} y1={p0[1]} x2={p1[0]} y2={p1[1]} stroke={c[0]} strokeWidth={sw} strokeLinecap="round" {...stickProps(0)}><title>{c[0]}</title></line>
+      <line x1={p1[0]} y1={p1[1]} x2={p2[0]} y2={p2[1]} stroke={c[2]} strokeWidth={sw} strokeLinecap="round" {...stickProps(260)}><title>{c[2]}</title></line>
+      <line x1={p2[0]} y1={p2[1]} x2={p3[0]} y2={p3[1]} stroke={c[4]} strokeWidth={sw} strokeLinecap="round" {...stickProps(520)}><title>{c[4]}</title></line>
+      <circle cx={p1[0]} cy={p1[1]} r={half} fill={c[1]} {...jointProps(220)}><title>{c[1]}</title></circle>
+      <circle cx={p2[0]} cy={p2[1]} r={half} fill={c[3]} {...jointProps(480)}><title>{c[3]}</title></circle>
+    </svg>
+  );
+}
+
 function NewLabelWizard({config,map,setMap}){
   const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
   const [step,setStep]=useState(1);
@@ -319,9 +343,11 @@ function NewLabelWizard({config,map,setMap}){
   const [langFiles,setLangFiles]=useState([]);
   const [transFiles,setTransFiles]=useState([]);
   const [prodColors,setProdColors]=useState({});
+  const [prodAssets,setProdAssets]=useState({});
   const [sku,setSku]=useState('');
   const [ufi,setUfi]=useState('');
   useEffect(()=>{api.getColors().then(r=>{if(r?.colors)setProdColors(r.colors);});},[]);
+  useEffect(()=>{api.checkAssets().then(r=>{if(r&&!r.error)setProdAssets(r);});},[]);
   const enabledProducts=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
   const enabledLangs=(config?.languages??[]).filter(l=>l.enabled);
   const productCfg=product?config.products.find(p=>p.name===product):null;
@@ -424,15 +450,22 @@ function NewLabelWizard({config,map,setMap}){
               <button key={p.name} className={'product-card '+(product===p.name?'selected':'')}
                 onClick={()=>setProduct(p.name)}
                 onDoubleClick={()=>{setProduct(p.name);setStep(2);}}>
-                <div className="product-name">{p.name}</div>
-                <div style={{display:'flex',gap:6,marginTop:4}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div title={prodAssets[p.name]?.logo?'Logo on file':'No logo found'} style={{height:30,minWidth:30,maxWidth:78,padding:'3px 7px',borderRadius:8,background:'rgba(255,255,255,.94)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,boxShadow:'0 1px 4px var(--shadow-sm)'}}>
+                    {prodAssets[p.name]?.logo?(
+                      <img src={`/api/logo_thumb?product=${encodeURIComponent(p.name)}`} alt="" style={{maxWidth:'100%',maxHeight:'100%',objectFit:'contain'}}/>
+                    ):(
+                      <span style={{fontSize:12,fontWeight:700,color:'#999',fontFamily:"'Open Sans',sans-serif"}}>{p.name.slice(0,1)}</span>
+                    )}
+                  </div>
+                  <div className="product-name" style={{flex:1,marginBottom:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:700,color:(prodColors[p.name]||[])[5]||'var(--text)'}}>{p.name}</div>
+                </div>
+                <div style={{display:'flex',gap:6,marginTop:8}}>
                   <span style={{padding:'1px 7px',borderRadius:3,fontSize:10,fontFamily:"'DM Mono',monospace",background:p.category==='PAM'?'rgba(var(--pam-rgb),.15)':p.category==='CE'?'rgba(var(--accent-rgb),.15)':'rgba(var(--mo-rgb),.15)',color:p.category==='PAM'?'var(--pam)':p.category==='CE'?'var(--ce)':'var(--mo)'}}>{p.category}</span>
                   {p.acidic&&<span className="acidic-badge">acidic</span>}
                 </div>
-                <div style={{display:'flex',gap:3,marginTop:7}}>
-                  {(prodColors[p.name]??Array(6).fill('#808080')).map((c,i)=>(
-                    <div key={i} title={`Brand${i+1}: ${c||'#808080'}`} style={{flex:1,height:7,borderRadius:2,background:c||'#808080'}}/>
-                  ))}
+                <div style={{marginTop:10}}>
+                  <BrandZigzag colors={prodColors[p.name]}/>
                 </div>
               </button>
             ))}
@@ -762,7 +795,7 @@ function Information({config,map,setMap}){
             <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
               {entries.map(([sz,dims])=>(
                 <div key={sz} style={{background:isActive?'var(--surface2)':'var(--surface3)',border:'1px solid '+(isActive?clr:'var(--border2)'),borderRadius:6,padding:'6px 11px',textAlign:'center',minWidth:64,transition:'all .2s'}}>
-                  <div style={{fontSize:12,fontWeight:600,fontFamily:"'Syne',sans-serif",color:isActive?'var(--text)':'var(--text3)'}}>{sz}</div>
+                  <div style={{fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",color:isActive?'var(--text)':'var(--text3)'}}>{sz}</div>
                   <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',marginTop:2}}>{dims}mm</div>
                 </div>
               ))}
@@ -776,7 +809,7 @@ function Information({config,map,setMap}){
           {Object.entries(config?.boxMultipliers??{}).map(([sz,box])=>(
             <div key={sz} style={{background:'var(--surface3)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 11px',textAlign:'center',minWidth:64}}>
               <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)'}}>{sz}</div>
-              <div style={{fontSize:11,fontWeight:600,fontFamily:"'Syne',sans-serif",color:'var(--text)',marginTop:2}}>{box}</div>
+              <div style={{fontSize:11,fontWeight:600,fontFamily:"'Open Sans',sans-serif",color:'var(--text)',marginTop:2}}>{box}</div>
             </div>
           ))}
         </div>
@@ -829,7 +862,11 @@ function Information({config,map,setMap}){
             )}
           </div>
         ):(
-          <div key={selected} style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div key={selected} style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
+            {/* Large Z watermark, low opacity, behind the panel content */}
+            <div style={{position:'absolute',top:-24,right:-30,width:420,opacity:.07,pointerEvents:'none',zIndex:-1}}>
+              <BrandZigzag key={selected} colors={swatches} height={190} animated={true}/>
+            </div>
             {/* Gradient header */}
             <div className="info-gradient-bar" style={{height:50,borderRadius:'var(--radius-sm)',marginBottom:8,background:`linear-gradient(135deg, ${swatches.map(c=>c||'#808080').join(', ')})`,border:'1px solid var(--border2)',boxShadow:'0 4px 20px rgba(0,0,0,.4)',display:'flex',alignItems:'center',paddingLeft:10,gap:10,position:'relative',overflow:'hidden',flexShrink:0}}>
               <div className="info-bar-shimmer"/>
@@ -837,10 +874,10 @@ function Information({config,map,setMap}){
                 {prodAssets.logo?(
                   <img src={`/api/logo_thumb?product=${encodeURIComponent(selected)}`} alt="" style={{maxWidth:'100%',maxHeight:'100%',objectFit:'contain'}}/>
                 ):(
-                  <span style={{fontSize:12,fontWeight:700,color:'#999',fontFamily:"'Syne',sans-serif"}}>{selected.slice(0,1)}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:'#999',fontFamily:"'Open Sans',sans-serif"}}>{selected.slice(0,1)}</span>
                 )}
               </div>
-              <span style={{fontWeight:700,fontSize:14,color:'#fff',textShadow:'0 1px 6px rgba(0,0,0,.6)',fontFamily:"'Syne',sans-serif",letterSpacing:'-.01em'}}>{selected}</span>
+              <span style={{fontWeight:700,fontSize:14,color:'#fff',textShadow:'0 1px 6px rgba(0,0,0,.6)',fontFamily:"'Open Sans',sans-serif",letterSpacing:'-.01em'}}>{selected}</span>
               {prodCfg&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.85)',background:'rgba(0,0,0,.28)',padding:'2px 8px',borderRadius:8,backdropFilter:'blur(4px)',flexShrink:0}}>{prodCfg.category}{prodCfg.acidic?' · acidic':''}{prodCfg.unit?' · '+prodCfg.unit:''}</span>}
               <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'rgba(255,255,255,.5)',paddingRight:14,flexShrink:0}}>{prodFiles.length} file{prodFiles.length!==1?'s':''}</span>
             </div>
@@ -1087,7 +1124,7 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
   const [scanning,setScanning]=useState(false);
   const [resetting,setResetting]=useState(false);
   const [resDirs,setResDirs]=useState(null);
-  useEffect(()=>{api.getResourceDirs().then(r=>setResDirs(r));api.get('/api/paths').then(r=>setResDirs(d=>({...d,...r})));},[]);
+  useEffect(()=>{api.getResourceDirs().then(r=>setResDirs(r));},[]);
   const save=async()=>{await saveConfig(cfg);setSaved(true);setTimeout(()=>setSaved(false),2000);};
   const resetToDefaults=async()=>{
     if(!window.confirm('Reset all settings to factory defaults? This cannot be undone.'))return;

@@ -838,7 +838,7 @@ def find_logo_for_product(product_name):
 
 def _trim_to_content(img):
     """Crop away transparent/white padding so a logo's real ink bounds fill the frame."""
-    from PIL import ImageChops
+    from PIL import Image, ImageChops
     bbox = img.split()[-1].getbbox()  # alpha-channel bbox — trims true transparency
     if bbox and (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) < 0.98 * img.width * img.height:
         return img.crop(bbox)
@@ -855,7 +855,12 @@ def render_logo_thumbnail(pdf_path: Path, size: int = 240) -> bytes:
     doc = fitz.open(str(pdf_path))
     try:
         page = doc.load_page(0)
-        zoom = max(4.0, size / max(page.rect.width, page.rect.height, 1))
+        dim  = max(page.rect.width, page.rect.height, 1)
+        # Floor of 4x gives small logos a crisp render to crop/downsample from,
+        # but oversized artboards (e.g. a die-line page mistakenly used as the
+        # logo source) must not be rendered at 4x too -- MuPDF refuses to
+        # rasterize a pixmap past its internal size limit ("Overly large image").
+        zoom = min(max(4.0, size / dim), 3000 / dim)
         pix  = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=True)
         img  = Image.frombytes("RGBA", (pix.width, pix.height), pix.samples)
         img  = _trim_to_content(img)
