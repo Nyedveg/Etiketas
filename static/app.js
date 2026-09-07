@@ -49,19 +49,32 @@ const Icon = {
   Resources:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.2 0-1.1.9-2 2-2h2a3 3 0 000-6A7 7 0 008 1zM5 8a1 1 0 110-2 1 1 0 010 2zm0-3a1 1 0 110-2 1 1 0 010 2zm3-2a1 1 0 110-2 1 1 0 010 2zm3 2a1 1 0 110-2 1 1 0 010 2z"/></svg>,
   Info:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zM7.25 6.5h1.5v1h-1.5v-1zm0 2h1.5v3.5h-1.5V8.5z"/></svg>,
   Trash:()=><svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M6 2a1 1 0 00-1 1H3.5a.5.5 0 000 1H4v8a1 1 0 001 1h6a1 1 0 001-1V4h.5a.5.5 0 000-1H11a1 1 0 00-1-1H6zm0 1h4v1H6V3zM5 5h6v7H5V5zm1.5 1a.5.5 0 00-.5.5v4a.5.5 0 001 0v-4a.5.5 0 00-.5-.5zm3 0a.5.5 0 00-.5.5v4a.5.5 0 001 0v-4a.5.5 0 00-.5-.5z"/></svg>,
+  External:()=><svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M9 2a1 1 0 000 2h2.586L7.293 8.293a1 1 0 101.414 1.414L13 5.414V8a1 1 0 002 0V3a1 1 0 00-1-1H9zM4 4a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-3a1 1 0 10-2 0v3H4V6h3a1 1 0 100-2H4z"/></svg>,
 };
 
-function FileActions({path, onDeleted}){
+// Builds an "open the containing folder in SharePoint" link from a file's
+// path relative to LABELS_DIR, e.g. base + "/MO/BioNPK%20Powder%20S%20500/EN/5kg".
+// The base is the synced library's root (Settings -> General -> SharePoint links).
+function sharepointFolderLink(base, relPath){
+  if(!base||!relPath)return null;
+  const parts=relPath.split(/[\\/]/).slice(0,-1);
+  if(!parts.length)return null;
+  return base.replace(/\/+$/,'')+'/'+parts.map(encodeURIComponent).join('/')+'?web=1';
+}
+
+function FileActions({path, onDeleted, sharepointBase}){
   const handleDelete=async()=>{
     if(!window.confirm('Do you REALLY want to delete this file?\n\nIt will be moved to the Recycle Bin.'))return;
     const r=await api.trashFile(path);
     if(r.ok){if(onDeleted)onDeleted(path);}
     else alert('Could not delete file:\n'+(r.error||'Unknown error'));
   };
+  const spLink=sharepointFolderLink(sharepointBase,path);
   return(
     <div className="file-actions">
       <button className="btn btn-ghost btn-indesign btn-sm" title="Open file" onClick={()=>api.openFile(path)}><Icon.Open/></button>
       <button className="btn btn-folder btn-sm" title="Show in Explorer" onClick={()=>api.revealFile(path)}><Icon.Folder/></button>
+      {spLink&&<button className="btn btn-ghost btn-sm" title="Open in SharePoint" onClick={()=>window.open(spLink,'_blank')}><Icon.External/></button>}
       <button className="btn btn-sm" title="Move to Recycle Bin" style={{background:'rgba(var(--danger-rgb),.08)',color:'var(--danger)',border:'1px solid rgba(var(--danger-rgb),.2)'}} onClick={handleDelete}><Icon.Trash/></button>
     </div>
   );
@@ -183,19 +196,178 @@ function Topbar({view,map}){
   );
 }
 
+// Ring chart, controlled hover (a segment index, 'center', or null) so a
+// wedge, its legend chip, and the center total all drive the same
+// highlight + detail readout instead of a plain title-attribute tooltip.
+function DonutChart({data,size=92,thickness=14,gapDeg=3,centerLabel='FILES',hover,setHover}){
+  const total=data.reduce((s,d)=>s+d.value,0);
+  const cx=size/2,cy=size/2,r=(size-thickness)/2;
+  const C=2*Math.PI*r;
+  const gapPx=total>0?(gapDeg/360)*C:0;
+  let acc=0;
+  const segs=data.map((d,i)=>{
+    const frac=total>0?d.value/total:0,fullLen=frac*C;
+    const visible=Math.max(0,fullLen-gapPx);
+    const seg={...d,idx:i,dashoffset:-acc,dasharray:`${visible} ${C-visible}`};
+    acc+=fullLen;
+    return seg;
+  });
+  const dim=hover!=null&&hover!=='center';
+  return(
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{flexShrink:0,overflow:'visible'}}>
+      <g transform={`rotate(-90 ${cx} ${cy})`}>
+        {segs.map(s=>{
+          const [visLen,gapLen]=s.dasharray.split(' ');
+          return(
+          <g key={s.idx}>
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke={s.color}
+              strokeWidth={hover===s.idx?thickness+5:thickness}
+              strokeDashoffset={s.dashoffset} className="donut-seg"
+              style={{'--seg-len':`${visLen}px`,'--seg-gap':`${gapLen}px`,animationDelay:`${s.idx*90}ms`,
+                opacity:dim&&hover!==s.idx?0.35:1,transition:'stroke-width .12s,opacity .12s'}}/>
+            {s.value>0&&(
+              <circle cx={cx} cy={cy} r={r} fill="none" stroke="transparent" strokeWidth={thickness+16}
+                strokeDasharray={s.dasharray} strokeDashoffset={s.dashoffset} style={{cursor:'pointer'}}
+                onMouseEnter={()=>setHover(s.idx)} onMouseLeave={()=>setHover(v=>v===s.idx?null:v)}/>
+            )}
+          </g>
+          );
+        })}
+      </g>
+      <g onMouseEnter={()=>setHover('center')} onMouseLeave={()=>setHover(v=>v==='center'?null:v)} style={{cursor:'pointer'}}>
+        <circle cx={cx} cy={cy} r={r-thickness/2-3} fill="transparent"/>
+        <text x={cx} y={cy-size*0.03} textAnchor="middle" style={{fontSize:size*0.2,fontWeight:700,fill:'var(--text)',fontFamily:"'Open Sans',sans-serif",pointerEvents:'none'}}>{total}</text>
+        <text x={cx} y={cy+size*0.14} textAnchor="middle" style={{fontSize:size*0.075,fill:'var(--text3)',fontFamily:"'DM Mono',monospace",letterSpacing:'.05em',pointerEvents:'none'}}>{centerLabel}</text>
+      </g>
+    </svg>
+  );
+}
+
+// Last-30-days creation trend. A single accent-hued line (this is a
+// magnitude/trend series, not categorical) with a real crosshair+tooltip,
+// plus dashed guides every 7 days so the 30-day span reads as ~4 weeks.
+function LineChart30d({history}){
+  const [hover,setHover]=useState(null);
+  const today=new Date(); today.setHours(0,0,0,0);
+  const days=[];
+  for(let i=29;i>=0;i--){const d=new Date(today); d.setDate(d.getDate()-i); days.push(d);}
+  const keyOf=d=>d.toISOString().slice(0,10);
+  const counts={};
+  for(const h of history){
+    if(!h.timestamp)continue;
+    const k=h.timestamp.slice(0,10);
+    counts[k]=(counts[k]||0)+1;
+  }
+  const data=days.map(d=>({date:d,key:keyOf(d),count:counts[keyOf(d)]||0}));
+  const max=Math.max(1,...data.map(d=>d.count));
+  const totalMonth=data.reduce((s,d)=>s+d.count,0);
+  const W=760,H=132,padTop=14,padBottom=20,padX=6;
+  const plotW=W-padX*2,plotH=H-padTop-padBottom;
+  const xFor=i=>padX+(i/(data.length-1))*plotW;
+  const yFor=v=>H-padBottom-plotH*(v/max);
+  const lineD=data.map((d,i)=>`${i===0?'M':'L'}${xFor(i).toFixed(1)},${yFor(d.count).toFixed(1)}`).join(' ');
+  const areaD=`${lineD} L${xFor(data.length-1).toFixed(1)},${H-padBottom} L${xFor(0).toFixed(1)},${H-padBottom} Z`;
+  const slotW=plotW/data.length;
+  return(
+    <div style={{position:'relative'}}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:'block',overflow:'visible'}}>
+        {[7,14,21].map(off=>(
+          <line key={off} className="chart-fade" x1={xFor(29-off)} y1={padTop} x2={xFor(29-off)} y2={H-padBottom} stroke="var(--border2)" strokeWidth={1} strokeDasharray="2 3"/>
+        ))}
+        <line x1={0} y1={H-padBottom} x2={W} y2={H-padBottom} stroke="var(--border2)" strokeWidth={1}/>
+        <g className="line-chart-grow">
+          <path d={areaD} fill="rgba(var(--accent-rgb),.09)" stroke="none"/>
+          <path d={lineD} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
+        </g>
+        {hover!=null&&(
+          <>
+            <line x1={xFor(hover)} y1={padTop} x2={xFor(hover)} y2={H-padBottom} stroke="var(--text3)" strokeWidth={1} strokeDasharray="2 2"/>
+            <circle cx={xFor(hover)} cy={yFor(data[hover].count)} r={4} fill="var(--accent)" stroke="var(--surface)" strokeWidth={2}/>
+          </>
+        )}
+        {data.map((d,i)=>(
+          <rect key={d.key} x={xFor(i)-slotW/2} y={0} width={slotW} height={H}
+            fill="transparent" onMouseEnter={()=>setHover(i)} onMouseLeave={()=>setHover(v=>v===i?null:v)}/>
+        ))}
+        {[0,7,14,21,29].map(i=>(
+          <text key={i} x={xFor(i)} y={H-5} textAnchor="middle" style={{fontSize:7.5,fill:'var(--text3)',fontFamily:"'DM Mono',monospace"}}>
+            {data[i].date.toLocaleDateString('en-US',{month:'numeric',day:'numeric'})}
+          </text>
+        ))}
+      </svg>
+      {hover!=null&&(
+        <div style={{position:'absolute',left:`${xFor(hover)/W*100}%`,top:padTop-2,transform:`translate(${hover>data.length-6?'-100%':hover<6?'0%':'-50%'},-100%)`,background:'var(--text)',color:'var(--surface)',padding:'4px 9px',borderRadius:7,fontSize:11,whiteSpace:'nowrap',pointerEvents:'none',fontFamily:"'DM Mono',monospace",boxShadow:'0 4px 14px rgba(0,0,0,.3)',zIndex:1}}>
+          {data[hover].date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · {data[hover].count} label{data[hover].count===1?'':'s'}
+        </div>
+      )}
+      <div style={{position:'absolute',top:0,right:0,fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)'}}>{totalMonth} in last 30 days</div>
+    </div>
+  );
+}
+
+// Hoisted to module scope (not defined inside Dashboard) so these keep a
+// stable component identity across Dashboard re-renders -- otherwise React
+// tears down and remounts them (and their CSS entrance animations restart)
+// every time an unrelated bit of Dashboard state changes.
+const InsightCard=({eyebrow,children})=>(
+  <div className="stat-card" style={{padding:'8px 14px',display:'flex',flexDirection:'column',justifyContent:'center',minWidth:0}}>
+    <div style={{fontSize:9,fontWeight:600,letterSpacing:'.06em',textTransform:'uppercase',color:'var(--text3)',marginBottom:3}}>{eyebrow}</div>
+    {children}
+  </div>
+);
+// Donut card: default state is just the ring + a plain legend (dot + label,
+// no numbers) -- deliberately sparse. Hovering a wedge, its legend chip, or
+// the center all drive the same detail readout in the corner.
+const PieCard=({title,data,size,thickness,centerLabel,centerNote})=>{
+  const [hover,setHover]=useState(null);
+  const t=data.reduce((s,d)=>s+d.value,0);
+  const detail=hover==null?null:hover==='center'?{label:title,text:centerNote}:(()=>{
+    const d=data[hover],pct=t>0?Math.round(d.value/t*100):0;
+    return{label:d.label,text:`${d.value} · ${pct}%${d.desc?' — '+d.desc:''}`};
+  })();
+  return(
+    <div className="card" style={{padding:'12px 20px',display:'flex',alignItems:'center',gap:22,minWidth:0,flex:1,position:'relative',overflow:'hidden',background:'var(--surface)'}}>
+      <DonutChart data={data} size={size} thickness={thickness} centerLabel={centerLabel} hover={hover} setHover={setHover}/>
+      <div style={{display:'flex',flexDirection:'column',gap:7,minWidth:0}}>
+        <div style={{fontSize:11,fontWeight:600,letterSpacing:'.06em',textTransform:'uppercase',color:'var(--text3)'}}>{title}</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:'5px 16px',maxWidth:170}}>
+          {data.map((d,i)=>d.value>0&&(
+            <div key={d.label} onMouseEnter={()=>setHover(i)} onMouseLeave={()=>setHover(v=>v===i?null:v)}
+              style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer',opacity:hover!=null&&hover!==i?0.4:1,transition:'opacity .12s'}}>
+              <span style={{width:8,height:8,borderRadius:'50%',background:d.color,flexShrink:0}}/>
+              <span style={{color:'var(--text2)',fontWeight:500}}>{d.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {detail&&(
+        <div style={{position:'absolute',top:10,right:14,background:'var(--text)',color:'var(--surface)',padding:'5px 11px',borderRadius:8,fontSize:11,whiteSpace:'nowrap',boxShadow:'0 4px 14px rgba(0,0,0,.3)',pointerEvents:'none',zIndex:2,fontFamily:"'DM Mono',monospace"}}>
+          <b style={{fontFamily:"'Open Sans',sans-serif"}}>{detail.label}</b>&nbsp;&nbsp;{detail.text}
+        </div>
+      )}
+    </div>
+  );
+};
+const SectionTitle=({children})=><p className="section-title" style={{flexShrink:0,marginBottom:8}}>{children}</p>;
+const Divider=()=><div style={{height:1,background:'var(--border)',margin:'14px 0',flexShrink:0}}/>;
+
 function Dashboard({map,setMap,config,setView,refreshMap}){
   const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
   const [ingesting,setIngesting]=useState(false);
   const [ingestResult,setIngestResult]=useState(null);
-  const [templates,setTemplates]=useState([]);
-  const [history,setHistory]=useState([]);
+  // null (not []) means "not loaded yet" -- lets the charts wait for real
+  // data instead of mounting against an empty placeholder and then jumping
+  // to the real values mid-animation once the fetch resolves.
+  const [templates,setTemplates]=useState(null);
+  const [history,setHistory]=useState(null);
+  const dataReady=templates!==null&&history!==null;
   useEffect(()=>{
-    api.getTemplates().then(r=>setTemplates(r.templates??[])).catch(()=>{});
-    api.getHistory().then(r=>setHistory(r.history??[])).catch(()=>{});
+    api.getTemplates().then(r=>setTemplates(r.templates??[])).catch(()=>setTemplates([]));
+    api.getHistory().then(r=>setHistory(r.history??[])).catch(()=>setHistory([]));
   },[]);
   const files=map?.files??[];
-  const total=files.length, indd=files.filter(f=>f.extension==='.indd').length;
-  const wip=files.filter(f=>f.wip).length, unsorted=files.filter(f=>!f.sorted).length;
+  const total=files.length;
+  const wip=files.filter(f=>f.wip).length;
   const handleReadFiles=async()=>{
     const pick=await api.pickDir();
     if(!pick.ok||!pick.path)return;
@@ -205,78 +377,168 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
     if(res.ok&&res.copied>0)await refreshMap();
     setIngesting(false);
   };
+  // Everything below reads templates/history, which are still loading in the
+  // background at this point -- render a lightweight placeholder instead of
+  // computing (and mounting animated charts) against not-yet-real data.
+  if(!dataReady)return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',flexDirection:'column',gap:10}}>
+      <div className="spinner"/>
+      <span style={{color:'var(--text3)',fontSize:12,fontFamily:"'DM Mono',monospace"}}>Loading dashboard...</span>
+    </div>
+  );
   const grouped={};
   for(const t of templates){const c=t.category||'Other';if(!grouped[c])grouped[c]=[];grouped[c].push(t);}
   const catColors={'MO':'var(--mo)','PAM':'var(--pam)','CE':'var(--ce)'};
-  const fmtTime=ts=>{if(!ts)return'';try{const d=new Date(ts);return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});}catch(e){return ts.slice(0,16).replace('T',' ');}};
+  const fmtTime=ts=>{if(!ts)return'';try{const d=new Date(ts);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}catch(e){return ts.slice(0,16).replace('T',' ');}};
+
+  // Most-created product, all time -- tallied from every file currently on
+  // disk (the creation log only goes back ~200 events, nowhere near "all time").
+  const getCategory=product=>(config?.products??[]).find(p=>p.name===product)?.category??'?';
+  const topProduct=list=>{
+    const counts={};
+    for(const item of list){if(item)counts[item]=(counts[item]||0)+1;}
+    let best=null;
+    for(const [name,count] of Object.entries(counts)){if(!best||count>best.count)best={name,count};}
+    return best;
+  };
+  const topAllTime=topProduct(files.map(f=>f.product));
+  // Most-created product this month -- from the creation log (precise
+  // timestamps), unlike file counts which can't tell you *when* a file was made.
+  // Local month key, not toISOString's UTC one -- the server stamps history
+  // timestamps with naive local time, so comparing in UTC could misfile
+  // entries made late at night near a month boundary.
+  const now=new Date();
+  const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const historyThisMonth=history.filter(h=>h.timestamp?.startsWith(monthKey));
+  const topThisMonth=topProduct(historyThisMonth.map(h=>h.product));
+  const madeThisMonth=historyThisMonth.length;
+  // CE / MO / PAM split, for the smaller donut.
+  const catCounts={CE:0,MO:0,PAM:0};
+  for(const f of files){const c=getCategory(f.product);if(catCounts[c]!==undefined)catCounts[c]++;}
+  const catTotal=catCounts.CE+catCounts.MO+catCounts.PAM;
+  const categoryData=[
+    {label:'CE',value:catCounts.CE,color:'#AC3A87'},   // same purple as InDesign in the status chart
+    {label:'MO',value:catCounts.MO,color:'#2F8E52'},   // saturated company green (brand accent)
+    {label:'PAM',value:catCounts.PAM,color:'#397BC2'}, // saturated company blue
+  ];
+  // File status, all time -- WIP / Unsorted / InDesign / Other are NOT
+  // independent flags (a file can be WIP *and* InDesign *and* Unsorted at
+  // once), so a pie needs each file bucketed into exactly one slice. Priority
+  // order: WIP first (needs attention regardless of anything else), then
+  // Unsorted-but-not-WIP, then finished .indd files, then everything else.
+  const statusUnsorted=files.filter(f=>!f.wip&&!f.sorted).length;
+  const statusIndd=files.filter(f=>!f.wip&&f.sorted&&f.extension==='.indd').length;
+  const statusOther=total-wip-statusUnsorted-statusIndd;
+  const statusData=[
+    {label:'WIP',value:wip,color:'#12847E',desc:'in progress, not yet final'},
+    {label:'Unsorted',value:statusUnsorted,color:'#CB4A64',desc:'not filed into a product folder'},
+    {label:'InDesign',value:statusIndd,color:'#AC3A87',desc:'finished and filed'},
+    {label:'Other',value:statusOther,color:'#9AA0AC',desc:'finished, non-.indd (PDF, IDML...)'},
+  ];
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
-      <div style={{flexShrink:0}}>
-        <div className="stats-grid" style={{marginBottom:12}}>
-          {[
-            {label:'Total files',value:total,color:null},
-            {label:'InDesign',value:indd,color:'var(--indd)'},
-            {label:'WIP labels',value:wip,color:'var(--wip)'},
-            {label:'Unsorted',value:unsorted,color:'var(--danger)'},
-            {label:'Templates',value:templates.length,color:'var(--accent)'},
-          ].map(({label,value,color})=>(
-            <div key={label} className="stat-card">
-              <div className="stat-value" style={color?{color}:{}}>{value}</div>
-              <div className="stat-label">{label}</div>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-3" style={{alignItems:'center',flexWrap:'wrap',marginBottom:12}}>
-          <button className="btn btn-primary" onClick={handleReadFiles} disabled={ingesting}>
-            {ingesting?<><div className="spinner" style={{width:14,height:14}}/>Reading files...</>:'Read files from folder'}
-          </button>
-          <button className="btn btn-ghost" onClick={()=>setView('new')}>+ New Label</button>
-          {ingestResult&&(
-            <span style={{fontSize:13,color:ingestResult.ok?'var(--success)':'var(--danger)'}}>
-              {ingestResult.ok
-                ?`${ingestResult.copied} file(s) copied, ${ingestResult.skipped} already existed${ingestResult.errors?` (${ingestResult.errors} errors)`:''}`
-                :ingestResult.error}
-            </span>
-          )}
-        </div>
+      <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+        <button className="btn btn-primary" onClick={handleReadFiles} disabled={ingesting}>
+          {ingesting?<><div className="spinner" style={{width:14,height:14}}/>Reading files...</>:'Read files from folder'}
+        </button>
+        {ingestResult&&(
+          <span style={{fontSize:13,color:ingestResult.ok?'var(--success)':'var(--danger)'}}>
+            {ingestResult.ok
+              ?`${ingestResult.copied} file(s) copied, ${ingestResult.skipped} already existed${ingestResult.errors?` (${ingestResult.errors} errors)`:''}`
+              :ingestResult.error}
+          </span>
+        )}
       </div>
-      <div style={{display:'flex',gap:14,flex:1,minHeight:0}}>
-        <div style={{flex:'0 0 55%',display:'flex',flexDirection:'column',minWidth:0}}>
-          <p className="section-title" style={{flexShrink:0,marginBottom:6}}>Creation History</p>
-          <div className="card" style={{flex:1,overflowY:'auto',padding:0,minHeight:0}}>
-            {history.length===0?(
-              <div style={{padding:'32px 16px',textAlign:'center',color:'var(--text3)',fontSize:13}}>No labels created yet</div>
-            ):(
-              <table className="files-table">
-                <thead><tr><th>Time</th><th>Product</th><th>Size</th><th>Languages</th><th>Files</th></tr></thead>
-                <tbody>
-                  {history.map((h,i)=>(
-                    <tr key={i}>
-                      <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)',whiteSpace:'nowrap'}}>{fmtTime(h.timestamp)}</td>
-                      <td style={{fontWeight:500}}>{h.product}</td>
-                      <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{h.packagingSize}</td>
-                      <td style={{fontFamily:"'DM Mono',monospace",fontSize:11}}>{(h.languages??[]).join(' · ')}</td>
-                      <td>
-                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                          {(h.files??[]).map((f,j)=>(
-                            <button key={j} className="btn btn-sm" title={f.filename}
-                              style={{padding:'2px 7px',fontSize:11,background:'var(--surface3)',border:'1px solid var(--border2)',color:'var(--text2)'}}
-                              onClick={()=>api.openFile(f.path)}>
-                              <Icon.Open/>{f.type==='box_label'?'Box':'Label'}
-                            </button>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+      <Divider/>
+
+      <div style={{flexShrink:0}}>
+        <SectionTitle>Activity</SectionTitle>
+        <div style={{display:'flex',gap:14}}>
+          <div style={{display:'flex',flexDirection:'column',gap:8,flex:'0 0 230px'}}>
+            <InsightCard eyebrow="Made this month">
+              <div className="stat-value" style={{fontSize:22,color:'var(--accent)'}}>{madeThisMonth}</div>
+            </InsightCard>
+            <InsightCard eyebrow="Top product · all time">
+              {topAllTime?(
+                <div style={{display:'flex',alignItems:'baseline',gap:6,minWidth:0}}>
+                  <span style={{fontSize:14,fontWeight:700,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={topAllTime.name}>{topAllTime.name}</span>
+                  <span style={{fontSize:10,color:'var(--text3)',fontFamily:"'DM Mono',monospace",flexShrink:0}}>{topAllTime.count}×</span>
+                </div>
+              ):<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>No data yet</div>}
+            </InsightCard>
+            <InsightCard eyebrow="Top product · this month">
+              {topThisMonth?(
+                <div style={{display:'flex',alignItems:'baseline',gap:6,minWidth:0}}>
+                  <span style={{fontSize:14,fontWeight:700,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={topThisMonth.name}>{topThisMonth.name}</span>
+                  <span style={{fontSize:10,color:'var(--text3)',fontFamily:"'DM Mono',monospace",flexShrink:0}}>{topThisMonth.count}×</span>
+                </div>
+              ):<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>None yet</div>}
+            </InsightCard>
+          </div>
+          <div className="card" style={{padding:'14px 20px 10px',flex:1,minWidth:0}}>
+            <LineChart30d history={history}/>
           </div>
         </div>
-        <div style={{flex:'0 0 calc(45% - 14px)',display:'flex',flexDirection:'column',minWidth:0}}>
-          <p className="section-title" style={{flexShrink:0,marginBottom:6}}>Available Templates</p>
-          <div className="card" style={{flex:1,overflowY:'auto',padding:0,minHeight:0}}>
+      </div>
+      <Divider/>
+
+      <div style={{flexShrink:0}}>
+        <SectionTitle>Composition</SectionTitle>
+        <div style={{display:'flex',gap:14}}>
+          <div style={{flex:'1 1 0'}}>
+            <PieCard title="File status" data={statusData} size={128} thickness={19} centerLabel="FILES"
+              centerNote="every file, bucketed into exactly one status"/>
+          </div>
+          <div style={{flex:'1 1 0'}}>
+            <PieCard title="Category split" data={categoryData} size={128} thickness={19} centerLabel="MATCHED"
+              centerNote="files whose product matched a configured product"/>
+          </div>
+        </div>
+      </div>
+      <Divider/>
+
+      <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
+        <SectionTitle>Log</SectionTitle>
+        <div style={{display:'flex',gap:14,flex:1,minHeight:0}}>
+          <div style={{flex:'0 0 55%',display:'flex',flexDirection:'column',minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--text)',marginBottom:6,flexShrink:0}}>Creation History</div>
+            <div className="card" style={{flex:1,minHeight:0,overflowY:'auto',padding:0}}>
+              {history.length===0?(
+                <div style={{padding:'32px 16px',textAlign:'center',color:'var(--text3)',fontSize:13}}>No labels created yet</div>
+              ):(
+                <table className="files-table">
+                  <thead><tr><th>Time</th><th>Product</th><th>Size</th><th>Languages</th><th>Files</th></tr></thead>
+                  <tbody>
+                    {history.map((h,i)=>(
+                      <tr key={i}>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)',whiteSpace:'nowrap'}}>{fmtTime(h.timestamp)}</td>
+                        <td style={{fontWeight:500}}>{h.product}</td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{h.packagingSize}</td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11}}>{(h.languages??[]).join(' · ')}</td>
+                        <td>
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                            {(h.files??[]).map((f,j)=>(
+                              <button key={j} className="btn btn-sm" title={f.filename}
+                                style={{padding:'2px 7px',fontSize:11,background:'var(--surface3)',border:'1px solid var(--border2)',color:'var(--text2)'}}
+                                onClick={()=>api.openFile(f.path)}>
+                                <Icon.Open/>{f.type==='box_label'?'Box':'Label'}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+          <div style={{flex:'0 0 calc(45% - 14px)',display:'flex',flexDirection:'column',minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--text)',marginBottom:6,flexShrink:0,display:'flex',alignItems:'center',gap:7}}>
+              Available Templates
+              <span style={{fontSize:10,fontFamily:"'DM Mono',monospace",fontWeight:500,color:'var(--accent)',background:'rgba(var(--accent-rgb),.12)',padding:'1px 7px',borderRadius:8}}>{templates.length}</span>
+            </div>
+            <div className="card" style={{flex:1,minHeight:0,overflowY:'auto',padding:0}}>
             {templates.length===0?(
               <div style={{padding:'32px 16px',textAlign:'center',color:'var(--text3)',fontSize:13}}>No templates found</div>
             ):(
@@ -299,6 +561,7 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
@@ -653,7 +916,7 @@ function NewLabelWizard({config,map,setMap}){
                           <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.languages?.join(' . ')??'--'}</td>
                           <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
                           <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
-                          <td><FileActions path={f.path} onDeleted={removeFile}/></td>
+                          <td><FileActions path={f.path} onDeleted={removeFile} sharepointBase={config?.sharepointBaseUrl}/></td>
                         </tr>
                       ))}
                     </tbody>
@@ -961,7 +1224,7 @@ function Information({config,map,setMap}){
                                     :<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>INDD</span>}
                                   {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
                                 </div></td>
-                                <td><FileActions path={f.path} onDeleted={removeFile}/></td>
+                                <td><FileActions path={f.path} onDeleted={removeFile} sharepointBase={config?.sharepointBaseUrl}/></td>
                               </tr>
                             ))}
                           </tbody>
@@ -1105,7 +1368,7 @@ function LabelsBrowser({map,setMap,config}){
                       {!f.print_file&&(f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(var(--idml-rgb),.15)',color:'var(--idml)'}}>IDML</span>:<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>InDesign</span>)}
                       {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
                     </div></td>
-                    <td><FileActions path={f.path} onDeleted={removeFile}/></td>
+                    <td><FileActions path={f.path} onDeleted={removeFile} sharepointBase={config?.sharepointBaseUrl}/></td>
                   </tr>
                 );
               })}
@@ -1202,6 +1465,13 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
               <button className="btn btn-danger" onClick={resetToDefaults} disabled={resetting} style={{width:'100%'}}>
                 {resetting?<><div className="spinner"/>Resetting...</>:'Reset to factory defaults'}
               </button>
+            </SettingCard>
+            <SettingCard title="SharePoint links" desc="Base URL of the synced SharePoint folder (the part before the product/size path). Used to add an 'Open in SharePoint' button next to files.">
+              <div className="flex gap-2 items-center">
+                <input className="input" placeholder="https://yourtenant.sharepoint.com/:f:/r/sites/.../Etiketas" value={cfg.sharepointBaseUrl||''} onChange={e=>setCfg({...cfg,sharepointBaseUrl:e.target.value})} style={{flex:1}}/>
+                <button className="btn btn-primary" onClick={save}>Save</button>
+              </div>
+              {saved&&<span style={{fontSize:12,color:'var(--success)'}}>✓ Saved</span>}
             </SettingCard>
           </div>
         )}

@@ -105,5 +105,6 @@
     "1L":    "1Lx12",
     "5L":    "5Lx4",
     "20L":   "20Lx1"
-  }
+  },
+  "sharepointBaseUrl": "https://nandobio.sharepoint.com/:f:/r/sites/Marketing/Labels/Etiketas"
 }

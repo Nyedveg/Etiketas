@@ -157,6 +157,13 @@ body{background:var(--bg);color:var(--text);font-family:'Roboto',sans-serif;font
 .info-card{animation:fadeSlideUp .35s cubic-bezier(.4,0,.2,1) both}
 .zz-stick{stroke-dashoffset:1;animation:zzDraw .3s cubic-bezier(.4,0,.2,1) both}
 .zz-joint{opacity:0;transform:scale(0);transform-box:fill-box;transform-origin:center;animation:zzJointIn .22s cubic-bezier(.4,0,.2,1) both}
+/* ── Dashboard chart entrance animations (replay on every mount, i.e. every time the Dashboard view is entered) ── */
+@keyframes donutSegDraw{from{stroke-dasharray:0 999999}to{stroke-dasharray:var(--seg-len) var(--seg-gap)}}
+.donut-seg{animation:donutSegDraw .6s cubic-bezier(.4,0,.2,1) both}
+@keyframes lineGrowIn{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.line-chart-grow{transform-origin:bottom;transform-box:fill-box;animation:lineGrowIn .7s cubic-bezier(.4,0,.2,1) both}
+@keyframes chartFadeIn{from{opacity:0}to{opacity:1}}
+.chart-fade{animation:chartFadeIn .5s ease .15s both}
 /* ── General polish ── */
 .card{transition:box-shadow .2s,border-color .2s}.card:hover{box-shadow:0 4px 24px var(--shadow-sm);border-color:var(--border2)}
 .nav-item.active{border-left:2px solid var(--accent);padding-left:8px}
