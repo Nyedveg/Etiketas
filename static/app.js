@@ -1037,7 +1037,6 @@ function Information({config,map,setMap}){
   const prodFiles=allFiles.filter(f=>f.product===selected);
   const filteredFiles=prodFiles.filter(f=>{
     if(fileType==='indd')return f.extension==='.indd'&&!f.print_file;
-    if(fileType==='idml')return f.extension==='.idml';
     if(fileType==='print')return f.print_file;
     return true;
   }).filter(f=>showWip==='wip'?f.wip:showWip==='done'?!f.wip:true);
@@ -1196,7 +1195,7 @@ function Information({config,map,setMap}){
               {tab==='files'&&(
                 <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
                   <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8,flexShrink:0}}>
-                    {[['all','All'],['indd','INDD'],['idml','IDML'],['print','Print']].map(([v,l])=>(
+                    {[['all','All'],['indd','INDD'],['print','Print']].map(([v,l])=>(
                       <button key={v} className={'filter-chip '+(fileType===v?'active':'')} onClick={()=>setFileType(v)}>{l}</button>
                     ))}
                     <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
@@ -1270,9 +1269,17 @@ function LabelsBrowser({map,setMap,config}){
   const [filterUnsorted,setFilterUnsorted]=useState(false);
   const [filterLangs,setFilterLangs]=useState([]);
   const [langOpen,setLangOpen]=useState(false);
+  const [sortOrder,setSortOrder]=useState('newest');
   const toggleLang=lang=>{
     setFilterLangs(prev=>prev.includes(lang)?prev.filter(l=>l!==lang):prev.length<3?[...prev,lang]:prev);
   };
+  const langPopRef=useRef(null);
+  useEffect(()=>{
+    if(!langOpen)return;
+    const h=e=>{if(langPopRef.current&&!langPopRef.current.contains(e.target))setLangOpen(false);};
+    document.addEventListener('mousedown',h);
+    return()=>document.removeEventListener('mousedown',h);
+  },[langOpen]);
   const files=map?.files??[];
   const getCategory=product=>(config?.products??[]).find(p=>p.name===product)?.category??'?';
   const sizeMatch=f=>{
@@ -1292,13 +1299,17 @@ function LabelsBrowser({map,setMap,config}){
     if(filterLabelType==='label'&&f.deze)return false;
     if(filterLabelType==='box'&&!f.deze)return false;
     if(filterFileType==='indd'&&f.extension!=='.indd')return false;
-    if(filterFileType==='idml'&&f.extension!=='.idml')return false;
     if(filterFileType==='print'&&!f.print_file)return false;
     if(filterWip==='wip'&&!f.wip)return false;
     if(filterUnsorted&&f.sorted)return false;
     if(!sizeMatch(f))return false;
     if(filterLangs.length>0&&!filterLangs.every(l=>(f.languages??[]).includes(l)))return false;
     return true;
+  });
+  const sorted=[...filtered].sort((a,b)=>{
+    const da=a.date||'',db=b.date||'';
+    if(da===db)return 0;
+    return sortOrder==='newest'?(da<db?1:-1):(da<db?-1:1);
   });
   return(
     <div>
@@ -1318,7 +1329,7 @@ function LabelsBrowser({map,setMap,config}){
             <button key={v} className={'filter-chip '+(filterLabelType===v?(cls||'active'):'')} onClick={()=>setFilterLabelType(v)}>{lbl}</button>
           ))}
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-          {[['all','All',null],['indd','InDesign','active-indesign'],['idml','IDML','active-mo'],['print','Print','active-print']].map(([v,lbl,cls])=>(
+          {[['all','All',null],['indd','InDesign','active-indesign'],['print','Print','active-print']].map(([v,lbl,cls])=>(
             <button key={v} className={'filter-chip '+(filterFileType===v?(cls||'active'):'')} onClick={()=>setFilterFileType(v)}>{lbl}</button>
           ))}
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
@@ -1328,21 +1339,26 @@ function LabelsBrowser({map,setMap,config}){
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
           <button className={'filter-chip '+(filterWip==='wip'?'active-wip':'')} onClick={()=>setFilterWip(filterWip==='wip'?'all':'wip')}>WIP only</button>
           <button className={'filter-chip '+(filterUnsorted?'active-wip':'')} onClick={()=>setFilterUnsorted(o=>!o)}>Unsorted</button>
+          <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
+          <button className={'filter-chip '+(sortOrder==='newest'?'active':'')} onClick={()=>setSortOrder('newest')} title="Sort by date, newest first">Newest first</button>
+          <button className={'filter-chip '+(sortOrder==='oldest'?'active':'')} onClick={()=>setSortOrder('oldest')} title="Sort by date, oldest first">Oldest first</button>
           <span style={{marginLeft:'auto',fontSize:12,color:'var(--text3)',fontFamily:"'DM Mono',monospace",alignSelf:'center'}}>{filtered.length} files</span>
         </div>
         {(config?.languages??[]).filter(l=>l.enabled).length>0&&(
-          <button className={'filter-chip '+(filterLangs.length>0?'active-lang':'')} onClick={()=>setLangOpen(o=>!o)}>
-            Language{filterLangs.length>0?` · ${filterLangs.join(', ')}`:''} {langOpen?'▴':'▾'}
-          </button>
-        )}
-        {langOpen&&(config?.languages??[]).filter(l=>l.enabled).length>0&&(
-          <div className="lang-chips-row" style={{width:'100%',display:'flex',gap:8,flexWrap:'wrap',marginTop:2,alignItems:'center'}}>
-            {(config.languages).filter(l=>l.enabled).map(l=>(
-              <button key={l.code} className={'filter-chip '+(filterLangs.includes(l.code)?'active-lang':'')} onClick={()=>toggleLang(l.code)}>
-                {l.flag} {l.code}
-              </button>
-            ))}
-            {filterLangs.length>0&&<button className="filter-chip" style={{opacity:.6}} onClick={()=>setFilterLangs([])}>✕ Clear</button>}
+          <div style={{position:'relative'}}>
+            <button className={'filter-chip '+(filterLangs.length>0?'active-lang':'')} onClick={()=>setLangOpen(o=>!o)}>
+              Language{filterLangs.length>0?` · ${filterLangs.join(', ')}`:''} {langOpen?'▴':'▾'}
+            </button>
+            {langOpen&&(
+              <div ref={langPopRef} className="lang-chips-row" style={{position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:50,width:280,display:'flex',flexWrap:'wrap',gap:8,alignItems:'center',background:'var(--surface)',border:'1px solid var(--border2)',borderRadius:'var(--radius-sm)',padding:10,boxShadow:'0 8px 28px var(--shadow-md)'}}>
+                {(config.languages).filter(l=>l.enabled).map(l=>(
+                  <button key={l.code} className={'filter-chip '+(filterLangs.includes(l.code)?'active-lang':'')} onClick={()=>toggleLang(l.code)}>
+                    {l.flag} {l.code}
+                  </button>
+                ))}
+                {filterLangs.length>0&&<button className="filter-chip" style={{opacity:.6}} onClick={()=>setFilterLangs([])}>✕ Clear</button>}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1353,7 +1369,7 @@ function LabelsBrowser({map,setMap,config}){
           <table className="files-table">
             <thead><tr><th>Filename</th><th>Product</th><th>Cat</th><th>Languages</th><th>Size</th><th>Date</th><th>Type</th><th></th></tr></thead>
             <tbody>
-              {filtered.map(f=>{
+              {sorted.map(f=>{
                 const cat=getCategory(f.product);
                 return(
                   <tr key={f.filename+f.path}>

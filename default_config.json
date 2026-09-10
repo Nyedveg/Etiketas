@@ -7,6 +7,7 @@
     {"name": "BioNPK Powder S 500","category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
     {"name": "BioSpektrum WG",     "category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
     {"name": "BioSplito",          "category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
+    {"name": "Splito",             "category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
     {"name": "BioStart",           "category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
     {"name": "BioStart 500",       "category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
     {"name": "Biotero",            "category": "MO",  "unit": "kg", "acidic": false, "enabled": true},
