@@ -1037,6 +1037,7 @@ function Information({config,map,setMap}){
   const prodFiles=allFiles.filter(f=>f.product===selected);
   const filteredFiles=prodFiles.filter(f=>{
     if(fileType==='indd')return f.extension==='.indd'&&!f.print_file;
+    if(fileType==='idml')return f.extension==='.idml';
     if(fileType==='print')return f.print_file;
     return true;
   }).filter(f=>showWip==='wip'?f.wip:showWip==='done'?!f.wip:true);
@@ -1195,7 +1196,7 @@ function Information({config,map,setMap}){
               {tab==='files'&&(
                 <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
                   <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8,flexShrink:0}}>
-                    {[['all','All'],['indd','INDD'],['print','Print']].map(([v,l])=>(
+                    {[['all','All'],['indd','INDD'],['idml','IDML'],['print','Print']].map(([v,l])=>(
                       <button key={v} className={'filter-chip '+(fileType===v?'active':'')} onClick={()=>setFileType(v)}>{l}</button>
                     ))}
                     <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
@@ -1299,6 +1300,7 @@ function LabelsBrowser({map,setMap,config}){
     if(filterLabelType==='label'&&f.deze)return false;
     if(filterLabelType==='box'&&!f.deze)return false;
     if(filterFileType==='indd'&&f.extension!=='.indd')return false;
+    if(filterFileType==='idml'&&f.extension!=='.idml')return false;
     if(filterFileType==='print'&&!f.print_file)return false;
     if(filterWip==='wip'&&!f.wip)return false;
     if(filterUnsorted&&f.sorted)return false;
@@ -1329,7 +1331,7 @@ function LabelsBrowser({map,setMap,config}){
             <button key={v} className={'filter-chip '+(filterLabelType===v?(cls||'active'):'')} onClick={()=>setFilterLabelType(v)}>{lbl}</button>
           ))}
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-          {[['all','All',null],['indd','InDesign','active-indesign'],['print','Print','active-print']].map(([v,lbl,cls])=>(
+          {[['all','All',null],['indd','InDesign','active-indesign'],['idml','IDML','active-mo'],['print','Print','active-print']].map(([v,lbl,cls])=>(
             <button key={v} className={'filter-chip '+(filterFileType===v?(cls||'active'):'')} onClick={()=>setFilterFileType(v)}>{lbl}</button>
           ))}
           <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>

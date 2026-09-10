@@ -168,7 +168,10 @@ $desktop = [Environment]::GetFolderPath('Desktop')
 $shortcutPath = Join-Path $desktop 'Etiketas.lnk'
 $wsh = New-Object -ComObject WScript.Shell
 $shortcut = $wsh.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = Join-Path $InstallDir 'Start_Etiketas.bat'
+# Launch through the .vbs so no console window ever appears; the app itself
+# takes the port back from any older instance, so re-launching is always safe.
+$shortcut.TargetPath       = 'wscript.exe'
+$shortcut.Arguments        = '"' + (Join-Path $InstallDir 'Etiketas.vbs') + '"'
 $shortcut.WorkingDirectory = $InstallDir
 $iconPath = Join-Path $InstallDir 'Nando-ico.ico'
 if (Test-Path -LiteralPath $iconPath) { $shortcut.IconLocation = "$iconPath,0" }
@@ -179,7 +182,8 @@ Write-Ok "Shortcut created on your Desktop"
 Write-Host "`n=======================================" -ForegroundColor White
 Write-Host " Etiketas is installed." -ForegroundColor Green
 Write-Host " Launch it from the new Desktop shortcut, or run:"
-Write-Host "   $InstallDir\Start_Etiketas.bat"
+Write-Host "   $InstallDir\Start_Etiketas.bat            (windowless)"
+Write-Host "   $InstallDir\Start_Etiketas.bat console    (with a debug console)"
 if (-not $linked) {
     Write-Host "`n NOTE: the labels folder link was not set up -- see the warning above." -ForegroundColor Yellow
 }

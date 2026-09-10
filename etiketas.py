@@ -5,7 +5,7 @@ Run with:  python etiketas.py
 Opens at:  http://localhost:7842
 """
 
-import ctypes, html, io, json, mimetypes, os, re, shutil, stat, threading, webbrowser, subprocess, zipfile
+import ctypes, html, io, json, mimetypes, os, re, shutil, socket, stat, sys, threading, time, webbrowser, subprocess, zipfile
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -13,6 +13,8 @@ from urllib.parse import urlparse, parse_qs
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR   = Path(__file__).parent
+LOG_FILE   = BASE_DIR / "etiketas.log"
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 STATIC_DIR = BASE_DIR / "static"
 LABELS_DIR = Path.home() / "Documents" / "Etiketas"
 QR_DIR          = BASE_DIR / "qrcodes"
@@ -51,7 +53,7 @@ def _onedrive_running():
         return False
     try:
         r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq OneDrive.exe"],
-                            capture_output=True, text=True, timeout=5)
+                            capture_output=True, text=True, timeout=5, creationflags=_NO_WINDOW)
         return "OneDrive.exe" in r.stdout
     except Exception:
         return False
@@ -1009,7 +1011,7 @@ def apply_qr_via_indesign(indd_path, qr_path):
         with tempfile.NamedTemporaryFile(mode='w', suffix='.vbs', delete=False, encoding='utf-8') as vf:
             vf.write(vbs)
             vbs_tmp = vf.name
-        result = subprocess.run(['cscript', '//NoLogo', vbs_tmp], capture_output=True, timeout=30)
+        result = subprocess.run(['cscript', '//NoLogo', vbs_tmp], capture_output=True, timeout=30, creationflags=_NO_WINDOW)
         return result.returncode == 0
     except Exception:
         return False
@@ -1056,7 +1058,7 @@ def trash_path(p):
         )
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_cmd],
-            capture_output=True, text=True
+            capture_output=True, text=True, creationflags=_NO_WINDOW
         )
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip() or "Trash failed")
@@ -1102,6 +1104,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+
+        if path == "/api/_shutdown":
+            # Internal: a newer instance is asking this one to step aside.
+            self.send_response(200); self.send_header("Content-Length", "2"); self.end_headers()
+            self.wfile.write(b"ok")
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            return
 
         if path in ("/", "/index.html"):
             self.serve_static(STATIC_DIR / "index.html", "text/html; charset=utf-8"); return
@@ -1429,17 +1438,85 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404); self.end_headers()
 
 
+# ── Single instance / windowless support ──────────────────────────────────────
+def _redirect_output_if_windowless():
+    """Under pythonw.exe there is no console: sys.stdout/stderr are None and any
+    print() would crash. Send them to a fresh log file instead (truncated each
+    launch so it never grows without bound)."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        f = open(LOG_FILE, "w", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stderr = f
+    except Exception:
+        sys.stdout = sys.stderr = io.StringIO()
+
+def _port_in_use(port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.3)
+    try:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+def _pids_listening_on(port):
+    try:
+        out = subprocess.run(["netstat", "-a", "-n", "-o", "-p", "TCP"],
+                             capture_output=True, text=True, creationflags=_NO_WINDOW).stdout
+    except Exception:
+        return set()
+    pids = set()
+    for line in out.splitlines():
+        p = line.split()
+        if len(p) >= 5 and p[0].upper() == "TCP" and p[1].endswith(f":{port}") and p[3].upper() == "LISTENING":
+            if p[4].isdigit() and p[4] != "0" and int(p[4]) != os.getpid():
+                pids.add(p[4])
+    return pids
+
+def _take_over_port(port):
+    """The newest launch always wins: ask any running instance to quit, then
+    force-kill it if it won't let go of the port."""
+    if not _port_in_use(port):
+        return
+    print(f"Another instance holds port {port} -- taking over.")
+    try:
+        import urllib.request
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/api/_shutdown", timeout=2).read()
+    except Exception:
+        pass
+    for _ in range(25):
+        if not _port_in_use(port):
+            return
+        time.sleep(0.12)
+    for pid in _pids_listening_on(port):
+        subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, creationflags=_NO_WINDOW)
+    for _ in range(25):
+        if not _port_in_use(port):
+            return
+        time.sleep(0.12)
+
 # ── Server startup ─────────────────────────────────────────────────────────────
+class _QuietHTTPServer(HTTPServer):
+    def handle_error(self, request, client_address):
+        et = sys.exc_info()[0]
+        if et and issubclass(et, ConnectionError):
+            return  # client hung up mid-response -- normal, not a bug worth a traceback
+        super().handle_error(request, client_address)
+
 def start():
+    _redirect_output_if_windowless()
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
     LABELS_DIR.mkdir(parents=True, exist_ok=True)
-    server = HTTPServer(("127.0.0.1", PORT), Handler)
+    _take_over_port(PORT)
+    server = _QuietHTTPServer(("127.0.0.1", PORT), Handler)
     url    = f"http://localhost:{PORT}"
     print("Etiketas - Label Manager")
     print(f"  Running at {url}")
     print(f"  Labels dir: {LABELS_DIR}")
     print(f"  Press Ctrl+C to stop\n")
-    threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+    t = threading.Timer(0.8, lambda: webbrowser.open(url)); t.daemon = True; t.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
