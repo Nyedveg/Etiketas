@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "code": "BG",
+    "name": "Bulgarian",
+    "flag": "🇧🇬",
+    "product": "FULLRANGE"
+  },
+  "_todo": "Filled in for FULLRANGE from M0101-FullRange_label_BG.docx. NOTE: the source document lists 5 label bullet points, but this template only has 4 slots — the first 4 were used (bullet4: 'Подобрява жизнеността на растенията.'); the 5th ('Подобрява микробиологичната активност на почвата.') was left out — confirm whether to swap one in before production. Storage conditions here include the source doc's seed-moisture sentence (not just the generic boilerplate) since that's what this specific label text contains — confirm that's still correct for this product. Composition value folds in the total concentration line since the schema has no separate field for it — split it out if a dedicated field gets added later.",
+  "lang1": {
+    "header": "BG | Растителен биостимулант – микробен продукт за пръскане на почвата.",
+    "bullet1": "Преобразува основните хранителни елементи във форми, достъпни за растенията (микробиологично фиксиране и освобождаване), както и подобрява усвояването им.",
+    "bullet2": "Биостимулация – растенията растат по-бързо, стават по-здрави, което води до оптимален добив.",
+    "bullet3": "Подобрява устойчивостта на растенията към суша и други стресови фактори.",
+    "bullet4": "Подобрява жизнеността на растенията."
+  },
+  "more_info": {
+    "label": "Повече информация:"
+  },
+  "composition": {
+    "label": "Състав:",
+    "value": "Paenibacillus azotofixans, Bacillus megaterium, Bacillus mucilaginosus, Bacillus mycoides, микоризен гъбичен организъм (Serendipita indica), витамини. Обща концентрация – не по-малко от 1.0 x 10⁹ CFU/g."
+  },
+  "carriers": {
+    "label": "Носещ материал:",
+    "value": "Декстроза."
+  },
+  "form": {
+    "label": "Форма на продукта:",
+    "value": "Прах."
+  },
+  "usage": {
+    "label": "Дозировка:",
+    "value": "0,25 – 1 kg/ha. За по-подробна информация сканирайте QR кода."
+  },
+  "preparation": {
+    "label": "Приготвяне на разтвора:",
+    "value": "Разтворете необходимото количество FULLRANGE в 200–400 л вода и напръскайте/полейте почвата. Препоръчваме ви да разтворите необходимото количество FULLRANGE във вода в отделен съд, преди да го налеете в пръскачката."
+  },
+  "storage": {
+    "label": "Условия за съхранение:",
+    "value": "Продуктът, в плътно затворена оригинална опаковка, може да се съхранява в продължение на 24 месеца при температура от +5 до +30 °C на сухо и добре проветриво място, защитено от пряка слънчева светлина. Семената с влажност 12–14 % могат да се съхраняват до един месец при възможно най-малки температурни колебания."
+  },
+  "box_section": {
+    "header": "BG | Растителен биостимулант – микробен продукт за пръскане на почвата."
+  },
+  "origin": {
+    "label": "Страна на произход:",
+    "value": "Литва."
+  },
+  "footer": {
+    "sku_label": "Код на артикула:",
+    "ufi_label": "UFI:",
+    "mfg_date_label": "Дата на производство:",
+    "batch_label": "Номер на партидата:",
+    "exp_date_label": "Срок на годност:",
+    "exp_date_value": "24 месеца от датата на производство",
+    "manufacturer_label": "Производител:",
+    "manufacturer_company": "UAB „Nando\"",
+    "manufacturer_address1": "Булевард „Европос\" 39,",
+    "manufacturer_address2": "LT-46329 Каунас, Литва",
+    "manufacturer_phone": "Тел. +370 37 441891, ",
+    "manufacturer_email": "info@nandobio.com",
+    "manufacturer_website": "www.nandobio.com"
+  }
+}
