@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "code": "PL",
+    "name": "Polish",
+    "flag": "🇵🇱",
+    "product": "AGRIWET"
+  },
+  "_todo": "Filled in for AGRIWET from Agriwet_TDS_EN_version_1_0.docx. This required actual translation from the English TDS (no Polish source existed), unlike the earlier BG file where the source was already in-language — have a native Polish speaker review before production use, especially 'lang1.header' and the composition/mode-of-action wording. 'carriers.value' is left blank: the TDS lists no carrier (it's a neat liquid adjuvant, not a carrier-based powder) — confirm that's correct rather than a gap. 'storage.value' and 'footer.exp_date_value' deliberately do NOT use the generic Nando boilerplate (+5 to +30 °C / 24 months) — this TDS specifies 0 to +40 °C and a 36-month shelf life, which is different from the biostimulant powder products. IMPORTANT: the TDS also carries full CLP hazard classification (causes serious eye damage, harmful if inhaled, toxic to aquatic life, signal word/pictograms, P-statements) that this JSON schema has no field for — that needs to be added to the physical label through whichever part of the process handles hazard pictograms/H-P statements; it is not represented anywhere in this file.",
+  "lang1": {
+    "header": "PL | ADIUWANT. NIEJONOWA MIESZANINA SILIKONOWO-ALKOKSYLOWANYCH ŚRODKÓW ZWILŻAJĄCYCH I ROZPRASZAJĄCYCH DO STOSOWANIA DOLISTNEGO",
+    "bullet1": "Zmniejsza napięcie powierzchniowe, zapewniając lepsze rozprowadzenie, przyczepność i penetrację.",
+    "bullet2": "Zapewnia doskonałe zwilżanie roślin, umożliwiając zmniejszenie zużycia wody nawet o 20%, zwiększenie pokrycia oraz oszczędność czasu i paliwa.",
+    "bullet3": "Utrzymuje skuteczność środków ochrony roślin i dolistnych nawozów mikroelementowych w warunkach wilgotnych (np. w obecności porannej rosy).",
+    "bullet4": "Chroni substancje czynne przed spłukaniem przez deszcz."
+  },
+  "more_info": {
+    "label": "Więcej informacji:"
+  },
+  "composition": {
+    "label": "Skład:",
+    "value": "3-(Polioksyetyleno)propyloheptametylotrisiloksan, alliloksypolietylenoglikol, etoksylowany alkohol tłuszczowy oraz inne składniki."
+  },
+  "carriers": {
+    "label": "Nośniki:",
+    "value": ""
+  },
+  "form": {
+    "label": "Postać produktu:",
+    "value": "Płyn (jasnożółty)."
+  },
+  "usage": {
+    "label": "Dawkowanie:",
+    "value": "50–300 ml/ha, w zależności od zastosowania. Pełna tabela dawkowania – zeskanuj kod QR."
+  },
+  "preparation": {
+    "label": "Przygotowanie roztworu:",
+    "value": "WSTRZĄSNĄĆ DOKŁADNIE PRZED UŻYCIEM! Przygotuj ciecz roboczą zgodnie z zaleceniami producenta środka ochrony roślin i nawozu. Dodaj AGRIWET jako ostatni składnik, chyba że stosowany jest pestycyd w postaci koncentratu emulgującego (EC) – w takim przypadku dodaj AGRIWET przed rozpuszczeniem pestycydu. Wykonaj oprysk przygotowanym roztworem w ciągu 24 godzin od przygotowania."
+  },
+  "storage": {
+    "label": "Warunki przechowywania:",
+    "value": "Przechowywać produkt w oryginalnym opakowaniu, w dobrze wentylowanym miejscu, w temperaturze od 0°C do +40°C, z dala od dzieci, żywności, napojów, pasz dla zwierząt, źródeł prądu, źródeł ciepła i bezpośredniego światła słonecznego."
+  },
+  "box_section": {
+    "header": "PL | ADIUWANT. NIEJONOWA MIESZANINA SILIKONOWO-ALKOKSYLOWANYCH ŚRODKÓW ZWILŻAJĄCYCH I ROZPRASZAJĄCYCH DO STOSOWANIA DOLISTNEGO"
+  },
+  "origin": {
+    "label": "Kraj pochodzenia:",
+    "value": "Litwa."
+  },
+  "footer": {
+    "sku_label": "Kod SKU:",
+    "ufi_label": "UFI:",
+    "mfg_date_label": "Data produkcji:",
+    "batch_label": "Numer partii:",
+    "exp_date_label": "Termin przydatności:",
+    "exp_date_value": "36 miesięcy od daty produkcji",
+    "manufacturer_label": "Producent:",
+    "manufacturer_company": "UAB Nando",
+    "manufacturer_address1": "Al. Europos 39,",
+    "manufacturer_address2": "LT-46329 Kowno, Litwa",
+    "manufacturer_phone": "Tel. +370 37 441891, ",
+    "manufacturer_email": "info@nandobio.com",
+    "manufacturer_website": "www.nandobio.com"
+  }
+}

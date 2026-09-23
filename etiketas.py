@@ -512,36 +512,91 @@ def _get_story_replacements(story_title, trans):
         return [f.get('mfg_date_label', ''), f.get('batch_label', '')]
     return None
 
-def apply_footer_content(idml_path: Path, translations: list, footer_values: dict) -> bool:
-    """Write combined footer labels (joined across translations) and user values to FOOTER_* stories.
-    translations: list of translation dicts (may contain None for skipped slots).
-    footer_values: dict with keys sku, mfg_date, batch, exp_date, manufacturer_value.
-    """
-    def combined_label(section_key, field_key):
-        parts = []
-        for t in translations:
-            if t:
-                v = t.get(section_key, {}).get(field_key, '')
-                if v:
-                    parts.append(v)
-        return ' / '.join(parts)
+# Current templates hold SKU/mfg-date/batch/shelf-life in one shared
+# "SHARED_SKU" story (label text baked in once, not per language slot) --
+# the older per-language FOOTER_*/LANG{n}_FOOTER_* story names this module
+# used to target don't exist in any current template, so that path was a
+# silent no-op. Manufacturing date and batch number are stamped on later at
+# the print line, so only their *labels* live in the template -- there is
+# deliberately no value to write for those two. SKU code and shelf life ARE
+# set at creation time -- SKU from the wizard (per label/batch), shelf life
+# from the translation file (per product).
+#
+# InDesign frequently splits one logical run of text into several <Content>
+# runs when formatting changes mid-run, so the number of runs per field
+# varies between templates (a bare label may be 1 run; a label with a
+# placeholder value after it may be 2-3). Rather than assume a fixed layout,
+# this locates the mfg-date/batch-label runs by text and infers the
+# SKU-value and shelf-life-value run spans around them.
+_MFG_LABEL_MARKERS   = ['pagaminimo data', 'date of manufacture', 'manufacturing date']
+_BATCH_LABEL_MARKERS = ['partijos numeris', 'batch number', 'batch no']
+_SHELF_LABEL_MARKERS = ['galiojimo laikas', 'shelf life', 'best before', 'expiry']
 
-    story_content = {
-        'FOOTER_SKU_LABEL':          [combined_label('footer', 'sku_label')],
-        'FOOTER_SKU_VALUE':          [footer_values.get('sku', '')],
-        'FOOTER_UFI_LABEL':          [combined_label('footer', 'ufi_label')],
-        'FOOTER_UFI_VALUE':          [footer_values.get('ufi', '')],
-        'FOOTER_MFG_DATE_LABEL':     [combined_label('footer', 'mfg_date_label')],
-        'FOOTER_MFG_DATE_VALUE':     [''],
-        'FOOTER_BATCH_LABEL':        [combined_label('footer', 'batch_label')],
-        'FOOTER_BATCH_VALUE':        [''],
-        'FOOTER_EXP_DATE_LABEL':     [combined_label('footer', 'exp_date_label')],
-        'FOOTER_EXP_DATE_VALUE':     [combined_label('footer', 'exp_date_value')],
-        'FOOTER_MANUFACTURER_LABEL': [combined_label('footer', 'manufacturer_label')],
-        'FOOTER_MANUFACTURER_VALUE': [footer_values.get('manufacturer_value', '')],
-    }
+def _find_run_index(contents, markers):
+    for i, c in enumerate(contents):
+        low = c.lower()
+        if any(mk in low for mk in markers):
+            return i
+    return None
+
+def _fill_shared_sku_xml(xml_text, sku_value, shelf_value):
+    """Return updated XML for a SHARED_SKU story, or None if its structure
+    wasn't recognized (left untouched rather than guessed at)."""
+    contents = re.findall(r'<Content>(.*?)</Content>', xml_text, re.DOTALL)
+    if not contents:
+        return None
+    mfg_i = _find_run_index(contents, _MFG_LABEL_MARKERS)
+    if mfg_i is None or mfg_i + 1 >= len(contents):
+        return None
+    batch_i = mfg_i + 1
+    if not any(mk in contents[batch_i].lower() for mk in _BATCH_LABEL_MARKERS):
+        return None
+    shelf_label_i = batch_i + 1
+    has_shelf_label = shelf_label_i < len(contents) and any(
+        mk in contents[shelf_label_i].lower() for mk in _SHELF_LABEL_MARKERS)
+
+    new_contents = list(contents)
+    # SKU value lives in run(s) between the SKU label (run 0) and the
+    # mfg-date label -- blank any separator runs, put the value in the last.
+    if sku_value and mfg_i >= 2:
+        for i in range(1, mfg_i):
+            new_contents[i] = ''
+        new_contents[mfg_i - 1] = sku_value
+    # Shelf-life value lives in run(s) after the shelf-life label.
+    if shelf_value and has_shelf_label and shelf_label_i + 1 < len(contents):
+        for i in range(shelf_label_i + 1, len(contents)):
+            new_contents[i] = ''
+        new_contents[-1] = shelf_value
+
+    if new_contents == contents:
+        return None
+    idx = [0]
+    def repl(m):
+        val = html.escape(new_contents[idx[0]])
+        idx[0] += 1
+        return f'<Content>{val}</Content>'
+    return re.sub(r'<Content>(.*?)</Content>', repl, xml_text, flags=re.DOTALL)
+
+def apply_footer_content(idml_path: Path, translations: list, footer_values: dict = None) -> bool:
+    """Fill the SHARED_SKU story's SKU-code and shelf-life values.
+    translations: list of translation dicts (may contain None for skipped slots).
+    footer_values: dict from the wizard, keyed 'sku' (and, currently unused,
+    'ufi'/'manufacturer_value'). SKU comes from here rather than the
+    translation file -- the same translation can be reused across different
+    markets/production batches, each with its own SKU, so SKU belongs to the
+    label being created, not the shared translated text. Shelf life is the
+    opposite: it's a property of the product/translation, not the batch, so
+    it's still sourced from the translation file, first non-blank one wins
+    across the selected languages.
+    """
+    sku_value = (footer_values or {}).get('sku', '')
+    shelf_value = next((t.get('footer', {}).get('exp_date_value', '')
+                         for t in translations if t and t.get('footer', {}).get('exp_date_value')), '')
+    if not sku_value and not shelf_value:
+        return True  # nothing to write -- not an error
 
     buf = io.BytesIO()
+    touched = False
     try:
         with zipfile.ZipFile(str(idml_path), 'r') as zin:
             with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
@@ -550,13 +605,17 @@ def apply_footer_content(idml_path: Path, translations: list, footer_values: dic
                     if item.filename.startswith('Stories/'):
                         xml = data.decode('utf-8')
                         m = re.search(r'StoryTitle="([^"]+)"', xml)
-                        if m and m.group(1) in story_content:
-                            xml = _replace_story_contents(xml, story_content[m.group(1)])
+                        if m and m.group(1) == 'SHARED_SKU':
+                            new_xml = _fill_shared_sku_xml(xml, sku_value, shelf_value)
+                            if new_xml is not None:
+                                xml = new_xml
+                                touched = True
                         data = xml.encode('utf-8')
                     zout.writestr(item, data)
     except Exception:
         return False
-    idml_path.write_bytes(buf.getvalue())
+    if touched:
+        idml_path.write_bytes(buf.getvalue())
     return True
 
 def apply_lang_translation(idml_path: Path, slot: int, trans: dict) -> bool:
@@ -731,7 +790,9 @@ def create_label(product, languages, packaging_size, config, label_template_path
                         ops["translations"].append(ok)
                     else:
                         ops["translations"].append(None)  # skipped
-                if apply_qr and footer_values:  # label only (apply_qr=True for label)
+                if apply_qr:  # label only (apply_qr=True for label) -- SKU/shelf-life
+                    # come from the translation file, so this should run regardless
+                    # of whether the wizard's (now-legacy) SKU/UFI fields were used.
                     ops["footer"] = apply_footer_content(dest_path, translations, footer_values)
         else:
             dest_path.write_bytes(b"")
