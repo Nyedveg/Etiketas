@@ -36,6 +36,17 @@ const api = {
 
 const scoreLabel = s => s>=75?{label:'Perfect',cls:'score-high'}:s>=50?{label:'Good',cls:'score-med'}:{label:'Fallback',cls:'score-low'};
 
+// Tokenized search: every word in the query must appear somewhere in the
+// text (in any order), instead of the whole query matching as one literal
+// substring -- "BioNPK 500" now matches "BioNPK Powder S 500" rather than
+// requiring that exact phrase.
+const matchesSearch = (text, query) => {
+  const tokens = (query||'').toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const hay = (text||'').toLowerCase();
+  return tokens.every(tok => hay.includes(tok));
+};
+
 
 const Icon = {
   Dashboard:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>,
@@ -616,7 +627,7 @@ function NewLabelWizard({config,map,setMap}){
   const productCfg=product?config.products.find(p=>p.name===product):null;
   const dimKey=productCfg?(()=>{const{category,acidic,unit}=productCfg;const u=unit||(category==='PAM'?'L':'kg');if(category==='PAM')return acidic?'PAM_acidic':'PAM_normal';if(category==='CE')return u==='kg'?'CE_solid':'CE';return u==='L'?'MO_liquid':'MO';})():null;
   const sizes=dimKey?(config?.packagingSizes?.[dimKey]??[]):[];
-  const filtered=enabledProducts.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered=enabledProducts.filter(p=>matchesSearch(p.name,search));
   useEffect(()=>{
     setLangFiles(languages.map(code=>transFiles.find(f=>f.code===code)?.path??null));
   },[languages.length, languages.join(','), transFiles.length]);
@@ -1029,7 +1040,7 @@ function Information({config,map,setMap}){
   const enabledProds=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
   const filteredProds=enabledProds
     .filter(p=>catFilter==='all'||p.category===catFilter)
-    .filter(p=>!search||p.name.toLowerCase().includes(search.toLowerCase()));
+    .filter(p=>matchesSearch(p.name,search));
   const prodCfg=selected?(config?.products??[]).find(p=>p.name===selected):null;
   const dimKey=prodCfg?(()=>{const{category,acidic,unit}=prodCfg;const u=unit||(category==='PAM'?'L':'kg');if(category==='PAM')return acidic?'PAM_acidic':'PAM_normal';if(category==='CE')return u==='kg'?'CE_solid':'CE';return u==='L'?'MO_liquid':'MO';})():null;
   const swatches=selected?(colors[selected]||Array(6).fill('#808080')):[];
@@ -1295,7 +1306,7 @@ function LabelsBrowser({map,setMap,config}){
     return true;
   };
   const filtered=files.filter(f=>{
-    if(search&&!f.filename.toLowerCase().includes(search.toLowerCase())&&!f.product?.toLowerCase().includes(search.toLowerCase()))return false;
+    if(!matchesSearch(f.filename+' '+(f.product||''),search))return false;
     if(filterCat!=='all'&&getCategory(f.product)!==filterCat)return false;
     if(filterLabelType==='label'&&f.deze)return false;
     if(filterLabelType==='box'&&!f.deze)return false;
