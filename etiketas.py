@@ -8,6 +8,7 @@ Opens at:  http://localhost:7842
 import ctypes, html, io, json, mimetypes, os, re, shutil, socket, stat, sys, threading, time, webbrowser, subprocess, zipfile
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -20,10 +21,13 @@ LABELS_DIR = Path.home() / "Documents" / "Etiketas"
 QR_DIR          = BASE_DIR / "qrcodes"
 TEMPLATE_DIR    = BASE_DIR / "templates"
 TRANSLATIONS_DIR = BASE_DIR / "translations"
+ICONS_DIR       = BASE_DIR / "icons"
 LOGO_THUMB_DIR = LABELS_DIR / ".cache" / "logo_thumbs"
+FILE_THUMB_DIR = LABELS_DIR / ".cache" / "file_thumbs"
 MAP_FILE     = LABELS_DIR / "labels_map.json"
 CFG_FILE     = LABELS_DIR / "app_config.json"
 COLORS_FILE  = LABELS_DIR / "colors_config.json"
+ICON_ASSIGN_FILE = LABELS_DIR / "icon_assignments.json"
 HISTORY_FILE = LABELS_DIR / "creation_history.json"
 DEFAULT_CFG_FILE = BASE_DIR / "default_config.json"
 PORT       = 7842
@@ -46,6 +50,29 @@ def append_history(entry):
     if len(history) > 200:
         history = history[:200]
     save_json(HISTORY_FILE, history)
+
+def _norm_name(s: str) -> str:
+    return re.sub(r'[^a-z0-9]', '', (s or '').lower())
+
+def get_icon_assignments(products: list) -> dict:
+    """Live product -> [icon id] map (LABELS_DIR/icon_assignments.json).
+    Seeded once from icons/icons.json's products[].icons (matched to the
+    current product list by normalized name/alias, best-effort -- names
+    don't line up exactly, e.g. "Biotero" vs. "BioTero") so a fresh install
+    starts with the catalogue's own trait mapping instead of empty."""
+    assignments = load_json(ICON_ASSIGN_FILE, None)
+    if assignments is not None:
+        return assignments
+    library = load_json(ICONS_DIR / "icons.json", {})
+    by_norm = {}
+    for lib_prod in library.get("products", []):
+        icons = lib_prod.get("icons", [])
+        for nm in [lib_prod.get("name", "")] + lib_prod.get("aliases", []):
+            if nm:
+                by_norm[_norm_name(nm)] = icons
+    assignments = {p["name"]: by_norm.get(_norm_name(p["name"]), []) for p in products}
+    save_json(ICON_ASSIGN_FILE, assignments)
+    return assignments
 
 # ── Sync status (best-effort: is LABELS_DIR a link into a synced folder?) ──────
 def _onedrive_running():
@@ -671,11 +698,20 @@ def apply_box_weight_text(idml_path: Path, box_mult: str) -> bool:
     idml_path.write_bytes(buf.getvalue())
     return True
 
-def list_translations():
+def get_translations_dir(cfg: dict = None) -> Path:
+    """Live translations folder -- cfg['translationsDir'] if the user has set
+    one (Settings -> Paths), else the app's own bundled "translations" folder."""
+    if cfg is None:
+        cfg = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
+    override = cfg.get("translationsDir")
+    return Path(override) if override else TRANSLATIONS_DIR
+
+def list_translations(translations_dir: Path = None):
     files = []
-    if not TRANSLATIONS_DIR.exists():
+    translations_dir = translations_dir or TRANSLATIONS_DIR
+    if not translations_dir.exists():
         return files
-    for f in sorted(TRANSLATIONS_DIR.rglob("*.json")):
+    for f in sorted(translations_dir.rglob("*.json")):
         try:
             meta = load_json(f, {}).get('meta', {})
             files.append({
@@ -760,6 +796,10 @@ def create_label(product, languages, packaging_size, config, label_template_path
     prod_colors = load_json(COLORS_FILE, {}).get(product, [])
     qr_path     = find_qr_for_product(product)
     logo_path   = find_logo_for_product(product)
+    icon_lib    = {ic["id"]: ic for ic in load_json(ICONS_DIR / "icons.json", {}).get("icons", [])}
+    trait_icons = [ICONS_DIR / icon_lib[i]["svg"]
+                   for i in get_icon_assignments(prods).get(product, [])
+                   if i in icon_lib and (ICONS_DIR / icon_lib[i]["svg"]).is_file()]
     # Pre-load translation data for each slot (None = skip)
     translations = []
     for lf in (lang_files or []):
@@ -794,6 +834,7 @@ def create_label(product, languages, packaging_size, config, label_template_path
                     # come from the translation file, so this should run regardless
                     # of whether the wizard's (now-legacy) SKU/UFI fields were used.
                     ops["footer"] = apply_footer_content(dest_path, translations, footer_values)
+                    ops["icons"]  = apply_trait_icons(dest_path, trait_icons)
         else:
             dest_path.write_bytes(b"")
         return dest_path, ops
@@ -954,6 +995,265 @@ def get_logo_thumbnail(product_name: str):
     cache_file.write_bytes(data)
     return data
 
+# ── File preview + metadata (Browse Files) ──────────────────────────────────────
+# PDFs are rasterized. IDML/INDD can't be rendered without InDesign itself
+# (PyMuPDF opens an IDML but reports 0 pages), so for those the preview is the
+# thumbnail InDesign embeds in the file's XMP metadata, as of its last save.
+_PREVIEW_EXTS = ('.pdf', '.idml', '.indd')
+
+def _resolve_label_path(rel_path: str, exts=_PREVIEW_EXTS):
+    """Validate a client-supplied path as an in-bounds file under LABELS_DIR with
+    one of the given extensions. Returns the resolved Path, or None."""
+    if not rel_path or Path(rel_path).suffix.lower() not in exts:
+        return None
+    full = (LABELS_DIR / rel_path).resolve()
+    try:
+        full.relative_to(LABELS_DIR.resolve())
+    except ValueError:
+        return None  # outside LABELS_DIR -- reject
+    if not full.is_file():
+        return None
+    return full
+
+_XMP_IMG_OPEN, _XMP_IMG_CLOSE = b"<xmpGImg:image>", b"</xmpGImg:image>"
+_B64_RUN = re.compile(rb"(?:[A-Za-z0-9+/=\r\n ]|&#x[0-9A-Fa-f]+;)+")
+
+def _xmp_images(buf: bytes) -> list:
+    """Decode the xmpGImg thumbnails in an XMP text buffer, preferring the
+    per-page ones (xmpTPg:PageNumber). An INDD can store one image body in
+    several separate extents with binary junk between them, so after the opening
+    tag this follows the long base64 runs in file order up to the closing tag.
+    Every image must then decode completely or it is dropped -- a damaged read
+    can never produce a broken preview -- and page thumbnails are only returned
+    as an unbroken run from page 1, so a missing page can't shift the numbering."""
+    import base64
+    from PIL import Image
+    pages, others, pos = {}, [], 0
+    while True:
+        i = buf.find(_XMP_IMG_OPEN, pos)
+        if i < 0:
+            break
+        j = pos = i + len(_XMP_IMG_OPEN)
+        parts = []
+        for k, m in enumerate(_B64_RUN.finditer(buf, j, j + 600_000)):
+            run, last = m.group(0), buf.startswith(_XMP_IMG_CLOSE, m.end())
+            if k == 0 and m.start() != j:
+                break                          # body must start right after the tag
+            if k > 0 and len(run) < 200 and not last:
+                continue                       # junk between extents
+            parts.append(run)
+            if last:
+                break
+        else:
+            parts = []                         # never reached the closing tag
+        b64 = re.sub(rb"[^A-Za-z0-9+/]", b"", re.sub(rb"&#x[0-9A-Fa-f]+;", b"", b"".join(parts)))
+        if not b64:
+            continue
+        try:
+            data = base64.b64decode(b64 + b"=" * (-len(b64) % 4))
+            Image.open(io.BytesIO(data)).load()
+        except Exception:
+            continue
+        num = re.findall(rb"<xmpTPg:PageNumber>(\d+)<", buf[max(0, i - 500):i])
+        if num:
+            pages.setdefault(int(num[-1]), data)
+        else:
+            others.append(data)
+    if pages:
+        run, n = [], 1
+        while n in pages:
+            run.append(pages[n])
+            n += 1
+        return run
+    return others
+
+def _indd_previews(data: bytes) -> list:
+    """INDD is stored in 4096-byte pages whose last 144 bytes aren't payload,
+    and every save appends a fresh XMP packet without erasing the old ones. So:
+    drop the page tails, then use the page thumbnails of the packet(s) with the
+    newest xmp:ModifyDate. The newest packet is often the one whose pages end up
+    scattered and unreadable, but an older packet with the *same* ModifyDate is
+    the same save (InDesign writes the metadata more than once per save), so
+    that is an equally current preview. A packet from an earlier save never is
+    used: no preview is better than an out-of-date one."""
+    flat = b"".join(data[o:o + 3952] for o in range(0, len(data), 4096))
+    begins = [m.start() for m in re.finditer(rb"<\?xpacket begin", flat)]
+    packets = []
+    for n, b in enumerate(begins):
+        seg = flat[b:begins[n + 1] if n + 1 < len(begins) else len(flat)]
+        mod = re.search(rb"<xmp:ModifyDate>([^<]*)</xmp:ModifyDate>", seg)
+        packets.append((mod.group(1) if mod else b"", b, seg))
+    if not packets:
+        return []
+    newest = max(p[0] for p in packets)
+    for date, _, seg in sorted(packets, key=lambda p: p[1], reverse=True):
+        if date == newest:
+            imgs = _xmp_images(seg)
+            if imgs:
+                return imgs
+    return []
+
+_preview_cache = {}   # (path, mtime_ns) -> [jpeg bytes]
+
+def embedded_previews(full: Path) -> list:
+    """Page thumbnails InDesign embedded in an IDML/INDD file (JPEG bytes)."""
+    key = (str(full), full.stat().st_mtime_ns)
+    if key in _preview_cache:
+        return _preview_cache[key]
+    try:
+        if full.suffix.lower() == '.idml':
+            with zipfile.ZipFile(full) as z:
+                previews = _xmp_images(z.read("META-INF/metadata.xml"))
+        else:
+            previews = _indd_previews(full.read_bytes())
+    except Exception:
+        previews = []
+    if len(_preview_cache) >= 64:
+        _preview_cache.pop(next(iter(_preview_cache)))
+    _preview_cache[key] = previews
+    return previews
+
+def _idml_color_settings(full: Path) -> dict:
+    """The document's CMYK/RGB working profiles, from designmap.xml."""
+    with zipfile.ZipFile(full) as z:
+        head = z.read("designmap.xml").decode("utf-8", "replace")
+    doc = re.search(r"<Document\b[^>]*>", head)
+    attrs = doc.group(0) if doc else ""
+    get = lambda a: (re.search(rf'\b{a}="([^"]*)"', attrs) or [None, None])[1]
+    return {"cmyk": get("CMYKProfile"), "rgb": get("RGBProfile")}
+
+def _icc_space(p: bytes):
+    if len(p) < 132 or p[36:40] != b"acsp":
+        return None
+    sig = p[16:20].decode("latin1").strip()
+    return {"GRAY": "Gray"}.get(sig, sig)
+
+def _icc_description(p: bytes):
+    """Human-readable profile name from an ICC profile's 'desc' tag (v2 or v4)."""
+    count = int.from_bytes(p[128:132], "big")
+    for i in range(min(count, 64)):
+        e = 132 + 12 * i
+        if p[e:e + 4] != b"desc":
+            continue
+        off, size = int.from_bytes(p[e + 4:e + 8], "big"), int.from_bytes(p[e + 8:e + 12], "big")
+        tag = p[off:off + size]
+        if tag[:4] == b"desc":
+            n = int.from_bytes(tag[8:12], "big")
+            return tag[12:12 + n].split(b"\0")[0].decode("latin1").strip() or None
+        if tag[:4] == b"mluc":
+            ln, o = int.from_bytes(tag[20:24], "big"), int.from_bytes(tag[24:28], "big")
+            return tag[o:o + ln].decode("utf-16-be", "replace").strip() or None
+    return None
+
+def _pdf_color_info(doc) -> dict:
+    """Embedded ICC profiles and the output intent (if any) found in the PDF."""
+    profiles, seen_refs, intent = [], set(), None
+    for x in range(1, doc.xref_length()):
+        try:
+            obj = doc.xref_object(x)
+        except Exception:
+            continue
+        for ref in re.findall(r"/ICCBased\s+(\d+)\s+0\s+R", obj):
+            if ref in seen_refs:
+                continue
+            seen_refs.add(ref)
+            try:
+                prof = doc.xref_stream(int(ref))
+            except Exception:
+                continue
+            space = _icc_space(prof)
+            entry = {"space": space, "name": _icc_description(prof)} if space else None
+            if entry and entry not in profiles:
+                profiles.append(entry)
+        if "/OutputConditionIdentifier" in obj and intent is None:
+            m = re.search(r"/OutputConditionIdentifier\s*\(((?:\\.|[^\\)])*)\)", obj)
+            intent = m.group(1) if m else None
+    return {"profiles": profiles, "output_intent": intent}
+
+def _pdf_size_mm(doc) -> list:
+    """First page's size in mm as the PDF defines it (bleed included, if any)."""
+    r = doc.load_page(0).rect
+    return [round(r.width / 72 * 25.4, 1), round(r.height / 72 * 25.4, 1)]
+
+def get_file_info(rel_path: str):
+    """Metadata for the Browse Files preview panel, or None for a bad path.
+    Deliberately no author and no filesystem/XMP dates: authors aren't recorded
+    in these files, and dates inherited from templates or reset by OneDrive
+    sync would mislead. 'rev' is only a cache-busting token for thumbnails."""
+    full = _resolve_label_path(rel_path)
+    if full is None:
+        return None
+    ext, st = full.suffix.lower(), full.stat()
+    info = {"kind": ext[1:], "size_bytes": st.st_size, "rev": int(st.st_mtime), "page_count": 0}
+    try:
+        if ext == '.pdf':
+            import fitz  # PyMuPDF
+            doc = fitz.open(str(full))
+            try:
+                info["page_count"] = doc.page_count
+                if doc.page_count:
+                    info["size_mm"] = _pdf_size_mm(doc)
+                info["color"] = _pdf_color_info(doc)
+            finally:
+                doc.close()
+        else:
+            info["page_count"] = len(embedded_previews(full))
+            if ext == '.idml':
+                info["color"] = _idml_color_settings(full)
+    except Exception:
+        pass
+    return info
+
+def render_file_thumbnail(pdf_path: Path, page: int = 0, size: int = 320) -> bytes:
+    """Rasterize one page of a print PDF into a preview PNG, full page (no
+    ink-crop -- unlike a logo, the whole page *is* the label's content)."""
+    import fitz  # PyMuPDF
+    from PIL import Image
+    doc = fitz.open(str(pdf_path))
+    try:
+        idx  = max(0, min(page, doc.page_count - 1))
+        pg   = doc.load_page(idx)
+        dim  = max(pg.rect.width, pg.rect.height, 1)
+        zoom = min(max(2.0, size / dim), 3000 / dim)  # same oversized-page guard as logos
+        pix  = pg.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        img  = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+        img.thumbnail((size, size), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        return buf.getvalue()
+    finally:
+        doc.close()
+
+def get_file_thumbnail(rel_path: str, page: int = 0):
+    """(bytes, mime) for one page preview of a PDF (rendered, cached on disk),
+    or of an IDML/INDD (InDesign's embedded thumbnail). None for anything that
+    isn't a real, in-bounds file with a preview (also guards path traversal)."""
+    full = _resolve_label_path(rel_path)
+    if full is None:
+        return None
+    if full.suffix.lower() != '.pdf':
+        previews = embedded_previews(full)
+        return (previews[page], "image/jpeg") if 0 <= page < len(previews) else None
+    slug  = re.sub(r'[^a-zA-Z0-9]+', '_', rel_path).strip('_')
+    mtime = int(full.stat().st_mtime)
+    cache_file = FILE_THUMB_DIR / f"{slug}_{mtime}_p{page}.png"
+    if cache_file.exists():
+        return cache_file.read_bytes(), "image/png"
+    try:
+        data = render_file_thumbnail(full, page=page)
+    except Exception:
+        return None
+    FILE_THUMB_DIR.mkdir(parents=True, exist_ok=True)
+    # Only purge pages cached under a stale (pre-regeneration) mtime -- pages
+    # already cached under the current mtime must survive so a multi-page
+    # preview doesn't evict itself one page at a time as each page loads.
+    for stale in FILE_THUMB_DIR.glob(f"{slug}_*.png"):
+        if f"{slug}_{mtime}_" not in stale.name:
+            try: stale.unlink()
+            except Exception: pass
+    cache_file.write_bytes(data)
+    return data, "image/png"
+
 def patch_logo_in_idml(idml_path, logo_path) -> bool:
     """Replace logo LinkResourceURI (_LOGO) in an IDML file in-place. Returns True on success."""
     logo_uri  = Path(logo_path).as_uri()
@@ -992,6 +1292,106 @@ def patch_logo_in_idml(idml_path, logo_path) -> bool:
                 zout.writestr(zi, data, compress_type=ctype)
         idml_path.write_bytes(out.getvalue())
         return True
+    except Exception:
+        return False
+
+_TRAIT_SLOT_RE = re.compile(r'TRAIT_SLOT_(\d+)\.svg', re.IGNORECASE)
+_TRAIT_URI_RE  = re.compile(r'(?<=")file:[^"]*?TRAIT_SLOT_\d+\.svg(?=")', re.IGNORECASE)
+
+def _fill_trait_slots_xml(text: str, icon_uris: list):
+    """Relink TRAIT_SLOT_n graphic frames to icon_uris[n-1] and delete the
+    frames beyond len(icon_uris). Returns (new_text, slot_count)."""
+    blocks, pos = [], 0
+    while True:
+        s = text.find('<Rectangle', pos)
+        if s == -1:
+            break
+        e = text.find('</Rectangle>', s)
+        if e == -1:
+            break
+        e += len('</Rectangle>')
+        m = _TRAIT_SLOT_RE.search(text, s, e)
+        if m and text[s + len('<Rectangle')] in ' \t\r\n>':
+            blocks.append((s, e, int(m.group(1))))
+        pos = e
+    if not blocks:
+        return text, 0
+    # Slots live in an InDesign Flex container (right-anchored row); the same
+    # container is dropped entirely if every slot ends up empty.
+    first_s = blocks[0][0]
+    fo_start = text.rfind('<FlexObject', 0, first_s)
+    last_e = blocks[-1][1]
+    fo_close = text.find('</FlexObject>', last_e)
+    only_slots = (
+        fo_start != -1 and fo_close != -1
+        and text.count('<Rectangle', fo_start, fo_close) == len(blocks)
+        and text.count('<FlexObject', fo_start, fo_close) == 1
+    )
+    for s, e, n in reversed(blocks):
+        if n <= len(icon_uris):
+            uri = icon_uris[n - 1]
+            text = text[:s] + _TRAIT_URI_RE.sub(lambda _m: uri, text[s:e]) + text[e:]
+        else:
+            ls = s
+            while ls > 0 and text[ls - 1] in ' \t':
+                ls -= 1
+            le = e
+            if text.startswith('\r\n', le):
+                le += 2
+            elif text.startswith('\n', le):
+                le += 1
+            text = text[:ls] + text[le:]
+    if only_slots and not icon_uris:
+        # fo_start is before every deletion above, so it is still valid here.
+        fo_close = text.find('</FlexObject>', fo_start)
+        ls = fo_start
+        while ls > 0 and text[ls - 1] in ' \t':
+            ls -= 1
+        le = fo_close + len('</FlexObject>')
+        if text.startswith('\r\n', le):
+            le += 2
+        elif text.startswith('\n', le):
+            le += 1
+        text = text[:ls] + text[le:]
+    return text, len(blocks)
+
+def apply_trait_icons(idml_path, icon_paths: list):
+    """Fill a template's TRAIT_SLOT_1..N icon frames with a product's trait
+    icons (SVG files, in display order) by relinking each slot's graphic, the
+    same way the logo/QR are swapped. Unused slots are removed.
+    Returns None when the template has no TRAIT_SLOT frames (older templates),
+    True on success, False on failure or if there are more icons than slots."""
+    idml_path = Path(idml_path)
+    icon_uris = [Path(p).as_uri() for p in icon_paths]
+    try:
+        entries, order = {}, []
+        with zipfile.ZipFile(io.BytesIO(idml_path.read_bytes()), 'r') as zin:
+            for info in zin.infolist():
+                entries[info.filename] = (info, zin.read(info.filename))
+                order.append(info.filename)
+        total_slots, changed = 0, False
+        for name in order:
+            info, data = entries[name]
+            if not name.endswith('.xml') or b'TRAIT_SLOT_' not in data:
+                continue
+            text = data.decode('utf-8')
+            new_text, slots = _fill_trait_slots_xml(text, icon_uris)
+            if slots:
+                total_slots += slots
+                entries[name] = (info, new_text.encode('utf-8'))
+                changed = True
+        if not changed:
+            return None
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, 'w') as zout:
+            for name in order:
+                info, data = entries[name]
+                ctype = zipfile.ZIP_STORED if name == 'mimetype' else zipfile.ZIP_DEFLATED
+                zi = zipfile.ZipInfo(name)
+                zi.date_time = info.date_time
+                zout.writestr(zi, data, compress_type=ctype)
+        idml_path.write_bytes(out.getvalue())
+        return len(icon_uris) <= total_slots
     except Exception:
         return False
 
@@ -1184,6 +1584,16 @@ class Handler(BaseHTTPRequestHandler):
             mime = mimetypes.guess_type(rel)[0] or "application/octet-stream"
             self.serve_static(STATIC_DIR / rel, mime); return
 
+        if path.startswith("/icons/"):
+            rel  = path[len("/icons/"):]
+            full = (ICONS_DIR / rel).resolve()
+            try:
+                full.relative_to(ICONS_DIR.resolve())
+            except ValueError:
+                self.send_response(404); self.end_headers(); return
+            mime = mimetypes.guess_type(rel)[0] or "application/octet-stream"
+            self.serve_static(full, mime); return
+
         if path == "/api/config":
             cfg = load_json(CFG_FILE)
             if not cfg:
@@ -1272,6 +1682,13 @@ class Handler(BaseHTTPRequestHandler):
             defaults = {p["name"]: ["#808080"] * 6 for p in cfg.get("products", [])}
             self.send_json({"colors": {**defaults, **colors}})
 
+        elif path == "/api/icons":
+            self.send_json(load_json(ICONS_DIR / "icons.json", {"icons": [], "products": []}))
+
+        elif path == "/api/icon_assignments":
+            cfg = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
+            self.send_json({"assignments": get_icon_assignments(cfg.get("products", []))})
+
         elif path == "/api/assets_check":
             cfg      = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
             products = cfg.get("products", [])
@@ -1304,14 +1721,41 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
 
+        elif path == "/api/file_thumb":
+            qs   = parse_qs(urlparse(self.path).query)
+            rel  = (qs.get("path") or [None])[0]
+            try:
+                page = int((qs.get("page") or ["0"])[0])
+            except ValueError:
+                page = 0
+            result = get_file_thumbnail(rel, page) if rel else None
+            if result is None:
+                self.send_response(404); self.end_headers(); return
+            data, mime = result
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "public, max-age=604800")
+            self.end_headers()
+            self.wfile.write(data)
+
+        elif path == "/api/file_info":
+            qs   = parse_qs(urlparse(self.path).query)
+            rel  = (qs.get("path") or [None])[0]
+            info = get_file_info(rel) if rel else None
+            if info is None:
+                self.send_response(404); self.end_headers(); return
+            self.send_json(info)
+
         elif path == "/api/translations":
-            self.send_json({"files": list_translations()})
+            self.send_json({"files": list_translations(get_translations_dir())})
 
         elif path == "/api/resource_dirs":
             self.send_json({
-                "logos":     str(BASE_DIR / "logos"),
-                "qrcodes":   str(QR_DIR),
-                "templates": str(TEMPLATE_DIR),
+                "logos":        str(BASE_DIR / "logos"),
+                "qrcodes":      str(QR_DIR),
+                "templates":    str(TEMPLATE_DIR),
+                "translations": str(get_translations_dir()),
             })
 
         elif path == "/api/config/default":
@@ -1320,7 +1764,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/export":
             cfg    = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
             colors = load_json(COLORS_FILE, {})
-            payload = json.dumps({"config": cfg, "colors": colors}, ensure_ascii=False, indent=2).encode("utf-8")
+            icon_assignments = get_icon_assignments(cfg.get("products", []))
+            payload = json.dumps({"config": cfg, "colors": colors, "icon_assignments": icon_assignments}, ensure_ascii=False, indent=2).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Disposition", 'attachment; filename="etiketas_export.json"')
@@ -1423,6 +1868,10 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/colors/save":
             save_json(COLORS_FILE, body)
+            self.send_json({"ok": True})
+
+        elif path == "/api/icon_assignments/save":
+            save_json(ICON_ASSIGN_FILE, body)
             self.send_json({"ok": True})
 
         elif path == "/api/config/reset":
@@ -1559,7 +2008,16 @@ def _take_over_port(port):
         time.sleep(0.12)
 
 # ── Server startup ─────────────────────────────────────────────────────────────
-class _QuietHTTPServer(HTTPServer):
+class _QuietHTTPServer(ThreadingMixIn, HTTPServer):
+    # A plain HTTPServer handles one request at a time; a page that fires off
+    # a burst of concurrent requests (e.g. 20 trait-icon <img> loads at once)
+    # leaves the later ones queued behind the earlier ones and some time out.
+    # request_queue_size is also bumped from socketserver's default of 5 --
+    # too small a listen() backlog drops/resets connection attempts that
+    # arrive before the accept loop has caught up, which threading alone
+    # doesn't fix since the backlog is a kernel-level limit, not a Python one.
+    daemon_threads = True
+    request_queue_size = 128
     def handle_error(self, request, client_address):
         et = sys.exc_info()[0]
         if et and issubclass(et, ConnectionError):

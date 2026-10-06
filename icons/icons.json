@@ -1,0 +1,35 @@
+{
+  "icons": [
+    {"id": "mo-nutrient-conversion", "category": "microbial_benefit", "name_en": "Converts key nutrients into plant-available forms and improves their uptake", "svg": "mo-nutrient-conversion.svg"},
+    {"id": "mo-soil-structure", "category": "microbial_benefit", "name_en": "Improves soil structure", "svg": "mo-soil-structure.svg"},
+    {"id": "mo-stress-resistance", "category": "microbial_benefit", "name_en": "Increases plant tolerance to drought and other stress factors", "svg": "mo-stress-resistance.svg"},
+    {"id": "mo-soil-microbiome", "category": "microbial_benefit", "name_en": "Supports a balanced, healthy soil microbiome", "svg": "mo-soil-microbiome.svg"},
+    {"id": "mo-root-development", "category": "microbial_benefit", "name_en": "Supports root system development", "svg": "mo-root-development.svg"},
+    {"id": "mo-reduced-mineral-n", "category": "microbial_benefit", "name_en": "Reduces mineral nitrogen rates", "svg": "mo-reduced-mineral-n.svg"},
+    {"id": "mo-green-mass", "category": "microbial_benefit", "name_en": "Increases green mass and leaf surface area", "svg": "mo-green-mass.svg"},
+    {"id": "mo-yield", "category": "microbial_benefit", "name_en": "Increases crop yield", "svg": "mo-yield.svg"},
+    {"id": "mo-residue-mineralisation", "category": "microbial_benefit", "name_en": "Speeds up crop residue mineralisation", "svg": "mo-residue-mineralisation.svg"},
+    {"id": "mo-compatibility", "category": "microbial_benefit", "name_en": "Compatible with most agricultural inputs", "svg": "mo-compatibility.svg"},
+    {"id": "adj-drift-reduction", "category": "adjuvant_benefit", "name_en": "Reduces spray drift", "svg": "adj-drift-reduction.svg"},
+    {"id": "adj-efficacy-boost", "category": "adjuvant_benefit", "name_en": "Increases crop protection product efficacy", "svg": "adj-efficacy-boost.svg"},
+    {"id": "adj-ph-adjustment", "category": "adjuvant_benefit", "name_en": "Optimises spray solution pH", "svg": "adj-ph-adjustment.svg"},
+    {"id": "adj-rainfastness", "category": "adjuvant_benefit", "name_en": "Improves rainfastness", "svg": "adj-rainfastness.svg"},
+    {"id": "adj-water-hardness", "category": "adjuvant_benefit", "name_en": "Counteracts water hardness", "svg": "adj-water-hardness.svg"},
+    {"id": "adj-water-saving", "category": "adjuvant_benefit", "name_en": "Saves water at application (up to 30 %)", "svg": "adj-water-saving.svg"},
+    {"id": "adj-uptake-enhancement", "category": "adjuvant_benefit", "name_en": "Improves active ingredient uptake in the target", "svg": "adj-uptake-enhancement.svg"},
+    {"id": "adj-tank-compatibility", "category": "adjuvant_benefit", "name_en": "Improves tank-mix compatibility and reduces tank residues", "svg": "adj-tank-compatibility.svg"},
+    {"id": "adj-antifoam", "category": "adjuvant_benefit", "name_en": "Prevents foaming in spray solutions", "svg": "adj-antifoam.svg"},
+    {"id": "adj-foam-reduction", "category": "adjuvant_benefit", "name_en": "Foam reduction / sprayer-tank cleaning", "svg": "adj-foam-reduction.svg"}
+  ],
+  "products": [
+    {"name": "Expert", "aliases": ["BioNPK Powder S", "Bio Expert"], "icons": ["mo-nutrient-conversion", "mo-soil-structure", "mo-stress-resistance", "mo-soil-microbiome", "mo-root-development", "mo-yield", "mo-compatibility"]},
+    {"name": "BioTero", "aliases": [], "icons": ["mo-soil-structure", "mo-soil-microbiome", "mo-residue-mineralisation"]},
+    {"name": "Silano", "aliases": [], "icons": ["adj-efficacy-boost", "adj-rainfastness", "adj-uptake-enhancement", "adj-drift-reduction", "adj-water-saving"]},
+    {"name": "OptiOil", "aliases": [], "icons": ["adj-efficacy-boost", "adj-rainfastness", "adj-uptake-enhancement", "adj-water-saving"]},
+    {"name": "Lignum", "aliases": [], "icons": ["adj-efficacy-boost", "adj-uptake-enhancement", "adj-drift-reduction"]},
+    {"name": "Foamex Advance", "aliases": [], "icons": ["adj-antifoam"]},
+    {"name": "pH Smart", "aliases": [], "icons": ["adj-efficacy-boost", "adj-antifoam", "adj-ph-adjustment", "adj-water-hardness", "adj-water-saving"]},
+    {"name": "pH Water Power", "aliases": [], "icons": ["adj-uptake-enhancement", "adj-antifoam", "adj-ph-adjustment", "adj-water-hardness", "adj-tank-compatibility"]},
+    {"name": "Emundo", "aliases": [], "icons": ["adj-foam-reduction"]}
+  ]
+}

@@ -84,7 +84,7 @@ body{background:var(--bg);color:var(--text);font-family:'Roboto',sans-serif;font
 .files-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
 .files-table tr:last-child td{border-bottom:none}.files-table tr:hover td{background:var(--surface2)}
 .path-cell{font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.file-actions{display:flex;gap:6px;opacity:0}tr:hover .file-actions{opacity:1}
+.file-actions{display:flex;gap:6px;opacity:0}tr:hover .file-actions{opacity:1}.file-preview-actions .file-actions{opacity:1}
 .wizard{max-width:680px}.wizard-steps{display:flex;align-items:center;gap:0;margin-bottom:36px}
 .step-circle{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;font-family:'Open Sans',sans-serif;flex-shrink:0;transition:all .2s}
 .step-circle.done{background:var(--accent);color:var(--on-accent)}.step-circle.active{background:var(--surface3);color:var(--text);border:2px solid var(--accent)}.step-circle.future{background:var(--surface2);color:var(--text3);border:2px solid var(--border2)}
@@ -146,13 +146,11 @@ body{background:var(--bg);color:var(--text);font-family:'Roboto',sans-serif;font
 .view-anim{animation:viewIn .18s cubic-bezier(.4,0,.2,1) both}
 /* ── Information section animations ── */
 @keyframes gradientReveal{from{clip-path:inset(0 100% 0 0 round var(--radius-sm))}to{clip-path:inset(0 0 0 0 round var(--radius-sm))}}
-@keyframes shimmerSweep{0%{transform:translateX(-100%) skewX(-12deg)}100%{transform:translateX(350%) skewX(-12deg)}}
 @keyframes swatchIn{from{opacity:0;transform:scaleX(0);transform-origin:left}to{opacity:1;transform:scaleX(1)}}
 @keyframes fadeSlideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 @keyframes zzDraw{to{stroke-dashoffset:0}}
 @keyframes zzJointIn{to{opacity:1;transform:scale(1)}}
 .info-gradient-bar{animation:gradientReveal .55s cubic-bezier(.4,0,.2,1) both}
-.info-bar-shimmer{position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.18) 50%,transparent 65%);animation:shimmerSweep .9s ease .55s 1;pointer-events:none}
 .info-swatch{animation:swatchIn .32s cubic-bezier(.4,0,.2,1) both}
 .info-card{animation:fadeSlideUp .35s cubic-bezier(.4,0,.2,1) both}
 .zz-stick{stroke-dashoffset:1;animation:zzDraw .3s cubic-bezier(.4,0,.2,1) both}
@@ -171,6 +169,7 @@ body{background:var(--bg);color:var(--text);font-family:'Roboto',sans-serif;font
 .stat-card{transition:box-shadow .2s,transform .2s}.stat-card:hover{box-shadow:0 6px 28px var(--shadow-md);transform:translateY(-2px)}
 .input:focus{box-shadow:0 0 0 3px rgba(var(--accent-rgb),.15)}
 .files-table tr{transition:background .12s}.files-table tr:hover td{background:var(--surface2)}.files-table tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
+.files-table tr.row-selected td{background:rgba(var(--accent-rgb),.1)}.files-table tr.row-selected td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
 .filter-chip{transition:all .15s}.filter-chip:hover{transform:translateY(-1px)}.filter-chip:active{transform:translateY(0)}
 .product-card{transition:all .18s}.product-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px var(--shadow-sm)}
 .lang-card{transition:all .15s}.lang-card:hover{transform:translateY(-1px)}

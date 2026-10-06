@@ -32,6 +32,10 @@ const api = {
   checkAssets:        ()    => api.get('/api/assets_check'),
   listTranslations:   ()    => api.get('/api/translations'),
   getSyncStatus:      ()    => api.get('/api/sync_status'),
+  getFileInfo:        (p)   => api.get('/api/file_info?path='+encodeURIComponent(p)),
+  getIcons:            ()    => api.get('/api/icons'),
+  getIconAssignments:  ()    => api.get('/api/icon_assignments'),
+  saveIconAssignments: (a)   => api.post('/api/icon_assignments/save', a),
 };
 
 const scoreLabel = s => s>=75?{label:'Perfect',cls:'score-high'}:s>=50?{label:'Good',cls:'score-med'}:{label:'Fallback',cls:'score-low'};
@@ -964,6 +968,7 @@ function NewLabelWizard({config,map,setMap}){
                   const opRows=[
                     {key:'colors', label:'Color swatches', val:ops.colors},
                     ...(!isBox?[{key:'qr', label:'QR code', val:ops.qr}]:[]),
+                    ...(!isBox?[{key:'icons', label:'Trait icons', val:ops.icons, hint:'Fails if the product has more traits assigned than the template has TRAIT_SLOT frames'}]:[]),
                     {key:'logo',   label:'Logo',           val:ops.logo},
                     ...transOps,
                   ];
@@ -981,11 +986,11 @@ function NewLabelWizard({config,map,setMap}){
                         </div>
                       </div>
                       <div style={{display:'flex',gap:8,flexWrap:'wrap',paddingLeft:30}}>
-                        {opRows.map(({key,label,val})=>{
+                        {opRows.map(({key,label,val,hint})=>{
                           const ok=val===true;
                           const na=val===null||val===undefined;
                           return(
-                            <span key={key} style={{
+                            <span key={key} title={hint} style={{
                               display:'inline-flex',alignItems:'center',gap:4,
                               fontSize:11,fontFamily:"'DM Mono',monospace",
                               padding:'2px 8px',borderRadius:10,
@@ -1025,17 +1030,18 @@ function Information({config,map,setMap}){
   const [selected,setSelected]=useState(null);
   const [search,setSearch]=useState('');
   const [colors,setColors]=useState({});
-  const [transFiles,setTransFiles]=useState([]);
   const [assets,setAssets]=useState({});
   const [fileType,setFileType]=useState('all');
   const [showWip,setShowWip]=useState('all');
   const [catFilter,setCatFilter]=useState('all');
-  const [tab,setTab]=useState('files');
   const [sizeRefOpen,setSizeRefOpen]=useState(false);
+  const [iconLib,setIconLib]=useState(null);
+  const [iconAssign,setIconAssign]=useState({});
   useEffect(()=>{
     api.getColors().then(r=>setColors(r.colors||{}));
-    api.listTranslations().then(r=>{if(r?.files)setTransFiles(r.files);});
     api.checkAssets().then(r=>{if(r&&!r.error)setAssets(r);});
+    api.getIcons().then(r=>setIconLib(r));
+    api.getIconAssignments().then(r=>setIconAssign(r.assignments||{}));
   },[]);
   const enabledProds=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
   const filteredProds=enabledProds
@@ -1052,8 +1058,8 @@ function Information({config,map,setMap}){
     if(fileType==='print')return f.print_file;
     return true;
   }).filter(f=>showWip==='wip'?f.wip:showWip==='done'?!f.wip:true);
-  const prodTrans=transFiles.filter(f=>f.product===selected);
   const prodAssets=selected?(assets[selected]||{}):{};
+  const prodIcons=(selected&&iconLib)?(iconAssign[selected]||[]).map(id=>iconLib.icons.find(ic=>ic.id===id)).filter(Boolean):[];
   const dimRows=[['PAM_normal','PAM Normal','var(--pam)'],['PAM_acidic','PAM Acidic','var(--warning)'],['MO','MO','var(--mo)'],['MO_liquid','MO Liquid','var(--mo)'],['CE','CE','var(--ce)'],['CE_solid','CE Solid','var(--ce)']];
   const catColor=c=>c==='PAM'?'var(--pam)':c==='CE'?'var(--ce)':'var(--mo)';
   const catBg=c=>c==='PAM'?'rgba(var(--pam-rgb),.15)':c==='CE'?'rgba(var(--accent-rgb),.15)':'rgba(var(--mo-rgb),.15)';
@@ -1108,7 +1114,7 @@ function Information({config,map,setMap}){
         </div>
         <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:2,paddingRight:2}}>
           {filteredProds.map(p=>(
-            <button key={p.name} onClick={()=>{setSelected(selected===p.name?null:p.name);setTab('files');setSizeRefOpen(false);}}
+            <button key={p.name} onClick={()=>{setSelected(selected===p.name?null:p.name);setSizeRefOpen(false);}}
               style={{display:'flex',alignItems:'center',gap:6,padding:'6px 9px',borderRadius:'var(--radius-sm)',border:'1px solid '+(selected===p.name?'var(--accent)':'var(--border2)'),background:selected===p.name?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',textAlign:'left',transition:'all .15s',flexShrink:0}}>
               <span style={{flex:1,fontSize:12,fontWeight:selected===p.name?500:400,color:selected===p.name?'var(--accent)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
               <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 4px',borderRadius:2,background:catBg(p.category),color:catColor(p.category),flexShrink:0}}>{p.category}</span>
@@ -1143,7 +1149,6 @@ function Information({config,map,setMap}){
             </div>
             {/* Gradient header */}
             <div className="info-gradient-bar" style={{height:50,borderRadius:'var(--radius-sm)',marginBottom:8,background:`linear-gradient(135deg, ${swatches.map(c=>c||'#808080').join(', ')})`,border:'1px solid var(--border2)',boxShadow:'0 4px 20px rgba(0,0,0,.4)',display:'flex',alignItems:'center',paddingLeft:10,gap:10,position:'relative',overflow:'hidden',flexShrink:0}}>
-              <div className="info-bar-shimmer"/>
               <div title={prodAssets.logo?'Logo on file':'No logo found'} style={{height:32,minWidth:32,maxWidth:120,padding:'4px 8px',borderRadius:8,background:'rgba(255,255,255,.94)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,.35)'}}>
                 {prodAssets.logo?(
                   <img src={`/api/logo_thumb?product=${encodeURIComponent(selected)}`} alt="" style={{maxWidth:'100%',maxHeight:'100%',objectFit:'contain'}}/>
@@ -1190,77 +1195,54 @@ function Information({config,map,setMap}){
                 <SizeTable showAll={true}/>
               </div>
             )}
-            {/* Tab strip */}
-            <div style={{display:'flex',gap:2,marginBottom:10,background:'var(--surface2)',borderRadius:'var(--radius-sm)',padding:3,border:'1px solid var(--border)',flexShrink:0}}>
-              {[
-                ['files',`Files${prodFiles.length?' ('+prodFiles.length+')':''}`],
-                ['translations',`Translations${prodTrans.length?' ('+prodTrans.length+')':''}`],
-              ].map(([key,label])=>(
-                <button key={key} onClick={()=>setTab(key)}
-                  style={{flex:1,padding:'5px 0',borderRadius:5,cursor:'pointer',fontSize:11,fontWeight:500,border:'none',background:tab===key?'var(--surface3)':'transparent',color:tab===key?'var(--text)':'var(--text2)',transition:'all .15s'}}>
-                  {label}
-                </button>
+            {/* Traits — always visible, not tucked behind a tab */}
+            <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:10,flexShrink:0}}>
+              {prodIcons.length===0?(
+                <span style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>No traits assigned to {selected}. Assign some in Resources &rarr; Icons.</span>
+              ):prodIcons.map(ic=>(
+                <div key={ic.id} title={ic.name_en} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 14px 5px 5px',borderRadius:24,background:'var(--surface2)',border:'1px solid var(--border2)'}}>
+                  <img src={`/icons/${ic.svg}`} alt="" style={{width:38,height:38,flexShrink:0}}/>
+                  <span style={{fontSize:12,lineHeight:1.25,color:'var(--text2)',maxWidth:170}}>{ic.name_en}</span>
+                </div>
               ))}
             </div>
-            {/* Tab content */}
-            <div className="view-anim" key={tab} style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
-              {tab==='files'&&(
-                <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
-                  <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8,flexShrink:0}}>
-                    {[['all','All'],['indd','INDD'],['idml','IDML'],['print','Print']].map(([v,l])=>(
-                      <button key={v} className={'filter-chip '+(fileType===v?'active':'')} onClick={()=>setFileType(v)}>{l}</button>
-                    ))}
-                    <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-                    <button className={'filter-chip '+(showWip==='wip'?'active-wip':'')} onClick={()=>setShowWip(showWip==='wip'?'all':'wip')}>WIP</button>
-                    <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)',alignSelf:'center'}}>{filteredFiles.length}/{prodFiles.length}</span>
+            {/* Files */}
+            <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8,flexShrink:0}}>
+                {[['all','All'],['indd','INDD'],['idml','IDML'],['print','Print']].map(([v,l])=>(
+                  <button key={v} className={'filter-chip '+(fileType===v?'active':'')} onClick={()=>setFileType(v)}>{l}</button>
+                ))}
+                <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
+                <button className={'filter-chip '+(showWip==='wip'?'active-wip':'')} onClick={()=>setShowWip(showWip==='wip'?'all':'wip')}>WIP</button>
+                <span style={{marginLeft:'auto',fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)',alignSelf:'center'}}>{filteredFiles.length}/{prodFiles.length}</span>
+              </div>
+              {filteredFiles.length===0?(
+                <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'12px 0'}}>No files match.</div>
+              ):(
+                <div style={{flex:1,overflowY:'auto'}}>
+                  <div className="card" style={{padding:0,overflow:'hidden'}}>
+                    <table className="files-table">
+                      <thead><tr><th>Filename</th><th>Langs</th><th>Size</th><th>Date</th><th>Type</th><th></th></tr></thead>
+                      <tbody>
+                        {filteredFiles.map(f=>(
+                          <tr key={f.filename+f.path}>
+                            <td className="path-cell" title={f.path}>{f.filename}</td>
+                            <td style={{fontFamily:"'DM Mono',monospace",fontSize:11}}>{f.languages?.join('·')??'--'}</td>
+                            <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
+                            <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
+                            <td><div style={{display:'flex',gap:4,alignItems:'center'}}>
+                              {f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
+                              {f.print_file?<span className="topbar-badge" style={{background:'var(--surface3)',color:'var(--text)'}}>Print</span>
+                                :f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(var(--idml-rgb),.15)',color:'var(--idml)'}}>IDML</span>
+                                :<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>INDD</span>}
+                              {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
+                            </div></td>
+                            <td><FileActions path={f.path} onDeleted={removeFile} sharepointBase={config?.sharepointBaseUrl}/></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  {filteredFiles.length===0?(
-                    <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'12px 0'}}>No files match.</div>
-                  ):(
-                    <div style={{flex:1,overflowY:'auto'}}>
-                      <div className="card" style={{padding:0,overflow:'hidden'}}>
-                        <table className="files-table">
-                          <thead><tr><th>Filename</th><th>Langs</th><th>Size</th><th>Date</th><th>Type</th><th></th></tr></thead>
-                          <tbody>
-                            {filteredFiles.map(f=>(
-                              <tr key={f.filename+f.path}>
-                                <td className="path-cell" title={f.path}>{f.filename}</td>
-                                <td style={{fontFamily:"'DM Mono',monospace",fontSize:11}}>{f.languages?.join('·')??'--'}</td>
-                                <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
-                                <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
-                                <td><div style={{display:'flex',gap:4,alignItems:'center'}}>
-                                  {f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
-                                  {f.print_file?<span className="topbar-badge" style={{background:'var(--surface3)',color:'var(--text)'}}>Print</span>
-                                    :f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(var(--idml-rgb),.15)',color:'var(--idml)'}}>IDML</span>
-                                    :<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>INDD</span>}
-                                  {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
-                                </div></td>
-                                <td><FileActions path={f.path} onDeleted={removeFile} sharepointBase={config?.sharepointBaseUrl}/></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              {tab==='translations'&&(
-                <div style={{overflowY:'auto',flex:1}}>
-                  {prodTrans.length===0?(
-                    <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'12px 0'}}>No translation files found for {selected}.</div>
-                  ):(
-                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                      {prodTrans.map(f=>(
-                        <div key={f.path} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:'var(--radius-sm)',background:'var(--surface2)',border:'1px solid var(--border2)'}}>
-                          <span style={{fontSize:18,lineHeight:1}}>{f.flag}</span>
-                          <span style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:'var(--accent)',width:28,flexShrink:0}}>{f.code}</span>
-                          <span style={{fontSize:12,color:'var(--text2)',flex:1}}>{f.name}</span>
-                          <span style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:160}} title={f.path}>{f.filename}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -1271,7 +1253,10 @@ function Information({config,map,setMap}){
   );
 }
 function LabelsBrowser({map,setMap,config}){
-  const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
+  const removeFile=p=>{
+    setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
+    setSelected(s=>s?.path===p?null:s);
+  };
   const [search,setSearch]=useState('');
   const [filterCat,setFilterCat]=useState('all');
   const [filterLabelType,setFilterLabelType]=useState('all');
@@ -1292,6 +1277,7 @@ function LabelsBrowser({map,setMap,config}){
     document.addEventListener('mousedown',h);
     return()=>document.removeEventListener('mousedown',h);
   },[langOpen]);
+  const [selected,setSelected]=useState(null);
   const files=map?.files??[];
   const getCategory=product=>(config?.products??[]).find(p=>p.name===product)?.category??'?';
   const sizeMatch=f=>{
@@ -1375,36 +1361,128 @@ function LabelsBrowser({map,setMap,config}){
           </div>
         )}
       </div>
-      {filtered.length===0?(
-        <div className="empty-state"><div className="icon">&#128269;</div><p>No files match</p></div>
-      ):(
-        <div className="card" style={{padding:0,overflow:'hidden'}}>
-          <table className="files-table">
-            <thead><tr><th>Filename</th><th>Product</th><th>Cat</th><th>Languages</th><th>Size</th><th>Date</th><th>Type</th><th></th></tr></thead>
-            <tbody>
-              {sorted.map(f=>{
-                const cat=getCategory(f.product);
-                return(
-                  <tr key={f.filename+f.path}>
-                    <td className="path-cell" title={f.path}>{f.filename}</td>
-                    <td style={{fontSize:13}}>{f.product??<span style={{color:'var(--text3)'}}>--</span>}</td>
-                    <td>{cat!=='?'&&<span className="topbar-badge" style={{background:cat==='PAM'?'rgba(var(--pam-rgb),.15)':cat==='CE'?'rgba(var(--accent-rgb),.15)':'rgba(var(--mo-rgb),.15)',color:cat==='PAM'?'var(--pam)':cat==='CE'?'var(--ce)':'var(--mo)'}}>{cat}</span>}</td>
-                    <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.languages?.join(' . ')??'--'}</td>
-                    <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
-                    <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
-                    <td><div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
-                      {f.print_file?<span className="topbar-badge" style={{background:'var(--surface3)',color:'var(--text)'}}>Print</span>:f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
-                      {!f.print_file&&(f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(var(--idml-rgb),.15)',color:'var(--idml)'}}>IDML</span>:<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>InDesign</span>)}
-                      {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
-                    </div></td>
-                    <td><FileActions path={f.path} onDeleted={removeFile} sharepointBase={config?.sharepointBaseUrl}/></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+        <div style={{flex:1,minWidth:0}}>
+          {filtered.length===0?(
+            <div className="empty-state"><div className="icon">&#128269;</div><p>No files match</p></div>
+          ):(
+            <div className="card" style={{padding:0,overflow:'hidden'}}>
+              <table className="files-table">
+                <thead><tr><th>Filename</th><th>Product</th><th>Cat</th><th>Languages</th><th>Size</th><th>Date</th><th>Type</th><th></th></tr></thead>
+                <tbody>
+                  {sorted.map(f=>{
+                    const cat=getCategory(f.product);
+                    return(
+                      <tr key={f.filename+f.path} className={selected?.path===f.path?'row-selected':''} onClick={()=>setSelected(f)} style={{cursor:'pointer'}}>
+                        <td className="path-cell" title={f.path}>{f.filename}</td>
+                        <td style={{fontSize:13}}>{f.product??<span style={{color:'var(--text3)'}}>--</span>}</td>
+                        <td>{cat!=='?'&&<span className="topbar-badge" style={{background:cat==='PAM'?'rgba(var(--pam-rgb),.15)':cat==='CE'?'rgba(var(--accent-rgb),.15)':'rgba(var(--mo-rgb),.15)',color:cat==='PAM'?'var(--pam)':cat==='CE'?'var(--ce)':'var(--mo)'}}>{cat}</span>}</td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.languages?.join(' . ')??'--'}</td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
+                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
+                        <td><div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
+                          {f.print_file?<span className="topbar-badge" style={{background:'var(--surface3)',color:'var(--text)'}}>Print</span>:f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
+                          {!f.print_file&&(f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(var(--idml-rgb),.15)',color:'var(--idml)'}}>IDML</span>:<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>InDesign</span>)}
+                          {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
+                        </div></td>
+                        <td onClick={e=>e.stopPropagation()}><FileActions path={f.path} onDeleted={removeFile} sharepointBase={config?.sharepointBaseUrl}/></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      )}
+        <FilePreviewPanel file={selected} sharepointBase={config?.sharepointBaseUrl} onDeleted={removeFile}/>
+      </div>
+    </div>
+  );
+}
+function FilePreviewPanel({file,sharepointBase,onDeleted}){
+  const [infoRaw,setInfo]=useState(null);
+  const panelRef=useRef(null);
+  const [maxH,setMaxH]=useState(null);
+  // info is only valid for the file it was fetched for; without this check the
+  // first render after switching files pairs the new file with the old file's info.
+  const info=infoRaw&&infoRaw._for===file?.path?infoRaw:null;
+  useEffect(()=>{
+    setInfo(null);
+    if(!file)return;
+    let cancelled=false;
+    api.getFileInfo(file.path)
+      .then(r=>{if(!cancelled)setInfo({...r,_for:file.path});})
+      .catch(()=>{if(!cancelled)setInfo({page_count:0,_for:file.path});});
+    return()=>{cancelled=true;};
+  },[file?.path]);
+  // Cap the panel at the space actually left below its current top edge, so
+  // its bottom never runs off the window (it's sticky, so its top moves).
+  useEffect(()=>{
+    const update=()=>{
+      const el=panelRef.current;
+      if(el)setMaxH(Math.max(240,window.innerHeight-el.getBoundingClientRect().top-16));
+    };
+    update();
+    window.addEventListener('resize',update);
+    window.addEventListener('scroll',update,true);
+    return()=>{window.removeEventListener('resize',update);window.removeEventListener('scroll',update,true);};
+  },[file?.path]);
+  const panelStyle={width:360,flexShrink:0,position:'sticky',top:16,padding:16,display:'flex',flexDirection:'column',gap:12,maxHeight:maxH??'calc(100vh - 140px)'};
+  if(!file){
+    return(
+      <div className="card" style={{...panelStyle,alignItems:'center',justifyContent:'center',minHeight:200,color:'var(--text3)',fontSize:13}}>
+        Select a file to preview
+      </div>
+    );
+  }
+  const isPdf=file.extension==='.pdf';
+  const pageCount=info?.page_count??0;
+  const sizeKb=info?.size_bytes!=null?Math.round(info.size_bytes/1024):null;
+  const sizeMm=info?.size_mm;
+  const col=info?.color;
+  // one labelled row per profile, like the other fields
+  const colorRows=!col?[]:col.profiles
+    ?[...col.profiles.map(p=>[`${p.space} profile`,p.name||'embedded profile']),...(col.output_intent?[['Output intent',col.output_intent]]:[])]
+    :[col.cmyk&&['CMYK profile',col.cmyk],col.rgb&&['RGB profile',col.rgb]].filter(Boolean);
+  return(
+    <div className="card" ref={panelRef} style={panelStyle}>
+      <div style={{fontSize:13,fontWeight:600,wordBreak:'break-word',lineHeight:1.3}}>{file.filename}</div>
+      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+        {file.print_file?<span className="topbar-badge" style={{background:'var(--surface3)',color:'var(--text)'}}>Print</span>:file.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
+        {!file.print_file&&(file.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(var(--idml-rgb),.15)',color:'var(--idml)'}}>IDML</span>:<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>InDesign</span>)}
+        {file.wip&&<span className="topbar-badge badge-wip">WIP</span>}
+      </div>
+      <div style={{fontSize:12,color:'var(--text2)',display:'flex',flexDirection:'column',gap:3}}>
+        {file.product&&<div><b>Product:</b> {file.product}</div>}
+        {file.packaging&&<div><b>Pack size:</b> {file.packaging}</div>}
+        {file.languages?.length>0&&<div><b>Languages:</b> {file.languages.join(', ')}</div>}
+        {file.date&&<div><b>Date:</b> {file.date}</div>}
+        {sizeKb!=null&&<div><b>File size:</b> {sizeKb} KB</div>}
+        {isPdf&&<div><b>Pages:</b> {pageCount||'...'}</div>}
+        {sizeMm&&<div><b>Dimensions:</b> {+sizeMm[0].toFixed(1)} × {+sizeMm[1].toFixed(1)} mm</div>}
+        {colorRows.map(([k,v],i)=><div key={i}><b>{k}:</b> {v}</div>)}
+        {info&&col?.profiles&&colorRows.length===0&&<div><b>Color:</b> <span style={{color:'var(--text3)'}}>no ICC profile embedded</span></div>}
+      </div>
+      <div className="file-preview-actions"><FileActions path={file.path} onDeleted={onDeleted} sharepointBase={sharepointBase}/></div>
+      <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,borderTop:'1px solid var(--border)',paddingTop:10,minHeight:0}}>
+        {info===null?(
+          <div style={{display:'flex',justifyContent:'center',padding:20}}><div className="spinner" style={{width:18,height:18}}/></div>
+        ):pageCount===0?(
+          <div style={{fontSize:12,color:'var(--text3)',textAlign:'center',padding:'24px 8px'}}>
+            {isPdf?'Could not read any pages from this PDF':'No embedded InDesign preview found in this file'}
+          </div>
+        ):(
+          <>
+            {!isPdf&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.4}}>InDesign preview, from the file's last InDesign save.</div>}
+            {Array.from({length:pageCount},(_,i)=>(
+              <div key={i} style={{flexShrink:0,border:'1px solid var(--border2)',borderRadius:'var(--radius-sm)',overflow:'hidden',background:'var(--surface2)'}}>
+                <img src={`/api/file_thumb?path=${encodeURIComponent(file.path)}&page=${i}&v=${info.rev||0}`} alt={`Page ${i+1}`} style={{display:'block',width:'100%',height:'auto'}}/>
+                {pageCount>1&&<div style={{fontSize:10,color:'var(--text3)',textAlign:'center',padding:'4px 0'}}>Page {i+1} / {pageCount}</div>}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1507,7 +1585,18 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
 
         {tab==='paths'&&(
           <div style={{display:'flex',flexDirection:'column',gap:8,overflowY:'auto'}}>
-            <p style={{fontSize:12,color:'var(--text3)',marginBottom:4}}>These are the directories the app reads from and writes to. Click a path to open it in Explorer.</p>
+            <SettingCard title="Translations folder" desc="Where language/translation JSON files are read from. Leave blank to use the app's own bundled 'translations' folder. (In the future this could point at a synced OneDrive folder, the same way the labels output folder does.)">
+              <div className="flex gap-2 items-center">
+                <input className="input" placeholder={resDirs?.translations||''} value={cfg.translationsDir||''} onChange={e=>setCfg({...cfg,translationsDir:e.target.value})} style={{flex:1,fontFamily:"'DM Mono',monospace",fontSize:12}}/>
+                <button className="btn btn-folder btn-sm" title="Browse for folder" onClick={async()=>{const pick=await api.pickDir();if(pick.ok&&pick.path)setCfg(c=>({...c,translationsDir:pick.path}));}}><Icon.Folder/></button>
+                {cfg.translationsDir&&<button className="btn btn-ghost btn-sm" title="Reset to default" onClick={()=>setCfg(c=>({...c,translationsDir:''}))}>&#8634;</button>}
+              </div>
+              <div className="flex gap-2 items-center" style={{marginTop:10}}>
+                <button className="btn btn-primary" onClick={save}>Save</button>
+                {saved&&<span style={{fontSize:12,color:'var(--success)'}}>✓ Saved</span>}
+              </div>
+            </SettingCard>
+            <p style={{fontSize:12,color:'var(--text3)',marginBottom:4,marginTop:4}}>These are the other directories the app reads from and writes to. Click a path to open it in Explorer.</p>
             {[
               ['labels','Labels output','Where generated label files are saved'],
               ['templates','Templates','IDML template files used when creating labels'],
@@ -1551,11 +1640,26 @@ function Resources({config,saveConfig}){
   },[swatchEdit]);
   const [resDirs,setResDirs]=useState(null);
   const [assets,setAssets]=useState({});
+  const [iconLib,setIconLib]=useState(null);
+  const [iconAssign,setIconAssign]=useState(null);
+  const [iconAssignSaved,setIconAssignSaved]=useState(false);
+  const [iconEditProd,setIconEditProd]=useState(null);
+  const iconSaveTimerRef=useRef(null);
   useEffect(()=>{
     api.getColors().then(r=>setColors(r.colors||{}));
     api.getResourceDirs().then(r=>setResDirs(r));
     api.checkAssets().then(r=>{if(r&&!r.error)setAssets(r);});
+    api.getIcons().then(r=>setIconLib(r));
+    api.getIconAssignments().then(r=>setIconAssign(r.assignments||{}));
   },[]);
+  const toggleIcon=(prod,iconId)=>{
+    const curr=(iconAssign?.[prod]||[]);
+    const next=curr.includes(iconId)?curr.filter(x=>x!==iconId):[...curr,iconId];
+    const newAssign={...iconAssign,[prod]:next};
+    setIconAssign(newAssign);
+    clearTimeout(iconSaveTimerRef.current);
+    iconSaveTimerRef.current=setTimeout(()=>{api.saveIconAssignments(newAssign);setIconAssignSaved(true);setTimeout(()=>setIconAssignSaved(false),2000);},600);
+  };
   const save=async()=>{await saveConfig(cfg);setSaved(true);setTimeout(()=>setSaved(false),2000);};
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState('');
@@ -1587,7 +1691,7 @@ function Resources({config,saveConfig}){
     <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
       <div style={{flexShrink:0}}>
         <div className="settings-tabs" style={{marginBottom:0}}>
-          {['products','colors'].map(t=>(
+          {['products','colors','icons'].map(t=>(
             <button key={t} className={`settings-tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>
               {t.charAt(0).toUpperCase()+t.slice(1)}
             </button>
@@ -1705,6 +1809,64 @@ function Resources({config,saveConfig}){
               {colorsSaved&&<span style={{fontSize:12,color:'var(--success)',flexShrink:0,paddingTop:8}}>Colors saved</span>}
             </>
           )}
+        </div>
+      )}
+      {tab==='icons'&&(
+        <div className="view-anim" style={{display:'flex',gap:16,flex:1,minHeight:0}}>
+          <div style={{width:210,flexShrink:0,display:'flex',flexDirection:'column',overflowY:'auto',paddingRight:4}}>
+            <p className="section-title" style={{flexShrink:0}}>Products</p>
+            {[['MO',moProds],['PAM',pamProds],['CE',ceProds]].map(([cat,prods])=>prods.length===0?null:(
+              <div key={cat} style={{marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:500,color:cat==='PAM'?'var(--pam)':cat==='CE'?'var(--ce)':'var(--mo)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
+                {prods.map(p=>{
+                  const n=(iconAssign?.[p.name]||[]).length;
+                  return(
+                    <button key={p.name} onClick={()=>setIconEditProd(p.name)}
+                      style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'6px 9px',marginBottom:2,borderRadius:'var(--radius-sm)',border:'1px solid '+(iconEditProd===p.name?'var(--accent)':'var(--border2)'),background:iconEditProd===p.name?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',textAlign:'left',transition:'all .15s'}}>
+                      <span style={{flex:1,fontSize:12,fontWeight:iconEditProd===p.name?500:400,color:iconEditProd===p.name?'var(--accent)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+                      <span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:'var(--text3)',flexShrink:0}}>{n||''}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div style={{flex:1,overflowY:'auto',minHeight:0,paddingRight:4}}>
+            {!iconEditProd?(
+              <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'4px 0'}}>Select a product to edit its assigned traits.</div>
+            ):!iconLib?(
+              <div className="spinner" style={{width:20,height:20}}/>
+            ):(
+              <>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+                  <p className="section-title" style={{margin:0}}>{iconEditProd} — traits</p>
+                  {iconAssignSaved&&<span style={{fontSize:12,color:'var(--success)'}}>Saved</span>}
+                </div>
+                {[['microbial_benefit','Microbial benefit'],['adjuvant_benefit','Adjuvant benefit']].map(([cat,catLabel])=>{
+                  const icons=iconLib.icons.filter(ic=>ic.category===cat);
+                  if(!icons.length)return null;
+                  return(
+                    <div key={cat} style={{marginBottom:18}}>
+                      <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8,fontFamily:"'DM Mono',monospace"}}>{catLabel}</div>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
+                        {icons.map(ic=>{
+                          const checked=(iconAssign?.[iconEditProd]||[]).includes(ic.id);
+                          return(
+                            <label key={ic.id} title={ic.name_en}
+                              style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:'var(--radius-sm)',border:'1px solid '+(checked?'var(--accent)':'var(--border2)'),background:checked?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',transition:'all .15s'}}>
+                              <input type="checkbox" checked={checked} onChange={()=>toggleIcon(iconEditProd,ic.id)} style={{accentColor:'var(--accent)',flexShrink:0}}/>
+                              <img src={`/icons/${ic.svg}`} alt="" style={{width:22,height:22,flexShrink:0,opacity:checked?1:.5}}/>
+                              <span style={{fontSize:11,lineHeight:1.25,color:checked?'var(--text)':'var(--text3)'}}>{ic.name_en}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
