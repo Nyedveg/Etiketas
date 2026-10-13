@@ -63,6 +63,25 @@ This exact command works unmodified on every machine, because
 > it. Delete the empty auto-created folder first (check it's actually
 > empty!), then run the command above.
 
+## Updating and uninstalling
+
+Run `install.bat` again whenever you want the latest version. If Etiketas is already
+installed it asks "Update it?" and then does a clean reinstall from GitHub: the new
+version is downloaded and checked first (a failed download changes nothing), the running
+app is stopped, and the old folder is replaced completely. Your labels and settings live
+in the shared folder, not in the app folder, so they aren't affected. Anything you put in
+the app's `translations` folder is carried over.
+
+To remove Etiketas, run `uninstall.bat` (or `install.bat uninstall`). It deletes the app
+folder and the Desktop shortcut after asking you to confirm. It does **not** touch:
+
+- your labels or the shared OneDrive folder, and the `Documents\Etiketas` link to it
+  (the junction is left in place -- deleting a junction in File Explorer is safe too, it
+  only removes the link, never the folder it points to);
+- the Python packages (Pillow, PyMuPDF) -- other tools may use them.
+
+Add `-Yes` to either command to skip the confirmation questions.
+
 ## Reading the status indicator
 
 Once linked, the topbar of the app shows a small dot + label reflecting

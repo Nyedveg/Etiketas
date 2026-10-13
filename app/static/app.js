@@ -1,12 +1,11 @@
 // Etiketas - Label Manager
-// React components (JSX transpiled by Babel standalone)
-const {useState, useEffect, useCallback, useRef, Fragment} = React;
-const PORT = 7842;
-const API  = `http://localhost:${PORT}`;
+// React components (JSX transpiled in the browser by the vendored Babel standalone)
+const {useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, useDeferredValue, memo, Fragment} = React;
 
+// Same-origin requests: the server only accepts calls made from its own page.
 const api = {
-  get:  (p)    => fetch(API+p).then(r=>r.json()),
-  post: (p, b) => fetch(API+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
+  get:  (p)    => fetch(p).then(r=>r.json()),
+  post: (p, b) => fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
   loadConfig:   ()    => api.get('/api/config'),
   saveConfig:   (cfg) => api.post('/api/config/save', cfg),
   loadMap:      ()    => api.get('/api/map'),
@@ -19,11 +18,8 @@ const api = {
   getLabelsDir:    ()    => api.get('/api/labels_dir').then(r=>r.path),
   resetConfig:     ()    => api.post('/api/config/reset', {}),
   syncProducts:    ()    => api.post('/api/config/sync_products', {}),
-  getDefaultConfig:()    => api.get('/api/config/default'),
   pickDir:         ()    => api.get('/api/pick_dir'),
   ingest:          (p)   => api.post('/api/ingest', {path:p}),
-  listQrCodes:     ()    => api.get('/api/qrcodes'),
-  applyQr:         (indd_path, qr_path) => api.post('/api/apply_qr', {indd_path, qr_path}),
   getTemplates:    ()    => api.get('/api/templates'),
   getHistory:      ()    => api.get('/api/history'),
   getColors:       ()    => api.get('/api/colors'),
@@ -51,6 +47,52 @@ const matchesSearch = (text, query) => {
   return tokens.every(tok => hay.includes(tok));
 };
 
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+const removeFromMap=(setMap,path)=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==path)}));
+const categoryMap=config=>Object.fromEntries((config?.products??[]).map(p=>[p.name,p.category]));
+// YYYY-MM-DD in local time. The server stamps creation history with naive local time, so it
+// has to be matched against local dates: toISOString() is UTC, and in a UTC+ zone local
+// midnight is still the previous UTC day, which shifted every chart bar by one day.
+const localDateKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+// Category colours: PAM brown, CE green, anything else (MO) navy.
+const CAT_STYLE={
+  PAM:{color:'var(--pam)',bg:'rgba(var(--pam-rgb),.15)'},
+  CE: {color:'var(--ce)', bg:'rgba(var(--accent-rgb),.15)'},
+  MO: {color:'var(--mo)', bg:'rgba(var(--mo-rgb),.15)'},
+};
+const catStyle=c=>CAT_STYLE[c]||CAT_STYLE.MO;
+
+// Which table of config.dimensions / config.packagingSizes a product is sized from
+// (mirrors dim_key_for in etiketas.py).
+const dimKeyFor=p=>{
+  if(!p)return null;
+  const {category,acidic,unit}=p, u=unit||(category==='PAM'?'L':'kg');
+  if(category==='PAM')return acidic?'PAM_acidic':'PAM_normal';
+  if(category==='CE')return u==='kg'?'CE_solid':'CE';
+  return u==='L'?'MO_liquid':'MO';
+};
+
+// File tag colours: one table for the badges in every file list and for the Browse
+// toolbar's filter options and pills, so a filter always looks like the thing it filters.
+const TONE={
+  label:  {bg:'rgba(var(--accent-rgb),.15)', color:'var(--success)'},
+  box:    {bg:'rgba(var(--pam-rgb),.15)',    color:'var(--pam)'},
+  indd:   {bg:'rgba(var(--indd-rgb),.15)',   color:'var(--indd)'},
+  idml:   {bg:'rgba(var(--idml-rgb),.15)',   color:'var(--idml)'},
+  print:  {bg:'var(--surface3)',             color:'var(--text)'},
+  wip:    {bg:'rgba(var(--warning-rgb),.15)',color:'var(--warning)'},
+  neutral:{bg:'var(--surface3)',             color:'var(--text2)'},
+};
+const Tag=({tone,children})=><span className="topbar-badge" style={{background:TONE[tone].bg,color:TONE[tone].color}}>{children}</span>;
+const BadgeKind=({f})=><Tag tone={f.deze?'box':'label'}>{f.deze?'Box':'Label'}</Tag>;
+const BadgePrint=()=><Tag tone="print">Print</Tag>;
+const BadgeFormat=({f,indd='InDesign'})=>f.extension==='.idml'?<Tag tone="idml">IDML</Tag>:<Tag tone="indd">{indd}</Tag>;
+const BadgeWip=()=><Tag tone="wip">WIP</Tag>;
+
+// Outline icons for the Browse toolbar (16px grid, stroke drawn to sit beside the sidebar icons).
+const stroke=(paths,size=14)=><svg viewBox="0 0 16 16" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths}</svg>;
+
 
 const Icon = {
   Dashboard:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>,
@@ -65,6 +107,16 @@ const Icon = {
   Info:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zM7.25 6.5h1.5v1h-1.5v-1zm0 2h1.5v3.5h-1.5V8.5z"/></svg>,
   Trash:()=><svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M6 2a1 1 0 00-1 1H3.5a.5.5 0 000 1H4v8a1 1 0 001 1h6a1 1 0 001-1V4h.5a.5.5 0 000-1H11a1 1 0 00-1-1H6zm0 1h4v1H6V3zM5 5h6v7H5V5zm1.5 1a.5.5 0 00-.5.5v4a.5.5 0 001 0v-4a.5.5 0 00-.5-.5zm3 0a.5.5 0 00-.5.5v4a.5.5 0 001 0v-4a.5.5 0 00-.5-.5z"/></svg>,
   External:()=><svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M9 2a1 1 0 000 2h2.586L7.293 8.293a1 1 0 101.414 1.414L13 5.414V8a1 1 0 002 0V3a1 1 0 00-1-1H9zM4 4a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-3a1 1 0 10-2 0v3H4V6h3a1 1 0 100-2H4z"/></svg>,
+  Search:({size})=>stroke(<><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></>,size),
+  Close:({size})=>stroke(<path d="M4 4l8 8M12 4l-8 8"/>,size),
+  Chevron:({size})=>stroke(<path d="M4 6.5l4 4 4-4"/>,size),
+  SortUp:()=>stroke(<path d="M4 10l4-4 4 4"/>,12),
+  SortDown:()=>stroke(<path d="M4 6l4 4 4-4"/>,12),
+  Tag:()=>stroke(<><path d="M2 2h5.6l6.4 6.4-5.6 5.6L2 7.6z"/><circle cx="5.2" cy="5.2" r=".9" fill="currentColor"/></>),
+  File:()=>stroke(<><path d="M4 1.8h5l3.2 3.2v8.7a.5.5 0 01-.5.5H4a.5.5 0 01-.5-.5V2.3a.5.5 0 01.5-.5z"/><path d="M9 1.8V5h3.2"/></>),
+  Ruler:()=>stroke(<><rect x="1.5" y="5" width="13" height="6" rx="1"/><path d="M4.5 5v2.5M7.2 5v1.6M9.9 5v2.5M12.5 5v1.6"/></>),
+  Globe:()=>stroke(<><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.2 2 2.2 10 0 12M8 2c-2.2 2-2.2 10 0 12"/></>),
+  Flag:()=>stroke(<path d="M3.5 14V2.5M3.5 3h8l-1.6 3 1.6 3h-8"/>),
 };
 
 // Builds an "open the containing folder in SharePoint" link from a file's
@@ -107,7 +159,7 @@ function App(){
   const refreshMap=useCallback(async()=>{const m=await api.scanLabels();setMap(m);},[]);
   if(loading)return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:20}}>
-      <img src="/Nando-white.png" alt="Etiketas" style={{height:52,opacity:.7}}/>
+      <img src="/static/img/Nando-white.png" alt="Etiketas" style={{height:52,opacity:.7}}/>
       <div className="spinner" style={{width:28,height:28,marginTop:4}}/>
       <span style={{color:'var(--text2)',fontSize:13,fontFamily:"'DM Mono',monospace"}}>Loading Etiketas...</span>
     </div>
@@ -119,7 +171,7 @@ function App(){
         <Topbar view={view} map={map}/>
         <div className={`content${['resources','settings','information','dashboard'].includes(view)?' no-scroll':''}`}>
           <div key={view} className="view-anim" style={{height:'100%'}}>
-            {view==='dashboard'&&<Dashboard map={map} setMap={setMap} config={config} setView={setView} refreshMap={refreshMap}/>}
+            {view==='dashboard'&&<Dashboard map={map} config={config} refreshMap={refreshMap}/>}
             {view==='new'&&<NewLabelWizard config={config} map={map} setMap={setMap}/>}
             {view==='browse'&&<LabelsBrowser map={map} setMap={setMap} config={config}/>}
             {view==='settings'&&<Settings config={config} saveConfig={saveConfig} setConfig={setConfig} refreshMap={refreshMap}/>}
@@ -137,7 +189,7 @@ function Sidebar({view,setView,map,refreshMap}){
   return(
     <div className="sidebar">
       <div className="sidebar-logo">
-        <img src="/Nando-white.png" alt="Nando" className="sidebar-logo-img"/>
+        <img src="/static/img/Nando-white.png" alt="Nando" className="sidebar-logo-img"/>
         <div>
           <div className="sidebar-logo-text">Etiketas</div>
           <div className="sidebar-logo-sub">Nando Bio</div>
@@ -266,14 +318,13 @@ function LineChart30d({history}){
   const today=new Date(); today.setHours(0,0,0,0);
   const days=[];
   for(let i=29;i>=0;i--){const d=new Date(today); d.setDate(d.getDate()-i); days.push(d);}
-  const keyOf=d=>d.toISOString().slice(0,10);
   const counts={};
   for(const h of history){
     if(!h.timestamp)continue;
     const k=h.timestamp.slice(0,10);
     counts[k]=(counts[k]||0)+1;
   }
-  const data=days.map(d=>({date:d,key:keyOf(d),count:counts[keyOf(d)]||0}));
+  const data=days.map(d=>{const key=localDateKey(d);return{date:d,key,count:counts[key]||0};});
   const max=Math.max(1,...data.map(d=>d.count));
   const totalMonth=data.reduce((s,d)=>s+d.count,0);
   const W=760,H=132,padTop=14,padBottom=20,padX=6;
@@ -330,6 +381,16 @@ const InsightCard=({eyebrow,children})=>(
     {children}
   </div>
 );
+const TopProductCard=({eyebrow,top,empty})=>(
+  <InsightCard eyebrow={eyebrow}>
+    {top?(
+      <div style={{display:'flex',alignItems:'baseline',gap:6,minWidth:0}}>
+        <span style={{fontSize:14,fontWeight:700,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={top.name}>{top.name}</span>
+        <span style={{fontSize:10,color:'var(--text3)',fontFamily:"'DM Mono',monospace",flexShrink:0}}>{top.count}×</span>
+      </div>
+    ):<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>{empty}</div>}
+  </InsightCard>
+);
 // Donut card: default state is just the ring + a plain legend (dot + label,
 // no numbers) -- deliberately sparse. Hovering a wedge, its legend chip, or
 // the center all drive the same detail readout in the corner.
@@ -366,8 +427,7 @@ const PieCard=({title,data,size,thickness,centerLabel,centerNote})=>{
 const SectionTitle=({children})=><p className="section-title" style={{flexShrink:0,marginBottom:8}}>{children}</p>;
 const Divider=()=><div style={{height:1,background:'var(--border)',margin:'14px 0',flexShrink:0}}/>;
 
-function Dashboard({map,setMap,config,setView,refreshMap}){
-  const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
+function Dashboard({map,config,refreshMap}){
   const [ingesting,setIngesting]=useState(false);
   const [ingestResult,setIngestResult]=useState(null);
   // null (not []) means "not loaded yet" -- lets the charts wait for real
@@ -403,12 +463,11 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
   );
   const grouped={};
   for(const t of templates){const c=t.category||'Other';if(!grouped[c])grouped[c]=[];grouped[c].push(t);}
-  const catColors={'MO':'var(--mo)','PAM':'var(--pam)','CE':'var(--ce)'};
-  const fmtTime=ts=>{if(!ts)return'';try{const d=new Date(ts);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}catch(e){return ts.slice(0,16).replace('T',' ');}};
+  const fmtTime=ts=>{if(!ts)return'';try{const d=new Date(ts);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}catch{return ts.slice(0,16).replace('T',' ');}};
 
   // Most-created product, all time -- tallied from every file currently on
   // disk (the creation log only goes back ~200 events, nowhere near "all time").
-  const getCategory=product=>(config?.products??[]).find(p=>p.name===product)?.category??'?';
+  const catOf=categoryMap(config);
   const topProduct=list=>{
     const counts={};
     for(const item of list){if(item)counts[item]=(counts[item]||0)+1;}
@@ -419,18 +478,13 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
   const topAllTime=topProduct(files.map(f=>f.product));
   // Most-created product this month -- from the creation log (precise
   // timestamps), unlike file counts which can't tell you *when* a file was made.
-  // Local month key, not toISOString's UTC one -- the server stamps history
-  // timestamps with naive local time, so comparing in UTC could misfile
-  // entries made late at night near a month boundary.
-  const now=new Date();
-  const monthKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const monthKey=localDateKey(new Date()).slice(0,7);
   const historyThisMonth=history.filter(h=>h.timestamp?.startsWith(monthKey));
   const topThisMonth=topProduct(historyThisMonth.map(h=>h.product));
   const madeThisMonth=historyThisMonth.length;
   // CE / MO / PAM split, for the smaller donut.
   const catCounts={CE:0,MO:0,PAM:0};
-  for(const f of files){const c=getCategory(f.product);if(catCounts[c]!==undefined)catCounts[c]++;}
-  const catTotal=catCounts.CE+catCounts.MO+catCounts.PAM;
+  for(const f of files){const c=catOf[f.product];if(catCounts[c]!==undefined)catCounts[c]++;}
   const categoryData=[
     {label:'CE',value:catCounts.CE,color:'#AC3A87'},   // same purple as InDesign in the status chart
     {label:'MO',value:catCounts.MO,color:'#2F8E52'},   // saturated company green (brand accent)
@@ -473,22 +527,8 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
             <InsightCard eyebrow="Made this month">
               <div className="stat-value" style={{fontSize:22,color:'var(--accent)'}}>{madeThisMonth}</div>
             </InsightCard>
-            <InsightCard eyebrow="Top product · all time">
-              {topAllTime?(
-                <div style={{display:'flex',alignItems:'baseline',gap:6,minWidth:0}}>
-                  <span style={{fontSize:14,fontWeight:700,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={topAllTime.name}>{topAllTime.name}</span>
-                  <span style={{fontSize:10,color:'var(--text3)',fontFamily:"'DM Mono',monospace",flexShrink:0}}>{topAllTime.count}×</span>
-                </div>
-              ):<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>No data yet</div>}
-            </InsightCard>
-            <InsightCard eyebrow="Top product · this month">
-              {topThisMonth?(
-                <div style={{display:'flex',alignItems:'baseline',gap:6,minWidth:0}}>
-                  <span style={{fontSize:14,fontWeight:700,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={topThisMonth.name}>{topThisMonth.name}</span>
-                  <span style={{fontSize:10,color:'var(--text3)',fontFamily:"'DM Mono',monospace",flexShrink:0}}>{topThisMonth.count}×</span>
-                </div>
-              ):<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>None yet</div>}
-            </InsightCard>
+            <TopProductCard eyebrow="Top product · all time" top={topAllTime} empty="No data yet"/>
+            <TopProductCard eyebrow="Top product · this month" top={topThisMonth} empty="None yet"/>
           </div>
           <div className="card" style={{padding:'14px 20px 10px',flex:1,minWidth:0}}>
             <LineChart30d history={history}/>
@@ -559,7 +599,7 @@ function Dashboard({map,setMap,config,setView,refreshMap}){
             ):(
               Object.entries(grouped).sort().map(([cat,tmplList])=>(
                 <div key={cat}>
-                  <div style={{padding:'7px 14px 4px',fontSize:11,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:catColors[cat]??'var(--text3)',borderBottom:'1px solid var(--border2)',background:'var(--surface2)',position:'sticky',top:0}}>
+                  <div style={{padding:'7px 14px 4px',fontSize:11,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:CAT_STYLE[cat]?.color??'var(--text3)',borderBottom:'1px solid var(--border2)',background:'var(--surface2)',position:'sticky',top:0}}>
                     {cat} <span style={{fontWeight:400,opacity:.6}}>({tmplList.length})</span>
                   </div>
                   {tmplList.map((t,i)=>(
@@ -605,8 +645,40 @@ function BrandZigzag({colors,height=40,animated=false}){
   );
 }
 
+// Review-step list of candidate templates for one of the two files being created.
+const ReasonBadge=({r})=>{
+  const s=r.type==='match'?{background:'rgba(var(--accent-rgb),.15)',color:'var(--success)'}
+    :r.type==='warn'?{background:'rgba(var(--warning-rgb),.15)',color:'var(--warning)'}
+    :{background:'var(--surface3)',color:'var(--text3)'};
+  return <span style={{...s,fontSize:10,padding:'1px 6px',borderRadius:3,fontFamily:"'DM Mono',monospace",whiteSpace:'nowrap'}}>{r.text}</span>;
+};
+const TemplatePicker=({items,selected,onSelect,title,newName,skipped})=>(
+  <div style={{marginBottom:14,opacity:skipped?.5:1,transition:'opacity .2s'}}>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+      <div style={{fontSize:11,fontWeight:500,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'.06em'}}>{title}</div>
+      {skipped&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'1px 7px',borderRadius:10,background:'rgba(var(--warning-rgb),.15)',color:'var(--warning)',border:'1px solid rgba(var(--warning-rgb),.3)'}}>skipped</span>}
+    </div>
+    {items&&items.length>0?(
+      items.map((item,idx)=>(
+        <div key={idx} onClick={()=>onSelect(selected===idx?null:idx)} style={{background:selected===idx?'var(--accent-dim)':'var(--surface2)',border:'1px solid '+(selected===idx?'var(--accent)':'var(--border2)'),borderRadius:'var(--radius-sm)',padding:'10px 12px',marginBottom:6,cursor:'pointer',transition:'all .15s'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:selected===idx?'var(--accent)':'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,marginRight:8}}>{item.file.filename}</span>
+            <span className={'match-score '+scoreLabel(item.score).cls}>{scoreLabel(item.score).label} ({item.score}pts)</span>
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+            {(item.reasons||[]).map((r,i)=><ReasonBadge key={i} r={r}/>)}
+          </div>
+        </div>
+      ))
+    ):(
+      <div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>No template found -- empty file will be created</div>
+    )}
+    {!skipped&&<div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Will be saved as: <span style={{fontFamily:"'DM Mono',monospace",color:'var(--accent)'}}>{newName}</span></div>}
+  </div>
+);
+
 function NewLabelWizard({config,map,setMap}){
-  const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
+  const removeFile=p=>removeFromMap(setMap,p);
   const [step,setStep]=useState(1);
   const [product,setProduct]=useState(null);
   const [languages,setLanguages]=useState([]);
@@ -623,37 +695,36 @@ function NewLabelWizard({config,map,setMap}){
   const [prodColors,setProdColors]=useState({});
   const [prodAssets,setProdAssets]=useState({});
   const [sku,setSku]=useState('');
-  const [ufi,setUfi]=useState('');
   useEffect(()=>{api.getColors().then(r=>{if(r?.colors)setProdColors(r.colors);});},[]);
   useEffect(()=>{api.checkAssets().then(r=>{if(r&&!r.error)setProdAssets(r);});},[]);
   const enabledProducts=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
   const enabledLangs=(config?.languages??[]).filter(l=>l.enabled);
   const productCfg=product?config.products.find(p=>p.name===product):null;
-  const dimKey=productCfg?(()=>{const{category,acidic,unit}=productCfg;const u=unit||(category==='PAM'?'L':'kg');if(category==='PAM')return acidic?'PAM_acidic':'PAM_normal';if(category==='CE')return u==='kg'?'CE_solid':'CE';return u==='L'?'MO_liquid':'MO';})():null;
+  const dimKey=dimKeyFor(productCfg);
   const sizes=dimKey?(config?.packagingSizes?.[dimKey]??[]):[];
   const filtered=enabledProducts.filter(p=>matchesSearch(p.name,search));
   useEffect(()=>{
     setLangFiles(languages.map(code=>transFiles.find(f=>f.code===code)?.path??null));
-  },[languages.length, languages.join(','), transFiles.length]);
+  },[languages,transFiles]);
+  // These two run when a step is entered and read the selections made by then.
   useEffect(()=>{
     if(step===3&&transFiles.length===0)
       api.listTranslations().then(r=>{if(r?.files)setTransFiles(r.files);});
+  },[step]);
+  useEffect(()=>{
     if(step!==5||!product||!languages.length||!size)return;
     setLoading(true);setSelectedLabel(0);setSelectedBox(0);
     api.findTemplate({product,languages,packagingSize:size}).then(info=>{setTmplInfo(info);setLoading(false);});
   },[step]);
-  const reset=()=>{setStep(1);setProduct(null);setLanguages([]);setSize(null);setTmplInfo(null);setResult(null);setSearch('');setSelectedLabel(0);setSelectedBox(0);setReviewTab('template');setLangFiles([]);setTransFiles([]);setSku('');setUfi('');};
+  const reset=()=>{setStep(1);setProduct(null);setLanguages([]);setSize(null);setTmplInfo(null);setResult(null);setSearch('');setSelectedLabel(0);setSelectedBox(0);setReviewTab('template');setLangFiles([]);setTransFiles([]);setSku('');};
   const toggleLang=code=>setLanguages(prev=>prev.includes(code)?prev.filter(c=>c!==code):prev.length<3?[...prev,code]:prev);
   const handleCreate=async()=>{
     setLoading(true);
-    const cfg=await api.loadConfig();
     const skipLabel=selectedLabel===null;
     const skipBox=selectedBox===null;
     const labelPath=skipLabel?null:(tmplInfo?.labels?.[selectedLabel]?.file?.path??null);
     const boxPath=skipBox?null:(tmplInfo?.boxes?.[selectedBox]?.file?.path??null);
-    const isPAM=productCfg?.category==='PAM';
-    const footerValues=(sku||ufi)?{sku,ufi:isPAM?ufi:'',manufacturer_value:''}:null;
-    const res=await api.createLabel({product,languages,packagingSize:size,config:cfg,labelTemplatePath:labelPath,boxTemplatePath:boxPath,langFiles,footerValues,skipLabel,skipBox});
+    const res=await api.createLabel({product,languages,packagingSize:size,labelTemplatePath:labelPath,boxTemplatePath:boxPath,langFiles,footerValues:sku?{sku}:null,skipLabel,skipBox});
     if(res.success&&res.results?.length){const m=await api.loadMap();setMap(m);}
     setResult(res);setLoading(false);setStep(6);
   };
@@ -661,41 +732,13 @@ function NewLabelWizard({config,map,setMap}){
   const boxMult=size?(config?.boxMultipliers?.[size]??size):'';
   const dims=tmplInfo?.dimensions??'?x?';
   const langStr=languages.join('_');
-  const prevLabel=product&&size&&languages.length?product+'_'+size+'_'+langStr+'_'+dims+'_'+dateStr+'_WIP.indd':'--';
-  const prevBox=product&&size&&languages.length?product+'_'+boxMult+'_'+langStr+'_180x180_'+dateStr+'_deze_WIP.indd':'--';
+  const labelExt=tmplInfo?.labels?.[selectedLabel]?.file?.extension??'.idml';
+  const boxExt=tmplInfo?.boxes?.[selectedBox]?.file?.extension??'.idml';
+  const prevLabel=product&&size&&languages.length?product+'_'+size+'_'+langStr+'_'+dims+'_'+dateStr+'_WIP'+labelExt:'--';
+  const prevBox=product&&size&&languages.length?product+'_'+boxMult+'_'+langStr+'_180x180_'+dateStr+'_deze_WIP'+boxExt:'--';
   const relatedFiles=(map?.files??[]).filter(f=>
     f.product===product&&f.extension==='.indd'&&!f.wip&&
     f.languages&&languages.some(l=>f.languages.includes(l))
-  );
-  const reasonBadge=(r,i)=>{
-    const s=r.type==='match'?{background:'rgba(var(--accent-rgb),.15)',color:'var(--success)'}
-      :r.type==='warn'?{background:'rgba(var(--warning-rgb),.15)',color:'var(--warning)'}
-      :{background:'var(--surface3)',color:'var(--text3)'};
-    return <span key={i} style={{...s,fontSize:10,padding:'1px 6px',borderRadius:3,fontFamily:"'DM Mono',monospace",whiteSpace:'nowrap'}}>{r.text}</span>;
-  };
-  const TemplatePicker=({items,selected,onSelect,title,newName,skipped})=>(
-    <div style={{marginBottom:14,opacity:skipped?.5:1,transition:'opacity .2s'}}>
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-        <div style={{fontSize:11,fontWeight:500,color:'var(--text2)',textTransform:'uppercase',letterSpacing:'.06em'}}>{title}</div>
-        {skipped&&<span style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'1px 7px',borderRadius:10,background:'rgba(var(--warning-rgb),.15)',color:'var(--warning)',border:'1px solid rgba(var(--warning-rgb),.3)'}}>skipped</span>}
-      </div>
-      {items&&items.length>0?(
-        items.map((item,idx)=>(
-          <div key={idx} onClick={()=>onSelect(selected===idx?null:idx)} style={{background:selected===idx?'var(--accent-dim)':'var(--surface2)',border:'1px solid '+(selected===idx?'var(--accent)':'var(--border2)'),borderRadius:'var(--radius-sm)',padding:'10px 12px',marginBottom:6,cursor:'pointer',transition:'all .15s'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-              <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:selected===idx?'var(--accent)':'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,marginRight:8}}>{item.file.filename}</span>
-              <span className={'match-score '+scoreLabel(item.score).cls}>{scoreLabel(item.score).label} ({item.score}pts)</span>
-            </div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-              {(item.reasons||[]).map((r,i)=>reasonBadge(r,i))}
-            </div>
-          </div>
-        ))
-      ):(
-        <div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>No template found -- empty file will be created</div>
-      )}
-      {!skipped&&<div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Will be saved as: <span style={{fontFamily:"'DM Mono',monospace",color:'var(--accent)'}}>{newName}</span></div>}
-    </div>
   );
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',maxWidth:720}}>
@@ -739,7 +782,7 @@ function NewLabelWizard({config,map,setMap}){
                   <div className="product-name" style={{flex:1,marginBottom:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:700,color:(prodColors[p.name]||[])[5]||'var(--text)'}}>{p.name}</div>
                 </div>
                 <div style={{display:'flex',gap:6,marginTop:8}}>
-                  <span style={{padding:'1px 7px',borderRadius:3,fontSize:10,fontFamily:"'DM Mono',monospace",background:p.category==='PAM'?'rgba(var(--pam-rgb),.15)':p.category==='CE'?'rgba(var(--accent-rgb),.15)':'rgba(var(--mo-rgb),.15)',color:p.category==='PAM'?'var(--pam)':p.category==='CE'?'var(--ce)':'var(--mo)'}}>{p.category}</span>
+                  <span style={{padding:'1px 7px',borderRadius:3,fontSize:10,fontFamily:"'DM Mono',monospace",background:catStyle(p.category).bg,color:catStyle(p.category).color}}>{p.category}</span>
                   {p.acidic&&<span className="acidic-badge">acidic</span>}
                 </div>
                 <div style={{marginTop:10}}>
@@ -834,25 +877,17 @@ function NewLabelWizard({config,map,setMap}){
             {/* Label footer details */}
             <div style={{marginTop:16,borderTop:'1px solid var(--border2)',paddingTop:14}}>
               <div style={{fontSize:11,fontWeight:500,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>
-                Label details <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--text3)'}}>— optional, written to FOOTER_* stories</span>
+                Label details <span style={{fontSize:10,fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--text3)'}}>— optional, written into the label footer</span>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:productCfg?.category==='PAM'?'1fr 1fr':'1fr',gap:10}}>
-                <div>
-                  <div style={{fontSize:11,color:'var(--text2)',marginBottom:4}}>SKU code</div>
-                  <input className="input" type="text" value={sku} onChange={e=>setSku(e.target.value)} placeholder="e.g. FNS-1L-001" style={{width:'100%',boxSizing:'border-box'}}/>
-                </div>
-                {productCfg?.category==='PAM'&&(
-                  <div>
-                    <div style={{fontSize:11,color:'var(--text2)',marginBottom:4}}>UFI code</div>
-                    <input className="input" type="text" value={ufi} onChange={e=>setUfi(e.target.value)} placeholder="e.g. XXXX-XXXX-XXXX-XXXX" style={{width:'100%',boxSizing:'border-box'}}/>
-                  </div>
-                )}
+              <div>
+                <div style={{fontSize:11,color:'var(--text2)',marginBottom:4}}>SKU code</div>
+                <input className="input" type="text" value={sku} onChange={e=>setSku(e.target.value)} placeholder="e.g. FNS-1L-001" style={{width:'100%',boxSizing:'border-box'}}/>
               </div>
             </div>
           </div>
           <div style={{flexShrink:0}}>
             <div style={{minHeight:22,display:'flex',alignItems:'center',marginBottom:6}}>
-              {(()=>{const missing=[...(!sku?['SKU']:[]),...(productCfg?.category==='PAM'&&!ufi?['UFI']:[])];return missing.length>0&&<span style={{fontSize:11,color:'var(--warning)'}}>&#9888; No {missing.join(' or ')} provided</span>;})()}
+              {!sku&&<span style={{fontSize:11,color:'var(--warning)'}}>&#9888; No SKU provided</span>}
             </div>
             <div className="flex gap-2">
               <button className="btn btn-ghost" onClick={()=>setStep(2)}>&larr; Back</button>
@@ -1025,52 +1060,17 @@ function NewLabelWizard({config,map,setMap}){
     </div>
   );
 }
-function Information({config,map,setMap}){
-  const removeFile=p=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
-  const [selected,setSelected]=useState(null);
-  const [search,setSearch]=useState('');
-  const [colors,setColors]=useState({});
-  const [assets,setAssets]=useState({});
-  const [fileType,setFileType]=useState('all');
-  const [showWip,setShowWip]=useState('all');
-  const [catFilter,setCatFilter]=useState('all');
-  const [sizeRefOpen,setSizeRefOpen]=useState(false);
-  const [iconLib,setIconLib]=useState(null);
-  const [iconAssign,setIconAssign]=useState({});
-  useEffect(()=>{
-    api.getColors().then(r=>setColors(r.colors||{}));
-    api.checkAssets().then(r=>{if(r&&!r.error)setAssets(r);});
-    api.getIcons().then(r=>setIconLib(r));
-    api.getIconAssignments().then(r=>setIconAssign(r.assignments||{}));
-  },[]);
-  const enabledProds=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
-  const filteredProds=enabledProds
-    .filter(p=>catFilter==='all'||p.category===catFilter)
-    .filter(p=>matchesSearch(p.name,search));
-  const prodCfg=selected?(config?.products??[]).find(p=>p.name===selected):null;
-  const dimKey=prodCfg?(()=>{const{category,acidic,unit}=prodCfg;const u=unit||(category==='PAM'?'L':'kg');if(category==='PAM')return acidic?'PAM_acidic':'PAM_normal';if(category==='CE')return u==='kg'?'CE_solid':'CE';return u==='L'?'MO_liquid':'MO';})():null;
-  const swatches=selected?(colors[selected]||Array(6).fill('#808080')):[];
-  const allFiles=map?.files??[];
-  const prodFiles=allFiles.filter(f=>f.product===selected);
-  const filteredFiles=prodFiles.filter(f=>{
-    if(fileType==='indd')return f.extension==='.indd'&&!f.print_file;
-    if(fileType==='idml')return f.extension==='.idml';
-    if(fileType==='print')return f.print_file;
-    return true;
-  }).filter(f=>showWip==='wip'?f.wip:showWip==='done'?!f.wip:true);
-  const prodAssets=selected?(assets[selected]||{}):{};
-  const prodIcons=(selected&&iconLib)?(iconAssign[selected]||[]).map(id=>iconLib.icons.find(ic=>ic.id===id)).filter(Boolean):[];
-  const dimRows=[['PAM_normal','PAM Normal','var(--pam)'],['PAM_acidic','PAM Acidic','var(--warning)'],['MO','MO','var(--mo)'],['MO_liquid','MO Liquid','var(--mo)'],['CE','CE','var(--ce)'],['CE_solid','CE Solid','var(--ce)']];
-  const catColor=c=>c==='PAM'?'var(--pam)':c==='CE'?'var(--ce)':'var(--mo)';
-  const catBg=c=>c==='PAM'?'rgba(var(--pam-rgb),.15)':c==='CE'?'rgba(var(--accent-rgb),.15)':'rgba(var(--mo-rgb),.15)';
-  const SizeTable=({showAll})=>(
+// Label sizes per category, with the product's own category highlighted.
+const DIM_ROWS=[['PAM_normal','PAM Normal','var(--pam)'],['PAM_acidic','PAM Acidic','var(--warning)'],['MO','MO','var(--mo)'],['MO_liquid','MO Liquid','var(--mo)'],['CE','CE','var(--ce)'],['CE_solid','CE Solid','var(--ce)']];
+function SizeTable({config,dimKey}){
+  return(
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
-      {dimRows.filter(([key])=>showAll||key===dimKey||!dimKey).map(([key,label,clr])=>{
+      {DIM_ROWS.map(([key,label,clr])=>{
         const isActive=dimKey===key;
         const entries=Object.entries(config?.dimensions?.[key]??{});
         if(!entries.length)return null;
         return(
-          <div key={key} style={{opacity:(!dimKey||isActive||showAll)?1:.35,transition:'opacity .2s'}}>
+          <div key={key}>
             <div style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:isActive?clr:'var(--text3)',fontWeight:isActive?700:400,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:6}}>{label}</div>
             <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
               {entries.map(([sz,dims])=>(
@@ -1096,6 +1096,42 @@ function Information({config,map,setMap}){
       </div>
     </div>
   );
+}
+function Information({config,map,setMap}){
+  const removeFile=p=>removeFromMap(setMap,p);
+  const [selected,setSelected]=useState(null);
+  const [search,setSearch]=useState('');
+  const [colors,setColors]=useState({});
+  const [assets,setAssets]=useState({});
+  const [fileType,setFileType]=useState('all');
+  const [showWip,setShowWip]=useState('all');
+  const [catFilter,setCatFilter]=useState('all');
+  const [sizeRefOpen,setSizeRefOpen]=useState(false);
+  const [iconLib,setIconLib]=useState(null);
+  const [iconAssign,setIconAssign]=useState({});
+  useEffect(()=>{
+    api.getColors().then(r=>setColors(r.colors||{}));
+    api.checkAssets().then(r=>{if(r&&!r.error)setAssets(r);});
+    api.getIcons().then(r=>setIconLib(r));
+    api.getIconAssignments().then(r=>setIconAssign(r.assignments||{}));
+  },[]);
+  const enabledProds=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
+  const filteredProds=enabledProds
+    .filter(p=>catFilter==='all'||p.category===catFilter)
+    .filter(p=>matchesSearch(p.name,search));
+  const prodCfg=selected?(config?.products??[]).find(p=>p.name===selected):null;
+  const dimKey=dimKeyFor(prodCfg);
+  const swatches=selected?(colors[selected]||Array(6).fill('#808080')):[];
+  const allFiles=map?.files??[];
+  const prodFiles=allFiles.filter(f=>f.product===selected);
+  const filteredFiles=prodFiles.filter(f=>{
+    if(fileType==='indd')return f.extension==='.indd'&&!f.print_file;
+    if(fileType==='idml')return f.extension==='.idml';
+    if(fileType==='print')return f.print_file;
+    return true;
+  }).filter(f=>showWip==='wip'?f.wip:showWip==='done'?!f.wip:true);
+  const prodAssets=selected?(assets[selected]||{}):{};
+  const prodIcons=(selected&&iconLib)?(iconAssign[selected]||[]).map(id=>iconLib.icons.find(ic=>ic.id===id)).filter(Boolean):[];
   return(
     <div style={{display:'flex',height:'100%',gap:10,overflow:'hidden'}}>
       {/* ── LEFT: product list sidebar ── */}
@@ -1107,7 +1143,7 @@ function Information({config,map,setMap}){
         <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
           {[['all','All'],['MO','MO'],['PAM','PAM'],['CE','CE']].map(([v,l])=>(
             <button key={v} onClick={()=>{setCatFilter(v);setSelected(null);}}
-              style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'2px 8px',borderRadius:10,border:'1px solid '+(catFilter===v?catColor(v==='all'?'MO':v):'var(--border2)'),background:catFilter===v?catBg(v==='all'?'MO':v):'transparent',color:catFilter===v?catColor(v==='all'?'MO':v):'var(--text3)',cursor:'pointer',transition:'all .15s'}}>
+              style={{fontSize:10,fontFamily:"'DM Mono',monospace",padding:'2px 8px',borderRadius:10,border:'1px solid '+(catFilter===v?catStyle(v==='all'?'MO':v).color:'var(--border2)'),background:catFilter===v?catStyle(v==='all'?'MO':v).bg:'transparent',color:catFilter===v?catStyle(v==='all'?'MO':v).color:'var(--text3)',cursor:'pointer',transition:'all .15s'}}>
               {l}
             </button>
           ))}
@@ -1117,7 +1153,7 @@ function Information({config,map,setMap}){
             <button key={p.name} onClick={()=>{setSelected(selected===p.name?null:p.name);setSizeRefOpen(false);}}
               style={{display:'flex',alignItems:'center',gap:6,padding:'6px 9px',borderRadius:'var(--radius-sm)',border:'1px solid '+(selected===p.name?'var(--accent)':'var(--border2)'),background:selected===p.name?'var(--accent-dim)':'var(--surface2)',cursor:'pointer',textAlign:'left',transition:'all .15s',flexShrink:0}}>
               <span style={{flex:1,fontSize:12,fontWeight:selected===p.name?500:400,color:selected===p.name?'var(--accent)':'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-              <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 4px',borderRadius:2,background:catBg(p.category),color:catColor(p.category),flexShrink:0}}>{p.category}</span>
+              <span style={{fontSize:9,fontFamily:"'DM Mono',monospace",padding:'1px 4px',borderRadius:2,background:catStyle(p.category).bg,color:catStyle(p.category).color,flexShrink:0}}>{p.category}</span>
             </button>
           ))}
           {filteredProds.length===0&&<div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 4px'}}>No products match.</div>}
@@ -1137,7 +1173,7 @@ function Information({config,map,setMap}){
             </button>
             {sizeRefOpen&&(
               <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
-                <SizeTable showAll={true}/>
+                <SizeTable config={config} dimKey={dimKey}/>
               </div>
             )}
           </div>
@@ -1192,7 +1228,7 @@ function Information({config,map,setMap}){
             </div>
             {sizeRefOpen&&(
               <div style={{marginBottom:8,padding:10,borderRadius:'var(--radius-sm)',background:'var(--surface2)',border:'1px solid var(--border2)',maxHeight:280,overflowY:'auto',flexShrink:0}}>
-                <SizeTable showAll={true}/>
+                <SizeTable config={config} dimKey={dimKey}/>
               </div>
             )}
             {/* Traits — always visible, not tucked behind a tab */}
@@ -1231,11 +1267,9 @@ function Information({config,map,setMap}){
                             <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
                             <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
                             <td><div style={{display:'flex',gap:4,alignItems:'center'}}>
-                              {f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
-                              {f.print_file?<span className="topbar-badge" style={{background:'var(--surface3)',color:'var(--text)'}}>Print</span>
-                                :f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(var(--idml-rgb),.15)',color:'var(--idml)'}}>IDML</span>
-                                :<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>INDD</span>}
-                              {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
+                              <BadgeKind f={f}/>
+                              {f.print_file?<BadgePrint/>:<BadgeFormat f={f} indd="INDD"/>}
+                              {f.wip&&<BadgeWip/>}
                             </div></td>
                             <td><FileActions path={f.path} onDeleted={removeFile} sharepointBase={config?.sharepointBaseUrl}/></td>
                           </tr>
@@ -1252,145 +1286,381 @@ function Information({config,map,setMap}){
     </div>
   );
 }
-function LabelsBrowser({map,setMap,config}){
-  const removeFile=p=>{
-    setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==p)}));
-    setSelected(s=>s?.path===p?null:s);
+// ── Browse: filters, sorting and the toolbar ─────────────────────────────────────
+// Colour rules: the category colours (CAT_STYLE) and the file-tag colours (TONE) are the only
+// colours in the toolbar -- the same ones the table rows use, so a filter looks like what it
+// filters. Everything else is neutral, and the accent means "on".
+
+// Pack-size groups (matched against the lower-cased packaging, e.g. "5kgx2").
+const PACK_GROUPS={'1kg-1l':/^(1kg|1l)/,'5kg-5l':/^(5kg|5l)/,'250g':/^250g/,'500g':/^500g/};
+const sizeMatches=(f,group)=>{
+  const p=(f.packaging??'').toLowerCase();
+  if(group==='other')return !p||!Object.values(PACK_GROUPS).some(re=>re.test(p));
+  return !!p&&PACK_GROUPS[group].test(p);
+};
+const CATS=['PAM','MO','CE'];
+const KIND_OPTIONS=[['label','Label'],['box','Box']];
+const FORMAT_OPTIONS=[['indd','InDesign'],['idml','IDML'],['print','Print']];
+const SIZE_OPTIONS=[['1kg-1l','1kg / 1L'],['5kg-5l','5kg / 5L'],['250g','250g'],['500g','500g'],['other','Other']];
+const STATUS_OPTIONS=[['wip','Work in progress'],['unsorted','Unsorted']];
+const STATUS_HINT={unsorted:'name not recognised'};
+const STATUS_TONE={wip:'wip',unsorted:'neutral'};
+const FACET_NAME={cat:'Category',kinds:'Type',formats:'Format',sizes:'Size',status:'Status',langs:'Language'};
+const FACET_KEYS=['cat','kinds','formats','sizes','status','langs'];
+const NO_FILTERS={cat:null,kinds:[],formats:[],sizes:[],status:[],langs:[],langMode:'all'};
+const NO_FILES=[];
+// Rows rendered at a time. Chrome re-records the whole table on every selection change, and
+// that cost grows with row count: ~65 ms per click at 1000+ rows, ~15 ms at 200.
+const BROWSE_PAGE=200;
+
+// Does file f have option v of a facet?
+const FACET_HAS={
+  cat:    (f,v,ctx)=>(ctx.catOf[f.product]??'?')===v,
+  kinds:  (f,v)=>v==='box'?f.deze:!f.deze,
+  formats:(f,v)=>v==='print'?f.print_file:v==='idml'?f.extension==='.idml':f.extension==='.indd',
+  sizes:  (f,v)=>sizeMatches(f,v),
+  status: (f,v)=>v==='wip'?f.wip:!f.sorted,
+  langs:  (f,v)=>(f.languages??[]).includes(v),
+};
+const selectedOf=(filters,key)=>key==='cat'?(filters.cat?[filters.cat]:[]):filters[key];
+// Across facets a file must pass every one (AND); within one facet any selected option will do (OR).
+// Language can instead require all selected languages (a label that carries both LT and LV).
+const facetPasses=(f,key,filters,ctx)=>{
+  const sel=selectedOf(filters,key);
+  if(!sel.length)return true;
+  const has=v=>!!FACET_HAS[key](f,v,ctx);
+  return key==='langs'&&filters.langMode==='all'?sel.every(has):sel.some(has);
+};
+const filterFiles=(entries,filters,query,ctx,except)=>
+  entries.filter(e=>matchesSearch(e.hay,query)&&FACET_KEYS.every(k=>k===except||facetPasses(e.f,k,filters,ctx)));
+const searchText=(f,langName)=>`${f.filename} ${f.product||''} ${(f.languages??[]).map(c=>langName[c]||'').join(' ')}`;
+
+// How many files each option would give. A facet is counted without its own selection (what the
+// option gives on its own) -- except language "all" matching, counted with it (what adding the
+// option would leave), so an option that would empty the list reads 0.
+const facetCounts=(entries,filters,query,ctx,langCodes)=>{
+  const values={cat:CATS,kinds:KIND_OPTIONS.map(o=>o[0]),formats:FORMAT_OPTIONS.map(o=>o[0]),sizes:SIZE_OPTIONS.map(o=>o[0]),status:STATUS_OPTIONS.map(o=>o[0]),langs:langCodes};
+  const out={};
+  for(const key of FACET_KEYS){
+    const pool=filterFiles(entries,filters,query,ctx,key==='langs'&&filters.langMode==='all'?null:key);
+    out[key]={};
+    for(const v of values[key])out[key][v]=pool.reduce((n,e)=>n+(FACET_HAS[key](e.f,v,ctx)?1:0),0);
+  }
+  return out;
+};
+
+// The applied filters as removable pills, in toolbar order.
+const appliedItems=filters=>{
+  const label=(opts,v)=>opts.find(o=>o[0]===v)?.[1]??v;
+  const items=[];
+  if(filters.cat)items.push({key:'cat',value:filters.cat,k:'Category',label:filters.cat,tone:catStyle(filters.cat)});
+  filters.kinds.forEach(v=>items.push({key:'kinds',value:v,k:'Type',label:label(KIND_OPTIONS,v),tone:TONE[v]}));
+  filters.formats.forEach(v=>items.push({key:'formats',value:v,k:'Format',label:label(FORMAT_OPTIONS,v),tone:TONE[v]}));
+  filters.sizes.forEach(v=>items.push({key:'sizes',value:v,k:'Size',label:label(SIZE_OPTIONS,v),tone:TONE.neutral}));
+  filters.status.forEach(v=>items.push({key:'status',value:v,k:'Status',label:label(STATUS_OPTIONS,v),tone:TONE[STATUS_TONE[v]]}));
+  filters.langs.forEach(v=>items.push({key:'langs',value:v,k:'Language',label:v,tone:TONE.neutral}));
+  return items;
+};
+const withoutItem=(filters,{key,value})=>key==='cat'?{...filters,cat:null}:{...filters,[key]:filters[key].filter(v=>v!==value)};
+
+// Sorting. Empty values always go last, and ties fall back to the path (which groups a
+// product's files together).
+const NAT=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'});
+const packAmount=p=>{
+  const m=/^(\d+(?:[.,]\d+)?)(kg|g|l|ml)/i.exec(p||'');
+  if(!m)return null;
+  const n=parseFloat(m[1].replace(',','.')),u=m[2].toLowerCase();
+  return u==='g'||u==='ml'?n/1000:n;
+};
+const SORT_KEY={
+  filename:f=>f.filename,
+  product:f=>f.product||null,
+  cat:(f,catOf)=>catOf[f.product]||null,
+  languages:f=>f.languages?.length?f.languages.join(' '):null,
+  size:f=>packAmount(f.packaging),
+  date:f=>f.date||null,
+  type:f=>f.print_file?'3':f.deze?'2':'1',
+};
+const DEFAULT_SORT={key:'date',dir:'desc'};
+const sortFiles=(files,{key,dir},catOf)=>{
+  const get=SORT_KEY[key],sign=dir==='desc'?-1:1;
+  return [...files].sort((a,b)=>{
+    const ka=get(a,catOf),kb=get(b,catOf);
+    if(ka==null&&kb==null)return NAT.compare(a.path,b.path);
+    if(ka==null)return 1;
+    if(kb==null)return -1;
+    const r=typeof ka==='number'&&typeof kb==='number'?ka-kb:NAT.compare(String(ka),String(kb));
+    return sign*r||NAT.compare(a.path,b.path);
+  });
+};
+const COLUMNS=[['filename','Filename'],['product','Product'],['cat','Cat'],['languages','Languages'],['size','Size'],['date','Date'],['type','Type']];
+const SortTh=({k,label,sort,onSort})=>{
+  const on=sort.key===k;
+  return(
+    <th className={'sortable'+(on?' sorted':'')} tabIndex={0} aria-sort={on?(sort.dir==='asc'?'ascending':'descending'):'none'}
+      onClick={()=>onSort(k)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onSort(k);}}}>
+      {label}<span className="sort-ind">{on&&sort.dir==='asc'?<Icon.SortUp/>:<Icon.SortDown/>}</span>
+    </th>
+  );
+};
+
+// ── Toolbar pieces ──
+function SearchBox({value,onChange,inputRef}){
+  return(
+    <div className="fb-search">
+      <span className="fb-search-ico"><Icon.Search size={15}/></span>
+      <input ref={inputRef} className="input" type="text" value={value} placeholder="Search files, products, languages…" aria-label="Search files"
+        onChange={e=>onChange(e.target.value)}
+        onKeyDown={e=>{if(e.key==='Escape'){if(value)onChange('');else e.target.blur();}}}/>
+      {value
+        ?<button type="button" className="fb-search-clear" aria-label="Clear search" onClick={()=>{onChange('');inputRef.current?.focus();}}><Icon.Close size={12}/></button>
+        :<kbd className="fb-kbd">/</kbd>}
+    </div>
+  );
+}
+
+// Category: one capsule with a segment per category. A category's colour shows as a dot until it
+// is chosen, then fills its segment -- the same colours as the Cat badges in the table.
+function CategorySegment({value,onChange,counts}){
+  const seg=(v,label)=>{
+    const on=(value??'all')===v,st=v==='all'?null:catStyle(v),n=st?counts?.[v]:null;
+    return(
+      <button key={v} type="button" aria-pressed={on} title={n==null?'All categories':`${n} file${n===1?'':'s'} in ${v}`}
+        className={'fb-seg-btn'+(on?' on':'')+(!on&&n===0?' dim':'')}
+        style={on&&st?{background:st.color,color:'var(--on-accent)'}:undefined}
+        onClick={()=>onChange(v==='all'||on?null:v)}>
+        {st&&<span className="fb-dot" style={{background:on?'var(--on-accent)':st.color}}/>}{label}
+      </button>
+    );
   };
-  const [search,setSearch]=useState('');
-  const [filterCat,setFilterCat]=useState('all');
-  const [filterLabelType,setFilterLabelType]=useState('all');
-  const [filterFileType,setFilterFileType]=useState('all');
-  const [filterSize,setFilterSize]=useState('all');
-  const [filterWip,setFilterWip]=useState('all');
-  const [filterUnsorted,setFilterUnsorted]=useState(false);
-  const [filterLangs,setFilterLangs]=useState([]);
-  const [langOpen,setLangOpen]=useState(false);
-  const [sortOrder,setSortOrder]=useState('newest');
-  const toggleLang=lang=>{
-    setFilterLangs(prev=>prev.includes(lang)?prev.filter(l=>l!==lang):prev.length<3?[...prev,lang]:prev);
-  };
-  const langPopRef=useRef(null);
+  return <div className="fb-seg" role="group" aria-label="Category">{seg('all','All')}{CATS.map(c=>seg(c,c))}</div>;
+}
+
+// A filter that opens a checklist: a capsule button with a caret, and a count badge once it is
+// narrowing the list. Options carry how many files they would give; ones that would give none
+// are disabled.
+function FacetMenu({id,name,Ico,options,selected,onToggle,onClear,open,onOpen,searchable,footer}){
+  const [q,setQ]=useState('');
+  const [alignRight,setAlignRight]=useState(false);
+  const rootRef=useRef(null),btnRef=useRef(null),popRef=useRef(null);
   useEffect(()=>{
-    if(!langOpen)return;
-    const h=e=>{if(langPopRef.current&&!langPopRef.current.contains(e.target))setLangOpen(false);};
-    document.addEventListener('mousedown',h);
-    return()=>document.removeEventListener('mousedown',h);
-  },[langOpen]);
+    if(!open){setQ('');return;}
+    const onDown=e=>{if(rootRef.current&&!rootRef.current.contains(e.target))onOpen(null);};
+    const onKey=e=>{if(e.key==='Escape'){onOpen(null);btnRef.current?.focus();}};
+    document.addEventListener('mousedown',onDown);document.addEventListener('keydown',onKey);
+    return()=>{document.removeEventListener('mousedown',onDown);document.removeEventListener('keydown',onKey);};
+  },[open,onOpen]);
+  useLayoutEffect(()=>{            // keep a wide menu inside the window
+    if(open&&popRef.current&&btnRef.current)setAlignRight(btnRef.current.getBoundingClientRect().left+popRef.current.offsetWidth>window.innerWidth-12);
+  },[open]);
+  const shown=searchable&&q.trim()?options.filter(o=>matchesSearch(o.search??o.label,q)):options;
+  return(
+    <div className="fb-facet" ref={rootRef}>
+      <button type="button" ref={btnRef} className={'fb-btn'+(selected.length?' on':'')+(open?' open':'')} aria-haspopup="menu" aria-expanded={open}
+        onClick={()=>onOpen(open?null:id)}>
+        <Ico/><span>{name}</span>{selected.length>0&&<span className="fb-badge">{selected.length}</span>}
+        <span className="fb-caret"><Icon.Chevron size={12}/></span>
+      </button>
+      {open&&(
+        <div className={'fb-pop'+(alignRight?' right':'')} ref={popRef} role="menu" aria-label={name}>
+          {searchable&&(
+            <div className="fb-pop-search">
+              <input className="input" autoFocus type="text" value={q} placeholder={`Find ${name.toLowerCase()}…`} aria-label={`Find ${name.toLowerCase()}`} onChange={e=>setQ(e.target.value)}/>
+            </div>
+          )}
+          <div className="fb-list">
+            {shown.map(o=>{
+              const on=selected.includes(o.value);
+              return(
+                <button key={o.value} type="button" role="menuitemcheckbox" aria-checked={on} disabled={o.count===0&&!on}
+                  className={'fb-opt'+(on?' on':'')} onClick={()=>onToggle(o.value)}>
+                  <span className="fb-check">{on&&<Icon.Check/>}</span>
+                  <span className="fb-opt-label">{o.node??o.label}</span>
+                  <span className="fb-count">{o.count}</span>
+                </button>
+              );
+            })}
+            {shown.length===0&&<div className="fb-none">Nothing matches “{q.trim()}”</div>}
+          </div>
+          {(selected.length>0||footer)&&(
+            <div className="fb-pop-foot">
+              {footer??<span/>}
+              {selected.length>0&&<button type="button" className="fb-link" onClick={onClear}>Clear</button>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// An applied filter: tinted like the thing it filters, removable.
+const FilterPill=({item,onRemove})=>(
+  <span className="fb-pill" style={{background:item.tone.bg,color:item.tone.color}}>
+    <span className="fb-pill-k">{item.k}</span>{item.label}
+    <button type="button" aria-label={`Remove ${item.k} ${item.label}`} onClick={onRemove}><Icon.Close size={10}/></button>
+  </span>
+);
+
+// One row of the Browse table. Memoized: with ~1000 files, selecting a row or
+// typing in the search box must only re-render the rows whose props changed.
+const BrowseRow=memo(function BrowseRow({f,cat,selected,onSelect}){
+  return(
+    <tr className={selected?'row-selected':''} onClick={()=>onSelect(f)} style={{cursor:'pointer'}}>
+      <td className="path-cell" title={f.path}>{f.filename}</td>
+      <td style={{fontSize:13}}>{f.product??<span style={{color:'var(--text3)'}}>--</span>}</td>
+      <td>{cat&&<span className="topbar-badge" style={{background:catStyle(cat).bg,color:catStyle(cat).color}}>{cat}</span>}</td>
+      <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.languages?.join(' . ')??'--'}</td>
+      <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
+      <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)',whiteSpace:'nowrap'}}>{f.date??'--'}</td>
+      <td><div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
+        {f.print_file?<BadgePrint/>:<BadgeKind f={f}/>}
+        {!f.print_file&&<BadgeFormat f={f}/>}
+        {f.wip&&<BadgeWip/>}
+      </div></td>
+    </tr>
+  );
+});
+
+// The view's filters, search and sort live here so they survive a visit to another view
+// (until the page is reloaded).
+const browseMemory={};
+
+function LabelsBrowser({map,setMap,config}){
   const [selected,setSelected]=useState(null);
-  const files=map?.files??[];
-  const getCategory=product=>(config?.products??[]).find(p=>p.name===product)?.category??'?';
-  const sizeMatch=f=>{
-    if(filterSize==='all')return true;
-    const p=(f.packaging??'').toLowerCase();
-    if(!p)return filterSize==='other';
-    if(filterSize==='1kg-1l')return p.startsWith('1kg')||p.toLowerCase().startsWith('1l');
-    if(filterSize==='5kg-5l')return p.startsWith('5kg')||p.toLowerCase().startsWith('5l');
-    if(filterSize==='250g')return p.startsWith('250g');
-    if(filterSize==='500g')return p.startsWith('500g');
-    if(filterSize==='other')return !p.startsWith('1kg')&&!p.toLowerCase().startsWith('1l')&&!p.startsWith('5kg')&&!p.toLowerCase().startsWith('5l')&&!p.startsWith('250g')&&!p.startsWith('500g');
-    return true;
-  };
-  const filtered=files.filter(f=>{
-    if(!matchesSearch(f.filename+' '+(f.product||''),search))return false;
-    if(filterCat!=='all'&&getCategory(f.product)!==filterCat)return false;
-    if(filterLabelType==='label'&&f.deze)return false;
-    if(filterLabelType==='box'&&!f.deze)return false;
-    if(filterFileType==='indd'&&f.extension!=='.indd')return false;
-    if(filterFileType==='idml'&&f.extension!=='.idml')return false;
-    if(filterFileType==='print'&&!f.print_file)return false;
-    if(filterWip==='wip'&&!f.wip)return false;
-    if(filterUnsorted&&f.sorted)return false;
-    if(!sizeMatch(f))return false;
-    if(filterLangs.length>0&&!filterLangs.every(l=>(f.languages??[]).includes(l)))return false;
-    return true;
-  });
-  const sorted=[...filtered].sort((a,b)=>{
-    const da=a.date||'',db=b.date||'';
-    if(da===db)return 0;
-    return sortOrder==='newest'?(da<db?1:-1):(da<db?-1:1);
-  });
+  const removeFile=useCallback(p=>{
+    removeFromMap(setMap,p);
+    setSelected(s=>s?.path===p?null:s);
+  },[setMap]);
+  const [search,setSearch]=useState(browseMemory.search??'');
+  const [filters,setFilters]=useState(browseMemory.filters??NO_FILTERS);
+  const [sort,setSort]=useState(browseMemory.sort??DEFAULT_SORT);
+  const [openFacet,setOpenFacet]=useState(null);
+  useEffect(()=>{Object.assign(browseMemory,{search,filters,sort});},[search,filters,sort]);
+  const searchRef=useRef(null);
+  useEffect(()=>{                  // "/" jumps to the search box, as in most file/issue lists
+    const onKey=e=>{
+      const t=document.activeElement;
+      if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey||(t&&(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)||t.isContentEditable)))return;
+      e.preventDefault();searchRef.current?.focus();
+    };
+    document.addEventListener('keydown',onKey);
+    return()=>document.removeEventListener('keydown',onKey);
+  },[]);
+
+  const files=map?.files??NO_FILES;
+  const catOf=useMemo(()=>categoryMap(config),[config]);
+  const ctx=useMemo(()=>({catOf}),[catOf]);
+  const langName=useMemo(()=>Object.fromEntries((config?.languages??[]).map(l=>[l.code,l.name])),[config]);
+  const entries=useMemo(()=>files.map(f=>({f,hay:searchText(f,langName)})),[files,langName]);
+  // Every language that has files, configured ones first in their usual order.
+  const langOptions=useMemo(()=>{
+    const present=new Set(files.flatMap(f=>f.languages??[]));
+    const configured=(config?.languages??[]).map(l=>l.code).filter(c=>present.has(c));
+    const extra=[...present].filter(c=>!configured.includes(c)).sort();
+    return [...configured,...extra];
+  },[files,config]);
+  const deferredSearch=useDeferredValue(search);   // keep typing responsive; the list catches up
+  const sorted=useMemo(
+    ()=>sortFiles(filterFiles(entries,filters,deferredSearch,ctx).map(e=>e.f),sort,catOf),
+    [entries,filters,deferredSearch,ctx,sort,catOf]);
+  const counts=useMemo(()=>facetCounts(entries,filters,deferredSearch,ctx,langOptions),[entries,filters,deferredSearch,ctx,langOptions]);
+  const applied=useMemo(()=>appliedItems(filters),[filters]);
+
+  const toggleIn=useCallback((key,value)=>setFilters(f=>({...f,[key]:f[key].includes(value)?f[key].filter(v=>v!==value):[...f[key],value]})),[]);
+  const clearKey=useCallback(key=>setFilters(f=>({...f,[key]:[]})),[]);
+  const clearAll=()=>setFilters(NO_FILTERS);
+  const onSort=k=>setSort(s=>s.key===k?{key:k,dir:s.dir==='asc'?'desc':'asc'}:{key:k,dir:k==='date'?'desc':'asc'});
+
+  // New search / filter / sort starts again from the first page; a file being added or
+  // deleted does not, so the list doesn't jump back while you work down it.
+  const filterKey=JSON.stringify([deferredSearch,filters,sort]);
+  const [shown,setShown]=useState(BROWSE_PAGE);
+  useEffect(()=>setShown(BROWSE_PAGE),[filterKey]);
+  const visible=sorted.length>shown?sorted.slice(0,shown):sorted;
+  const hidden=sorted.length-visible.length;
+
+  const tag=(tone,text,hint)=><><Tag tone={tone}>{text}</Tag>{hint&&<span className="fb-hint">{hint}</span>}</>;
+  const opt=(key,list,node)=>list.map(([value,label])=>({value,label,count:counts[key][value]??0,node:node(value,label)}));
+  const kindOpts=opt('kinds',KIND_OPTIONS,(v,l)=>tag(v,l));
+  const formatOpts=opt('formats',FORMAT_OPTIONS,(v,l)=>tag(v,l));
+  const sizeOpts=opt('sizes',SIZE_OPTIONS,(v,l)=><span className="fb-mono">{l}</span>);
+  const statusOpts=opt('status',STATUS_OPTIONS,(v,l)=>tag(STATUS_TONE[v],l,STATUS_HINT[v]));
+  const langOpts=langOptions.map(code=>({value:code,label:langName[code]||code,search:`${code} ${langName[code]||''}`,count:counts.langs[code]??0,
+    node:<><span className="fb-code">{code}</span><span>{langName[code]||''}</span></>}));
+  const menu=(id,Ico,opts,extra)=>(
+    <FacetMenu id={id} name={FACET_NAME[id]} Ico={Ico} options={opts} selected={filters[id]} onToggle={v=>toggleIn(id,v)} onClear={()=>clearKey(id)}
+      open={openFacet===id} onOpen={setOpenFacet} {...extra}/>
+  );
+  const langMode=(
+    <span className="fb-mode" role="group" aria-label="Match">
+      Match
+      {['all','any'].map(m=>(
+        <button key={m} type="button" aria-pressed={filters.langMode===m} className={filters.langMode===m?'on':''} onClick={()=>setFilters(f=>({...f,langMode:m}))}>{m}</button>
+      ))}
+    </span>
+  );
+
+  const searching=deferredSearch.trim()!=='';
+  // Empty result: what each applied filter (or the search) is costing, so a dead end is one click from a way out.
+  const suggestions=useMemo(()=>{
+    if(sorted.length>0)return [];
+    const out=applied.map(it=>({label:`${it.k}: ${it.label}`,n:filterFiles(entries,withoutItem(filters,it),deferredSearch,ctx).length,remove:()=>setFilters(withoutItem(filters,it))}));
+    if(searching)out.push({label:`search “${deferredSearch.trim()}”`,n:filterFiles(entries,filters,'',ctx).length,remove:()=>setSearch('')});
+    return out.filter(s=>s.n>0).sort((a,b)=>b.n-a.n).slice(0,6);
+  },[sorted.length,applied,entries,filters,deferredSearch,ctx,searching]);
+
   return(
     <div>
-      <div className="browser-filters">
-        <button className="btn btn-folder" onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}>
-          <Icon.Folder/>Open Labels Folder
-        </button>
-        <div className="search-wrap" style={{width:260}}>
-          <span className="search-icon">&#128269;</span>
-          <input className="input" placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)}/>
+      <div className="fb">
+        <div className="fb-row">
+          <SearchBox value={search} onChange={setSearch} inputRef={searchRef}/>
+          <CategorySegment value={filters.cat} counts={counts.cat} onChange={cat=>setFilters(f=>({...f,cat}))}/>
+          {menu('kinds',Icon.Tag,kindOpts)}
+          {menu('formats',Icon.File,formatOpts)}
+          {menu('sizes',Icon.Ruler,sizeOpts)}
+          {langOptions.length>0&&menu('langs',Icon.Globe,langOpts,{searchable:true,footer:langMode})}
+          {menu('status',Icon.Flag,statusOpts)}
         </div>
-        {[['all','All',null],['PAM','PAM','active-pam'],['MO','MO','active-mo'],['CE','CE','active-ce']].map(([v,lbl,cls])=>(
-          <button key={v} className={'filter-chip '+(filterCat===v?(cls||'active'):'')} onClick={()=>setFilterCat(v)}>{lbl}</button>
-        ))}
-        <div style={{width:'100%',display:'flex',gap:8,flexWrap:'wrap',marginTop:6}}>
-          {[['all','All',null],['label','Label','active-label'],['box','Box','active-box']].map(([v,lbl,cls])=>(
-            <button key={v} className={'filter-chip '+(filterLabelType===v?(cls||'active'):'')} onClick={()=>setFilterLabelType(v)}>{lbl}</button>
-          ))}
-          <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-          {[['all','All',null],['indd','InDesign','active-indesign'],['idml','IDML','active-mo'],['print','Print','active-print']].map(([v,lbl,cls])=>(
-            <button key={v} className={'filter-chip '+(filterFileType===v?(cls||'active'):'')} onClick={()=>setFilterFileType(v)}>{lbl}</button>
-          ))}
-          <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-          {[['all','All sizes',null],['1kg-1l','1kg / 1L',null],['5kg-5l','5kg / 5L',null],['250g','250g',null],['500g','500g',null],['other','Other',null]].map(([v,lbl])=>(
-            <button key={v} className={'filter-chip '+(filterSize===v?'active':'')} onClick={()=>setFilterSize(v)}>{lbl}</button>
-          ))}
-          <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-          <button className={'filter-chip '+(filterWip==='wip'?'active-wip':'')} onClick={()=>setFilterWip(filterWip==='wip'?'all':'wip')}>WIP only</button>
-          <button className={'filter-chip '+(filterUnsorted?'active-wip':'')} onClick={()=>setFilterUnsorted(o=>!o)}>Unsorted</button>
-          <div style={{width:1,background:'var(--border2)',margin:'0 2px'}}/>
-          <button className={'filter-chip '+(sortOrder==='newest'?'active':'')} onClick={()=>setSortOrder('newest')} title="Sort by date, newest first">Newest first</button>
-          <button className={'filter-chip '+(sortOrder==='oldest'?'active':'')} onClick={()=>setSortOrder('oldest')} title="Sort by date, oldest first">Oldest first</button>
-          <span style={{marginLeft:'auto',fontSize:12,color:'var(--text3)',fontFamily:"'DM Mono',monospace",alignSelf:'center'}}>{filtered.length} files</span>
+        <div className="fb-row fb-summary">
+          <span className="fb-total">{applied.length>0||searching?`Showing ${sorted.length} of ${files.length} files`:`${files.length} files`}</span>
+          {applied.map(it=><FilterPill key={it.key+it.value} item={it} onRemove={()=>setFilters(withoutItem(filters,it))}/>)}
+          {applied.length>0&&<button type="button" className="fb-link" onClick={clearAll}>Clear all</button>}
+          <button type="button" className="btn btn-folder btn-sm fb-folder" onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}>
+            <Icon.Folder/>Open labels folder
+          </button>
         </div>
-        {(config?.languages??[]).filter(l=>l.enabled).length>0&&(
-          <div style={{position:'relative'}}>
-            <button className={'filter-chip '+(filterLangs.length>0?'active-lang':'')} onClick={()=>setLangOpen(o=>!o)}>
-              Language{filterLangs.length>0?` · ${filterLangs.join(', ')}`:''} {langOpen?'▴':'▾'}
-            </button>
-            {langOpen&&(
-              <div ref={langPopRef} className="lang-chips-row" style={{position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:50,width:280,display:'flex',flexWrap:'wrap',gap:8,alignItems:'center',background:'var(--surface)',border:'1px solid var(--border2)',borderRadius:'var(--radius-sm)',padding:10,boxShadow:'0 8px 28px var(--shadow-md)'}}>
-                {(config.languages).filter(l=>l.enabled).map(l=>(
-                  <button key={l.code} className={'filter-chip '+(filterLangs.includes(l.code)?'active-lang':'')} onClick={()=>toggleLang(l.code)}>
-                    {l.flag} {l.code}
-                  </button>
-                ))}
-                {filterLangs.length>0&&<button className="filter-chip" style={{opacity:.6}} onClick={()=>setFilterLangs([])}>✕ Clear</button>}
-              </div>
-            )}
-          </div>
-        )}
       </div>
       <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
         <div style={{flex:1,minWidth:0}}>
-          {filtered.length===0?(
-            <div className="empty-state"><div className="icon">&#128269;</div><p>No files match</p></div>
+          {sorted.length===0?(
+            <div className="empty-state">
+              <div className="icon"><Icon.Search size={34}/></div>
+              <p>No files match {searching?`“${deferredSearch.trim()}”`:''}{searching&&applied.length>0?' with ':''}{applied.length>0?'these filters':''}</p>
+              {suggestions.length>0&&(
+                <div className="fb-suggest">
+                  <span>Try removing</span>
+                  {suggestions.map(s=><button key={s.label} type="button" className="fb-sugg" onClick={s.remove}>{s.label}<b>{s.n} files</b></button>)}
+                </div>
+              )}
+              {(applied.length>0||searching)&&<button type="button" className="btn btn-primary" onClick={()=>{clearAll();setSearch('');}}>Clear search and filters</button>}
+            </div>
           ):(
-            <div className="card" style={{padding:0,overflow:'hidden'}}>
-              <table className="files-table">
-                <thead><tr><th>Filename</th><th>Product</th><th>Cat</th><th>Languages</th><th>Size</th><th>Date</th><th>Type</th><th></th></tr></thead>
+            <div className="card" style={{padding:0,overflowX:'auto'}}>
+              <table className="files-table browse">
+                <thead><tr>{COLUMNS.map(([k,l])=><SortTh key={k} k={k} label={l} sort={sort} onSort={onSort}/>)}</tr></thead>
                 <tbody>
-                  {sorted.map(f=>{
-                    const cat=getCategory(f.product);
-                    return(
-                      <tr key={f.filename+f.path} className={selected?.path===f.path?'row-selected':''} onClick={()=>setSelected(f)} style={{cursor:'pointer'}}>
-                        <td className="path-cell" title={f.path}>{f.filename}</td>
-                        <td style={{fontSize:13}}>{f.product??<span style={{color:'var(--text3)'}}>--</span>}</td>
-                        <td>{cat!=='?'&&<span className="topbar-badge" style={{background:cat==='PAM'?'rgba(var(--pam-rgb),.15)':cat==='CE'?'rgba(var(--accent-rgb),.15)':'rgba(var(--mo-rgb),.15)',color:cat==='PAM'?'var(--pam)':cat==='CE'?'var(--ce)':'var(--mo)'}}>{cat}</span>}</td>
-                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.languages?.join(' . ')??'--'}</td>
-                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{f.packaging??'--'}</td>
-                        <td style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:'var(--text3)'}}>{f.date??'--'}</td>
-                        <td><div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
-                          {f.print_file?<span className="topbar-badge" style={{background:'var(--surface3)',color:'var(--text)'}}>Print</span>:f.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
-                          {!f.print_file&&(f.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(var(--idml-rgb),.15)',color:'var(--idml)'}}>IDML</span>:<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>InDesign</span>)}
-                          {f.wip&&<span className="topbar-badge badge-wip">WIP</span>}
-                        </div></td>
-                        <td onClick={e=>e.stopPropagation()}><FileActions path={f.path} onDeleted={removeFile} sharepointBase={config?.sharepointBaseUrl}/></td>
-                      </tr>
-                    );
-                  })}
+                  {visible.map(f=>(
+                    <BrowseRow key={f.path} f={f} cat={catOf[f.product]} selected={selected?.path===f.path} onSelect={setSelected}/>
+                  ))}
                 </tbody>
               </table>
+              {hidden>0&&(
+                <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:'1px solid var(--border)'}}>
+                  <button className="btn" onClick={()=>setShown(n=>n+BROWSE_PAGE)}>Show {Math.min(BROWSE_PAGE,hidden)} more</button>
+                  <span style={{fontSize:12,color:'var(--text3)',fontFamily:"'DM Mono',monospace"}}>{visible.length} of {sorted.length} shown -- search or filter to narrow the list</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1448,9 +1718,9 @@ function FilePreviewPanel({file,sharepointBase,onDeleted}){
     <div className="card" ref={panelRef} style={panelStyle}>
       <div style={{fontSize:13,fontWeight:600,wordBreak:'break-word',lineHeight:1.3}}>{file.filename}</div>
       <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-        {file.print_file?<span className="topbar-badge" style={{background:'var(--surface3)',color:'var(--text)'}}>Print</span>:file.deze?<span className="topbar-badge badge-pam">Box</span>:<span className="topbar-badge badge-ok">Label</span>}
-        {!file.print_file&&(file.extension==='.idml'?<span className="topbar-badge" style={{background:'rgba(var(--idml-rgb),.15)',color:'var(--idml)'}}>IDML</span>:<span className="topbar-badge" style={{background:'rgba(var(--indd-rgb),.15)',color:'var(--indd)'}}>InDesign</span>)}
-        {file.wip&&<span className="topbar-badge badge-wip">WIP</span>}
+        {file.print_file?<BadgePrint/>:<BadgeKind f={file}/>}
+        {!file.print_file&&<BadgeFormat f={file}/>}
+        {file.wip&&<BadgeWip/>}
       </div>
       <div style={{fontSize:12,color:'var(--text2)',display:'flex',flexDirection:'column',gap:3}}>
         {file.product&&<div><b>Product:</b> {file.product}</div>}
@@ -1486,6 +1756,14 @@ function FilePreviewPanel({file,sharepointBase,onDeleted}){
     </div>
   );
 }
+const SettingCard=({title,desc,children,danger})=>(
+  <div style={{background:'var(--surface2)',border:'1px solid '+(danger?'rgba(var(--danger-rgb),.2)':'var(--border)'),borderRadius:'var(--radius-sm)',padding:'14px 16px'}}>
+    <div style={{fontSize:13,fontWeight:600,color:danger?'var(--danger)':'var(--text)',marginBottom:desc?3:10}}>{title}</div>
+    {desc&&<div style={{fontSize:12,color:'var(--text3)',marginBottom:12,lineHeight:1.5}}>{desc}</div>}
+    {children}
+  </div>
+);
+
 function Settings({config,saveConfig,setConfig,refreshMap}){
   const [tab,setTab]=useState('languages');
   const [cfg,setCfg]=useState(config);
@@ -1507,13 +1785,6 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
   const remL=i=>setCfg({...cfg,languages:cfg.languages.filter((_,j)=>j!==i)});
   const addL=()=>{if(!newLang.code.trim()||!newLang.name.trim())return;setCfg({...cfg,languages:[...cfg.languages,{...newLang,enabled:true}]});setNewLang({code:'',name:'',flag:''});};
   const handleScan=async()=>{setScanning(true);await refreshMap();setScanning(false);};
-  const SettingCard=({title,desc,children,danger})=>(
-    <div style={{background:'var(--surface2)',border:'1px solid '+(danger?'rgba(var(--danger-rgb),.2)':'var(--border)'),borderRadius:'var(--radius-sm)',padding:'14px 16px'}}>
-      <div style={{fontSize:13,fontWeight:600,color:danger?'var(--danger)':'var(--text)',marginBottom:desc?3:10}}>{title}</div>
-      {desc&&<div style={{fontSize:12,color:'var(--text3)',marginBottom:12,lineHeight:1.5}}>{desc}</div>}
-      {children}
-    </div>
-  );
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
       {/* Tab strip */}
@@ -1623,31 +1894,43 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
   );
 }
 
+// Debounced autosave for the Colors/Icons editors: save(value) runs `delay` ms
+// after the last change, and `saved` flashes for two seconds afterwards.
+function useAutosave(save,delay){
+  const timer=useRef(null);
+  const [saved,setSaved]=useState(false);
+  const schedule=useCallback(value=>{
+    clearTimeout(timer.current);
+    timer.current=setTimeout(()=>{save(value);setSaved(true);setTimeout(()=>setSaved(false),2000);},delay);
+  },[save,delay]);
+  return [saved,schedule];
+}
+
+const CategoryHeading=({cat,mb=6})=>(
+  <div style={{fontSize:11,fontWeight:500,color:catStyle(cat).color,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:mb,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
+);
+
 function Resources({config,saveConfig}){
   const [tab,setTab]=useState('products');
   const [cfg,setCfg]=useState(config);
   const [saved,setSaved]=useState(false);
   const [colors,setColors]=useState(null);
-  const [colorsSaved,setColorsSaved]=useState(false);
+  const [colorsSaved,scheduleColorsSave]=useAutosave(api.saveColors,900);
   const [swatchEdit,setSwatchEdit]=useState(null);
   const swatchPopRef=useRef(null);
-  const saveTimerRef=useRef(null);
   useEffect(()=>{
     if(!swatchEdit)return;
     const h=e=>{if(swatchPopRef.current&&!swatchPopRef.current.contains(e.target))setSwatchEdit(null);};
     document.addEventListener('mousedown',h);
     return()=>document.removeEventListener('mousedown',h);
   },[swatchEdit]);
-  const [resDirs,setResDirs]=useState(null);
   const [assets,setAssets]=useState({});
   const [iconLib,setIconLib]=useState(null);
   const [iconAssign,setIconAssign]=useState(null);
-  const [iconAssignSaved,setIconAssignSaved]=useState(false);
+  const [iconAssignSaved,scheduleIconSave]=useAutosave(api.saveIconAssignments,600);
   const [iconEditProd,setIconEditProd]=useState(null);
-  const iconSaveTimerRef=useRef(null);
   useEffect(()=>{
     api.getColors().then(r=>setColors(r.colors||{}));
-    api.getResourceDirs().then(r=>setResDirs(r));
     api.checkAssets().then(r=>{if(r&&!r.error)setAssets(r);});
     api.getIcons().then(r=>setIconLib(r));
     api.getIconAssignments().then(r=>setIconAssign(r.assignments||{}));
@@ -1657,8 +1940,7 @@ function Resources({config,saveConfig}){
     const next=curr.includes(iconId)?curr.filter(x=>x!==iconId):[...curr,iconId];
     const newAssign={...iconAssign,[prod]:next};
     setIconAssign(newAssign);
-    clearTimeout(iconSaveTimerRef.current);
-    iconSaveTimerRef.current=setTimeout(()=>{api.saveIconAssignments(newAssign);setIconAssignSaved(true);setTimeout(()=>setIconAssignSaved(false),2000);},600);
+    scheduleIconSave(newAssign);
   };
   const save=async()=>{await saveConfig(cfg);setSaved(true);setTimeout(()=>setSaved(false),2000);};
   const [syncing,setSyncing]=useState(false);
@@ -1681,12 +1963,9 @@ function Resources({config,saveConfig}){
     curr[idx]=hex;
     const newColors={...colors,[name]:curr};
     setColors(newColors);
-    clearTimeout(saveTimerRef.current);
-    saveTimerRef.current=setTimeout(()=>{api.saveColors(newColors);setColorsSaved(true);setTimeout(()=>setColorsSaved(false),2000);},900);
+    scheduleColorsSave(newColors);
   };
-  const moProds=(cfg?.products??[]).filter(p=>p.category==='MO').sort((a,b)=>a.name.localeCompare(b.name));
-  const pamProds=(cfg?.products??[]).filter(p=>p.category==='PAM').sort((a,b)=>a.name.localeCompare(b.name));
-  const ceProds=(cfg?.products??[]).filter(p=>p.category==='CE').sort((a,b)=>a.name.localeCompare(b.name));
+  const prodsByCat=['MO','PAM','CE'].map(cat=>[cat,(cfg?.products??[]).filter(p=>p.category===cat).sort((a,b)=>a.name.localeCompare(b.name))]);
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
       <div style={{flexShrink:0}}>
@@ -1731,10 +2010,9 @@ function Resources({config,saveConfig}){
                   <button className="btn btn-danger btn-sm" onClick={()=>remP(i)}>x</button>
                 </div>
               );};
-              const catColor=cat=>cat==='PAM'?'var(--pam)':cat==='CE'?'var(--ce)':'var(--mo)';
-              return [['MO',indexed.filter(p=>p.category==='MO')],['PAM',indexed.filter(p=>p.category==='PAM')],['CE',indexed.filter(p=>p.category==='CE')]].map(([cat,prods])=>(
+              return ['MO','PAM','CE'].map(cat=>[cat,indexed.filter(p=>p.category===cat)]).map(([cat,prods])=>(
                 <div key={cat} style={{marginBottom:16}}>
-                  <div style={{fontSize:11,fontWeight:500,color:catColor(cat),textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
+                  <CategoryHeading cat={cat}/>
                   {prods.sort((a,b)=>a.name.localeCompare(b.name)).map(renderItem)}
                 </div>
               ));
@@ -1759,9 +2037,9 @@ function Resources({config,saveConfig}){
           ):(
             <>
               <div style={{flex:1,overflowY:'auto',paddingRight:4,minHeight:0}}>
-                {[['MO',moProds],['PAM',pamProds],['CE',ceProds]].map(([cat,prods])=>prods.length===0?null:(
+                {prodsByCat.map(([cat,prods])=>prods.length===0?null:(
                   <div key={cat} style={{marginBottom:24}}>
-                    <div style={{fontSize:11,fontWeight:500,color:cat==='PAM'?'var(--pam)':cat==='CE'?'var(--ce)':'var(--mo)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
+                    <CategoryHeading cat={cat} mb={10}/>
                     {prods.map(p=>{
                       const swatches=(colors[p.name]||Array(6).fill('#808080'));
                       return(
@@ -1815,9 +2093,9 @@ function Resources({config,saveConfig}){
         <div className="view-anim" style={{display:'flex',gap:16,flex:1,minHeight:0}}>
           <div style={{width:210,flexShrink:0,display:'flex',flexDirection:'column',overflowY:'auto',paddingRight:4}}>
             <p className="section-title" style={{flexShrink:0}}>Products</p>
-            {[['MO',moProds],['PAM',pamProds],['CE',ceProds]].map(([cat,prods])=>prods.length===0?null:(
+            {prodsByCat.map(([cat,prods])=>prods.length===0?null:(
               <div key={cat} style={{marginBottom:14}}>
-                <div style={{fontSize:11,fontWeight:500,color:cat==='PAM'?'var(--pam)':cat==='CE'?'var(--ce)':'var(--mo)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6,fontFamily:"'DM Mono',monospace"}}>{cat}</div>
+                <CategoryHeading cat={cat}/>
                 {prods.map(p=>{
                   const n=(iconAssign?.[p.name]||[]).length;
                   return(

@@ -5,15 +5,15 @@ REM   Start_Etiketas.bat console   -> runs it with a visible console for debuggi
 cd /d "%~dp0"
 
 if /i "%~1"=="console" (
-    python etiketas.py
+    python app\etiketas.py
     pause
     exit /b
 )
 
 where pythonw >nul 2>&1
 if %errorlevel%==0 (
-    start "" pythonw.exe etiketas.py
+    start "" pythonw.exe app\etiketas.py
 ) else (
-    start "" pyw.exe etiketas.py
+    start "" pyw.exe app\etiketas.py
 )
 exit /b
