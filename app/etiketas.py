@@ -17,7 +17,8 @@ from labelnames import Catalogue, label_entry, label_kind, norm_name, pack_amoun
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 # Project layout: this file lives in app/ (code, default config, the web UI in app/static/);
-# the files the app works with -- icons, logos, QR codes, IDML templates -- are in assets/.
+# icons and mockup photos are in assets/. Templates, QR codes, logos and translations live in
+# the shared "Marketing - Label Resources" OneDrive folder (see RESOURCE_DIRS).
 APP_DIR    = Path(__file__).parent
 BASE_DIR   = APP_DIR.parent
 ASSETS_DIR = BASE_DIR / "assets"
@@ -25,10 +26,6 @@ LOG_FILE   = APP_DIR / "etiketas.log"
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 STATIC_DIR = APP_DIR / "static"
 LABELS_DIR = Path.home() / "Documents" / "Etiketas"
-QR_DIR          = ASSETS_DIR / "qrcodes"
-LOGO_DIR        = ASSETS_DIR / "logos"
-TEMPLATE_DIR    = ASSETS_DIR / "templates"
-TRANSLATIONS_DIR = BASE_DIR / "translations"
 ICONS_DIR       = ASSETS_DIR / "icons"
 LOGO_THUMB_DIR = LABELS_DIR / ".cache" / "logo_thumbs"
 FILE_THUMB_DIR = LABELS_DIR / ".cache" / "file_thumbs"
@@ -821,21 +818,40 @@ def fill_idml(path, *, is_label, is_template, colors, qr_path, logo_path, box_mu
         pkg.save()
     return ops
 
-# Folders the user can point elsewhere in Settings -> Paths (a synced OneDrive folder, say):
-# config key -> the app's own folder, used while the setting is blank (as it is on install).
-RESOURCE_DIRS = {
-    "templatesDir":    TEMPLATE_DIR,
-    "qrCodesDir":      QR_DIR,
-    "logosDir":        LOGO_DIR,
-    "translationsDir": TRANSLATIONS_DIR,
+# Templates, QR codes, logos and translations come from the shared "Marketing - Label Resources"
+# folder, synced to each PC by OneDrive. It is found per PC (the user name is in the path), the
+# same way install.ps1 looks for it -- the config holding any custom folder (Settings -> Paths)
+# is shared by everyone, so a blank setting means "this PC's copy of the shared folder".
+RESOURCES_FOLDER = "Marketing - Label Resources"
+RESOURCE_DIRS = {                   # config key -> folder inside RESOURCES_FOLDER
+    "templatesDir":    "Templates",
+    "qrCodesDir":      "QR Codes",
+    "logosDir":        "Logos",
+    "translationsDir": "QR Info and Translations/Translations",
 }
 
+def shared_resources_dir() -> Path:
+    """This PC's synced RESOURCES_FOLDER: under "OneDrive - Nando, UAB", else under any other
+    OneDrive folder in the user profile; where it is expected if it isn't synced (yet)."""
+    home = Path.home()
+    expected = home / "OneDrive - Nando, UAB" / RESOURCES_FOLDER
+    if expected.is_dir():
+        return expected
+    for onedrive in sorted(home.glob("OneDrive*")):
+        if (onedrive / RESOURCES_FOLDER).is_dir():
+            return onedrive / RESOURCES_FOLDER
+    return expected
+
+def default_resource_dir(key: str) -> Path:
+    return shared_resources_dir() / RESOURCE_DIRS[key]
+
 def _resource_dir(key: str, cfg: dict = None) -> Path:
-    """The live folder for a RESOURCE_DIRS key: the user's setting, else the default."""
+    """The live folder for a RESOURCE_DIRS key: the custom folder if one is set (~ and %VARS%
+    are expanded, so one setting can suit every PC), else the shared folder's."""
     if cfg is None:
         cfg = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
     override = (cfg.get(key) or "").strip()
-    return Path(override) if override else RESOURCE_DIRS[key]
+    return Path(os.path.expandvars(override)).expanduser() if override else default_resource_dir(key)
 
 def get_translations_dir(cfg: dict = None) -> Path:
     return _resource_dir("translationsDir", cfg)
@@ -851,7 +867,7 @@ def get_logo_dir(cfg: dict = None) -> Path:
 
 def list_translations(translations_dir: Path = None):
     files = []
-    translations_dir = translations_dir or TRANSLATIONS_DIR
+    translations_dir = translations_dir or get_translations_dir()
     if not translations_dir.exists():
         return files
     for f in sorted(translations_dir.rglob("*.json")):
@@ -1716,7 +1732,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({
             "labels": str(LABELS_DIR),
             **{k: str(v) for k, v in live.items()},
-            "defaults": {k: str(v) for k, v in RESOURCE_DIRS.items()},
+            "defaults": {k: str(default_resource_dir(k)) for k in RESOURCE_DIRS},
             "missing": [k for k, v in live.items() if not v.is_dir()],
         })
 

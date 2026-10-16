@@ -1996,7 +1996,7 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
 
         {tab==='paths'&&(
           <div style={{display:'flex',flexDirection:'column',gap:8,overflowY:'auto'}}>
-            <SettingCard title="Folders" desc="Where the app reads templates, QR codes, logos and translations from -- point one at a synced OneDrive folder to share it. Leave a field blank to use the app's own folder, which is what a new install uses.">
+            <SettingCard title="Folders" desc="Where the app reads templates, QR codes, logos and translations from. Leave a field blank to use the shared 'Marketing - Label Resources' OneDrive folder on this PC -- the default. These settings are shared by everyone who uses the labels folder, so a custom folder should exist on every PC; ~ stands for each user's own profile folder.">
               <div style={{display:'flex',flexDirection:'column',gap:12}}>
                 {[
                   ['templatesDir','templates','Templates','IDML template files used when creating labels'],
@@ -2025,14 +2025,6 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
                 {saved&&<span style={{fontSize:12,color:'var(--success)'}}>✓ Saved</span>}
               </div>
             </SettingCard>
-            <div style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>Labels output</div>
-                <div style={{fontSize:11,color:'var(--text3)',marginBottom:4}}>Where generated label files are saved</div>
-                <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:resDirs?.labels?'var(--accent)':'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={resDirs?.labels||''}>{resDirs?.labels||'—'}</div>
-              </div>
-              <button className="btn btn-folder btn-sm" disabled={!resDirs?.labels} onClick={()=>resDirs?.labels&&api.openFile(resDirs.labels)} title="Open in Explorer"><Icon.Folder/></button>
-            </div>
           </div>
         )}
 

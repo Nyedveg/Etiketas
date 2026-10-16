@@ -9,7 +9,9 @@
 
     Install / update:
     1. Confirms the shared OneDrive/SharePoint folder is synced to this PC
-       (hard requirement -- stops here if it isn't).
+       (hard requirement -- stops here if it isn't), and looks for the shared
+       "Marketing - Label Resources" folder with the templates, QR codes, logos and
+       translations (only warns if it, or a folder in it, is missing).
     2. Confirms Python is installed.
     3. Downloads the latest Etiketas from GitHub and checks it. The installed copy is only
        touched after that has worked, so a failed download changes nothing.
@@ -40,6 +42,8 @@ param(
     [string]$ShortcutDir = [Environment]::GetFolderPath('Desktop'),
     # The shared OneDrive folder, and the link to it that the app reads its labels through.
     [string]$OneDriveFolder = (Join-Path $env:USERPROFILE 'OneDrive - Nando, UAB\Marketing - Etiketas'),
+    # The shared folder the app reads its templates, QR codes, logos and translations from.
+    [string]$ResourcesFolder = (Join-Path $env:USERPROFILE 'OneDrive - Nando, UAB\Marketing - Label Resources'),
     [string]$LabelsDir      = (Join-Path $env:USERPROFILE 'Documents\Etiketas')
 )
 
@@ -93,11 +97,11 @@ function Assert-SafeInstallDir([string]$dir, [bool]$mustExist) {
     if ($depth -lt 3) { Stop-Setup "Refusing to use '$full' as the install folder -- it is too close to the top of the drive." }
     $protected = @($env:USERPROFILE, $env:LOCALAPPDATA, $env:APPDATA, $env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)},
                    (Join-Path $env:LOCALAPPDATA 'Programs'), [Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('MyDocuments'),
-                   $LabelsDir, $OneDriveFolder, (Split-Path -Parent $OneDriveFolder)) |
+                   $LabelsDir, $OneDriveFolder, (Split-Path -Parent $OneDriveFolder), $ResourcesFolder) |
                  Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd('\') }
     if ($protected -contains $full) { Stop-Setup "Refusing to use '$full' as the install folder -- it is a folder that holds your own files." }
-    # the install folder must not contain the labels (it would be deleted with it)
-    foreach ($data in @($LabelsDir, $OneDriveFolder)) {
+    # the install folder must not contain the labels or the shared resources (they would be deleted with it)
+    foreach ($data in @($LabelsDir, $OneDriveFolder, $ResourcesFolder)) {
         $d = [IO.Path]::GetFullPath($data).TrimEnd('\')
         if ($d.ToLower().StartsWith($full.ToLower() + '\')) { Stop-Setup "Refusing to use '$full' as the install folder -- your labels folder ($d) is inside it." }
     }
@@ -239,6 +243,36 @@ if (-not $resolvedOneDrive) {
     exit 1
 }
 Write-Ok "Found: $resolvedOneDrive"
+
+# ---- Step 1b: the shared label resources -- wanted, but not a reason to stop -------
+# The app finds this folder itself (the same way) and reads its templates, QR codes, logos and
+# translations from it, unless other folders are set in Settings -> Paths.
+Write-Step "Checking for the shared label resources folder"
+$resourceIssues = @()
+$resolvedResources = $null
+if (Test-Path -LiteralPath $ResourcesFolder -PathType Container) {
+    $resolvedResources = $ResourcesFolder
+} else {
+    foreach ($c in (Get-ChildItem -LiteralPath $env:USERPROFILE -Directory -Filter 'OneDrive*' -ErrorAction SilentlyContinue)) {
+        $maybe = Join-Path $c.FullName 'Marketing - Label Resources'
+        if (Test-Path -LiteralPath $maybe -PathType Container) { $resolvedResources = $maybe; break }
+    }
+}
+if (-not $resolvedResources) {
+    $resourceIssues += 'the Marketing - Label Resources folder'
+    Write-Warn "Could not find a synced 'Marketing - Label Resources' folder under any OneDrive folder in your profile."
+    Write-Warn "Etiketas installs anyway, but finds no templates, QR codes, logos or translations until you sync"
+    Write-Warn "that folder (the same way as 'Marketing - Etiketas') or choose other folders in Settings -> Paths."
+} else {
+    Write-Ok "Found: $resolvedResources"
+    foreach ($sub in @(@('Templates', 'templates'), @('QR Codes', 'QR codes'), @('Logos', 'logos'),
+                       @('QR Info and Translations\Translations', 'translations'))) {
+        if (-not (Test-Path -LiteralPath (Join-Path $resolvedResources $sub[0]) -PathType Container)) {
+            $resourceIssues += $sub[1]
+            Write-Warn "There is no '$($sub[0])' folder in it -- Etiketas will have no $($sub[1]) until there is (or another folder is set in Settings -> Paths)."
+        }
+    }
+}
 
 # ---- Step 2: Python ----------------------------------------------------------
 Write-Step "Checking for Python"
@@ -409,5 +443,8 @@ Write-Host "   $InstallDir\Start_Etiketas.bat console    (with a debug console)"
 Write-Host " To update later, run install.bat again. To remove it: uninstall.bat"
 if (-not $linked) {
     Write-Host "`n NOTE: the labels folder link was not set up -- see the warning above." -ForegroundColor Yellow
+}
+if ($resourceIssues.Count -gt 0) {
+    Write-Host "`n NOTE: missing $($resourceIssues -join ', ') -- see the warning above." -ForegroundColor Yellow
 }
 Write-Host "======================================="

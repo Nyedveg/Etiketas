@@ -32,6 +32,32 @@ already consistent per Microsoft 365 tenant, and `%USERPROFILE%`
 automatically resolves to each person's own home folder — so nobody
 needs to type their own username anywhere.
 
+### The shared label resources folder
+
+Templates, QR codes, logos and translations come from a second shared folder,
+**"Marketing - Label Resources"**. Sync it the same way, so it ends up at
+`%USERPROFILE%\OneDrive - Nando, UAB\Marketing - Label Resources`, with these
+folders in it:
+
+| Folder | Holds |
+|---|---|
+| `Templates` | the IDML label templates |
+| `QR Codes` | `{product}_QR.png` |
+| `Logos` | `{product}_LOGO.*` |
+| `QR Info and Translations\Translations` | the translation JSON files |
+
+Unlike "Marketing - Etiketas", this one isn't required to install: the
+installer warns if the folder, or one of the folders in it, is missing, and
+carries on. Etiketas finds it on each PC by itself, under the person's own
+OneDrive folder. Until it is synced, the app has no templates, QR codes, logos
+or translations.
+
+To use other folders instead, set them in **Settings → Paths**. Those
+settings are stored with the labels, so they apply to everyone. Use `~` for
+the person's own home folder (for example `~\OneDrive - Nando, UAB\...`), not
+a path with your own username in it. Leaving a field blank goes back to the
+shared folder.
+
 ## One-time setup: if you already have Etiketas data (do this once)
 
 You have real files sitting in `Documents\Etiketas` already. **Move**
