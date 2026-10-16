@@ -9,6 +9,10 @@ __pycache__/
 # instead of committing one that only works on the machine that made it
 *.lnk
 
+# VS Code workspace and editor settings -- personal, not part of the app
+*.code-workspace
+.vscode/
+
 # Local run logs
 *.log
 
