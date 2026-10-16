@@ -5,12 +5,12 @@ Run with:  python app/etiketas.py   (or double-click Etiketas.vbs / Start_Etiket
 Opens at:  http://127.0.0.1:7842
 """
 
-import ctypes, html, io, json, mimetypes, os, re, shutil, socket, stat, sys, threading, time, webbrowser, subprocess, zipfile
+import ctypes, html, io, json, mimetypes, os, re, shutil, socket, stat, sys, threading, time, traceback, webbrowser, subprocess, zipfile
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qs, quote, unquote
 
 import organizer
 from labelnames import Catalogue, label_entry, label_kind, norm_name, pack_amount, take_date
@@ -32,6 +32,8 @@ TRANSLATIONS_DIR = BASE_DIR / "translations"
 ICONS_DIR       = ASSETS_DIR / "icons"
 LOGO_THUMB_DIR = LABELS_DIR / ".cache" / "logo_thumbs"
 FILE_THUMB_DIR = LABELS_DIR / ".cache" / "file_thumbs"
+MOCKUP_CACHE_DIR = LABELS_DIR / ".cache" / "mockups"
+MOCKUP_DIR     = ASSETS_DIR / "mockups"
 MAP_FILE     = LABELS_DIR / "labels_map.json"
 CFG_FILE     = LABELS_DIR / "app_config.json"
 COLORS_FILE  = LABELS_DIR / "colors_config.json"
@@ -225,11 +227,12 @@ def dim_key_for(prod_cfg: dict) -> str:
     return "MO_liquid" if (category == "MO" and unit == "L") else "MO"
 
 def scan_templates():
-    """The IDML templates in TEMPLATE_DIR that follow the template naming convention."""
+    """The IDML templates in the templates folder that follow the template naming convention."""
     templates = []
-    if not TEMPLATE_DIR.exists():
+    template_dir = get_template_dir()
+    if not template_dir.exists():
         return templates
-    for root, dirs, fnames in os.walk(TEMPLATE_DIR):
+    for root, dirs, fnames in os.walk(template_dir):
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for fname in fnames:
             if fname.startswith('.') or Path(fname).suffix.lower() != '.idml':
@@ -818,13 +821,33 @@ def fill_idml(path, *, is_label, is_template, colors, qr_path, logo_path, box_mu
         pkg.save()
     return ops
 
-def get_translations_dir(cfg: dict = None) -> Path:
-    """Live translations folder -- cfg['translationsDir'] if the user has set
-    one (Settings -> Paths), else the app's own bundled "translations" folder."""
+# Folders the user can point elsewhere in Settings -> Paths (a synced OneDrive folder, say):
+# config key -> the app's own folder, used while the setting is blank (as it is on install).
+RESOURCE_DIRS = {
+    "templatesDir":    TEMPLATE_DIR,
+    "qrCodesDir":      QR_DIR,
+    "logosDir":        LOGO_DIR,
+    "translationsDir": TRANSLATIONS_DIR,
+}
+
+def _resource_dir(key: str, cfg: dict = None) -> Path:
+    """The live folder for a RESOURCE_DIRS key: the user's setting, else the default."""
     if cfg is None:
         cfg = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
-    override = cfg.get("translationsDir")
-    return Path(override) if override else TRANSLATIONS_DIR
+    override = (cfg.get(key) or "").strip()
+    return Path(override) if override else RESOURCE_DIRS[key]
+
+def get_translations_dir(cfg: dict = None) -> Path:
+    return _resource_dir("translationsDir", cfg)
+
+def get_template_dir(cfg: dict = None) -> Path:
+    return _resource_dir("templatesDir", cfg)
+
+def get_qr_dir(cfg: dict = None) -> Path:
+    return _resource_dir("qrCodesDir", cfg)
+
+def get_logo_dir(cfg: dict = None) -> Path:
+    return _resource_dir("logosDir", cfg)
 
 def list_translations(translations_dir: Path = None):
     files = []
@@ -983,25 +1006,27 @@ def _first_by_key(files, key):
     return index
 
 def _qr_index() -> dict:
-    """norm_name(product) -> its {product}_QR.png in QR_DIR."""
-    if not QR_DIR.exists():
+    """norm_name(product) -> its {product}_QR.png in the QR codes folder."""
+    qr_dir = get_qr_dir()
+    if not qr_dir.exists():
         return {}
-    return _first_by_key(sorted(QR_DIR.glob("*_QR.png")),
+    return _first_by_key(sorted(qr_dir.glob("*_QR.png")),
                          lambda f: norm_name(re.sub(r'_qr$', '', f.stem, flags=re.I)))
 
 def _logo_index() -> dict:
-    """norm_name(file stem) -> the logo file ({product}_LOGO.*) in LOGO_DIR."""
-    if not LOGO_DIR.exists():
+    """norm_name(file stem) -> the logo file ({product}_LOGO.*) in the logos folder."""
+    logo_dir = get_logo_dir()
+    if not logo_dir.exists():
         return {}
-    return _first_by_key((f for f in sorted(LOGO_DIR.iterdir()) if f.is_file()),
+    return _first_by_key((f for f in sorted(logo_dir.iterdir()) if f.is_file()),
                          lambda f: norm_name(f.stem))
 
 def find_qr_for_product(product_name):
-    """The {product}_QR.png in QR_DIR (case/space insensitive), or None."""
+    """The {product}_QR.png in the QR codes folder (case/space insensitive), or None."""
     return _qr_index().get(norm_name(product_name))
 
 def find_logo_for_product(product_name):
-    """The {product}_LOGO.* in LOGO_DIR (case/space insensitive), or None."""
+    """The {product}_LOGO.* in the logos folder (case/space insensitive), or None."""
     return _logo_index().get(norm_name(product_name) + "logo")
 
 def _trim_to_content(img):
@@ -1299,6 +1324,140 @@ def get_file_thumbnail(rel_path: str, page: int = 0):
                        lambda: _render_pdf_png(full, page, 320, 2.0, False))
     return (data, "image/png") if data else None
 
+# ── Package mockups (Browse Files) ──────────────────────────────────────────────
+# A label's print PDF shown on a photo of its package -- see mockups.py and
+# assets/mockups/mockups.json. mockups needs numpy, so it is only imported here.
+_MOCKUP_LOCK = threading.Lock()      # one render at a time: each holds a few 100 MB
+_MOCKUP_PREVIEW, _MOCKUP_EXPORT = 900, 2000
+
+def _mockups_module():
+    try:
+        import mockups
+        return mockups, None
+    except ImportError as exc:
+        return None, f"Mockups need the {exc.name or 'numpy'} package (pip install numpy)."
+
+def _label_pdf_for(full: Path):
+    """The PDF a mockup is made from: the file itself, or for an .indd/.idml the PDF
+    exported next to it under the same name (the +2mm print one first, then the newest)."""
+    from glob import escape
+    if full.suffix.lower() == ".pdf":
+        return full
+    twins = list(full.parent.glob(escape(full.stem) + "*.pdf"))
+    return max(twins, key=lambda f: ("2mm" in f.name.lower(), f.stat().st_mtime)) if twins else None
+
+def _mockup_plan(rel_path: str):
+    """(plan, None) with what a label's mockup is made of, or (None, reason). None
+    overall for a bad path."""
+    full = _resolve_label_path(rel_path)
+    if full is None:
+        return None
+    mk, missing = _mockups_module()
+    if mk is None:
+        return None, missing
+    cfg = merged_config()
+    entry = label_entry(rel_path, full.name, make_catalogue(cfg))
+    if entry["deze"]:
+        return None, "Box labels have no mockup."
+    prod = next((p for p in cfg.get("products", []) if p["name"] == entry["product"]), None)
+    if prod is None:
+        return None, "The label’s product isn’t known, so there is no picture to put it on."
+    name, photo = mk.choose(MOCKUP_DIR, prod.get("category"), prod.get("acidic", False), entry["packaging"])
+    if name is None:
+        return None, photo
+    pdf = _label_pdf_for(full)
+    if pdf is None:
+        return None, "A mockup is made from the label’s PDF, and there isn’t one next to this file."
+    try:
+        pages = len(mk.label_info(pdf, entry["dimensions"]))
+    except Exception as exc:
+        return None, f"Could not read the label’s PDF ({exc.__class__.__name__})."
+    if not pages:
+        return None, "The label’s PDF has no pages."
+    # changes whenever the label, the photo or its settings change
+    token = "|".join(str(int(f.stat().st_mtime)) for f in (pdf, MOCKUP_DIR / photo["photo"], MOCKUP_DIR / "mockups.json",
+                                                           Path(mk.__file__)))
+    return {"mk": mk, "name": name, "photo": photo, "pdf": pdf, "made_from": pdf.name if pdf != full else None,
+            "dims": entry["dimensions"],
+            "views": mk.views_for(photo, pages), "token": token}, None
+
+def get_mockup_info(rel_path: str):
+    """What the preview panel needs to offer a mockup, or None for a bad path."""
+    got = _mockup_plan(rel_path)
+    if got is None:
+        return None
+    plan, reason = got
+    if plan is None:
+        return {"available": False, "reason": reason}
+    import hashlib
+    return {"available": True, "photo": plan["name"], "views": plan["views"],
+            "made_from": plan["made_from"],
+            "rev": hashlib.sha1(plan["token"].encode()).hexdigest()[:10]}
+
+def get_product_mockup(product: str):
+    """The mockup for a product's page: its newest label that has a mockup picture (newest by the
+    date in the file name -- file dates are reset by OneDrive sync; then finished before WIP, then
+    most recently made by this app, then the print PDF), with that label's mockup info."""
+    files = [f for f in load_json(MAP_FILE, {}).get("files", []) if f.get("product") == product and not f.get("deze")]
+    if not files:
+        return {"available": False, "reason": "There are no labels for this product yet."}
+    made = {}                                    # file stem -> when this app made it
+    for h in load_json(HISTORY_FILE, []) or []:
+        for f in h.get("files", []):
+            made.setdefault(Path(f.get("path", "")).stem.lower(), h.get("timestamp", ""))
+    def made_at(f):                              # its print PDF is named after the InDesign file
+        stem = Path(f["path"]).stem.lower()
+        return max((t for s, t in made.items() if s and stem.startswith(s)), default="")
+    files.sort(key=lambda f: (f.get("date") or "", not f.get("wip"), made_at(f), bool(f.get("print_file")),
+                              f.get("extension") == ".pdf", f["path"]), reverse=True)
+    first_reason, tried = None, set()
+    for f in files:
+        if f.get("packaging") in tried:          # same pack, same (missing) picture
+            continue
+        info = get_mockup_info(f["path"])
+        if info and info.get("available"):
+            return {**info, "path": f["path"], "filename": f["filename"], "date": f.get("date"),
+                    "packaging": f.get("packaging")}
+        if info and info.get("reason", "").startswith("There is no mockup picture"):
+            tried.add(f.get("packaging"))
+        first_reason = first_reason or (info or {}).get("reason")
+    return {"available": False, "reason": first_reason or "None of this product’s labels can be shown as a mockup."}
+
+def get_mockup(rel_path: str, view: str, export: bool):
+    """(bytes, mime) of a label's mockup: a quick JPEG preview (cached on disk) or a
+    full-size PNG to save. None if there is none."""
+    got = _mockup_plan(rel_path)
+    plan = got and got[0]
+    if not plan or view not in plan["views"]:
+        return None
+    size, fmt, ext = (_MOCKUP_EXPORT, "PNG", "png") if export else (_MOCKUP_PREVIEW, "JPEG", "jpg")
+    def make():
+        with _MOCKUP_LOCK:
+            return plan["mk"].render(MOCKUP_DIR, plan["photo"], plan["pdf"], plan["dims"], view, size, fmt)
+    if export:                       # saved by the user anyway, and big: not worth keeping
+        try:
+            return make(), "image/png"
+        except Exception:
+            print(f"mockup export failed for {rel_path}", file=sys.stderr); traceback.print_exc()
+            return None
+    import hashlib
+    slug = f"{_slug(rel_path)}_{view}{size}"
+    key = hashlib.sha1(plan["token"].encode()).hexdigest()[:10]
+    cache_file = MOCKUP_CACHE_DIR / f"{slug}_{key}.{ext}"
+    if cache_file.exists():
+        return cache_file.read_bytes(), "image/jpeg"
+    try:
+        data = make()
+    except Exception:
+        print(f"mockup failed for {rel_path}", file=sys.stderr); traceback.print_exc()
+        return None
+    MOCKUP_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    for f in MOCKUP_CACHE_DIR.glob(f"{slug}_*.{ext}"):        # made from an older label / photo
+        if re.fullmatch(re.escape(slug) + r"_[0-9a-f]{10}\." + ext, f.name):
+            f.unlink(missing_ok=True)
+    cache_file.write_bytes(data)
+    return data, "image/jpeg"
+
 # ── Open file/folder in OS ─────────────────────────────────────────────────────
 def open_path(p):
     if os.name == "nt":
@@ -1515,6 +1674,9 @@ class Handler(BaseHTTPRequestHandler):
         "/api/assets_check":    "api_assets_check",
         "/api/logo_thumb":      "api_logo_thumb",
         "/api/file_thumb":      "api_file_thumb",
+        "/api/mockup_info":     "api_mockup_info",
+        "/api/mockup":          "api_mockup",
+        "/api/product_mockup":  "api_product_mockup",
         "/api/file_info":       "api_file_info",
         "/api/export":          "api_export",
     }
@@ -1548,12 +1710,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"path": str(LABELS_DIR)})
 
     def api_resource_dirs(self):
+        cfg = load_config()
+        live = {"logos": get_logo_dir(cfg), "qrcodes": get_qr_dir(cfg), "templates": get_template_dir(cfg),
+                "translations": get_translations_dir(cfg)}
         self.send_json({
-            "labels":       str(LABELS_DIR),
-            "logos":        str(LOGO_DIR),
-            "qrcodes":      str(QR_DIR),
-            "templates":    str(TEMPLATE_DIR),
-            "translations": str(get_translations_dir()),
+            "labels": str(LABELS_DIR),
+            **{k: str(v) for k, v in live.items()},
+            "defaults": {k: str(v) for k, v in RESOURCE_DIRS.items()},
+            "missing": [k for k, v in live.items() if not v.is_dir()],
         })
 
     def api_sync_status(self):
@@ -1605,6 +1769,36 @@ class Handler(BaseHTTPRequestHandler):
             self.send_image(*result)
         else:
             self.send_404()
+
+    def api_mockup_info(self):
+        rel = self._arg("path")
+        info = get_mockup_info(rel) if rel else None
+        if info is not None:
+            self.send_json(info)
+        else:
+            self.send_404()
+
+    def api_product_mockup(self):
+        product = self._arg("product")
+        if product:
+            self.send_json(get_product_mockup(product))
+        else:
+            self.send_404()
+
+    def api_mockup(self):
+        rel, view = self._arg("path"), self._arg("view", "front")
+        export = self._arg("download") == "1"
+        result = get_mockup(rel, view, export) if rel else None
+        if not result:
+            return self.send_404()
+        if export:
+            name = Path(rel).stem + ("_mockup_back" if view == "back" else "_mockup") + ".png"
+            ascii_name = re.sub(r'[^A-Za-z0-9._ +()-]', '_', name)
+            self._send(200, result[0], result[1], {
+                "Content-Disposition": f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(name)}',
+                "Cache-Control": "no-store"})
+        else:
+            self.send_image(*result)
 
     def api_file_info(self):
         rel = self._arg("path")

@@ -1,0 +1,36 @@
+{
+  "_about": [
+    "Which picture a label is shown on in Browse > preview > Mockup, and how. The photos are squares: the mockup is the whole picture.",
+    "A label uses the entry named <CATEGORY>[_pH]_<pack> (_pH for acidic products; pack as 1l, 5l, 250ml, 1kg, 250g ...),",
+    "  or else the entry named <CATEGORY>[_pH] whose 'packs' cover its pack ('*g' = every g and kg pack).",
+    "  Failing both, a category listed in 'same_as' uses that category's picture (MO liquids come in PAM's bottles and canisters).",
+    "kind 'wrap': wrapped round the white bottle (calibrated to PAM_1l.jpg; the body is resized to the label, which is how",
+    "  the 250 ml bottle is made).",
+    "kind 'panel': a label on a flat or soft surface.",
+    "  area        the four corners (top-left, top-right, bottom-right, bottom-left; photo px) of the surface the label is",
+    "              fitted into, keeping its proportions -- a turned face is a slanted shape, and the label follows it.",
+    "  area_ratio  the real width / height of that area, when the photo shows it foreshortened (default: as it looks).",
+    "  curve       [top, bottom]: how far (photo px) the area's top and bottom lines dip at the middle; the label bows with them.",
+    "  inset       margin left round the label, as a share of the area's height.",
+    "  paper       the label paper's colour as a share of white, per R, G, B (1, 1, 1 = pure white).",
+    "  shadows     opacity of the photo's shading laid over the label in Multiply (0..1).",
+    "  contrast    Levels on that shading before it is laid over (1 = as photographed, 2 = shadows twice as deep).",
+    "  flatten     shade only by the surface's own creases, not the light across it: the size (share of the label width)",
+    "              of what counts as a crease.",
+    "  highlights  opacity of the photo's highlights laid over it in Screen (0..1).",
+    "  detail      how fine the shading is, as a share of the label width (smaller = sharper creases).",
+    "  bulge       how much the label's edges bow out on a puffed-up surface (0.03 = slight).",
+    "  falloff     how much darker the label's corners are, where that surface turns from the light (0..1).",
+    "  displace    [x, y] displacement-map strength, as a share of the picture: the label bends with the folds of the",
+    "              surface (used for the foil pouch)."
+  ],
+  "same_as": {"MO": "PAM"},
+  "photos": {
+    "PAM_1l":    {"kind": "wrap", "photo": "PAM_1l.jpg"},
+    "PAM_250ml": {"kind": "wrap", "photo": "PAM_1l.jpg"},
+    "PAM_5l":    {"kind": "panel", "photo": "PAM_5l.jpg", "area": [[680, 1247], [2065, 1247], [2065, 2345], [680, 2345]], "curve": [15, 20], "inset": 0.015, "shadows": 0.55, "highlights": 0.25, "detail": 0.008},
+    "PAM_20l":   {"kind": "panel", "photo": "PAM_20l.jpg", "area": [[830, 862], [1850, 862], [1850, 2112], [830, 2112]], "inset": 0.01, "shadows": 0.55, "highlights": 0.25, "detail": 0.008},
+    "PAM_pH":    {"kind": "panel", "photo": "PAM_pH_canister.jpg", "packs": ["1l", "5l"], "area": [[649, 805], [1984, 791], [1984, 2052], [649, 2055]], "inset": 0.04, "shadows": 0.6, "highlights": 0.3, "detail": 0.01},
+    "MO":        {"kind": "panel", "photo": "MO_pouch.jpg", "packs": ["*g"], "area": [[1177, 1406], [2677, 1406], [2677, 2886], [1177, 2886]], "paper": [0.975, 0.982, 0.995], "flatten": 0.03, "shadows": 0.65, "contrast": 1.5, "highlights": 0.05, "detail": 0.008, "bulge": 0.035, "falloff": 0.12, "displace": [0.005, 0.0015]}
+  }
+}

@@ -29,6 +29,8 @@ const api = {
   listTranslations:   ()    => api.get('/api/translations'),
   getSyncStatus:      ()    => api.get('/api/sync_status'),
   getFileInfo:        (p)   => api.get('/api/file_info?path='+encodeURIComponent(p)),
+  getMockupInfo:      (p)   => api.get('/api/mockup_info?path='+encodeURIComponent(p)),
+  getProductMockup:   (n)   => api.get('/api/product_mockup?product='+encodeURIComponent(n)),
   getIcons:            ()    => api.get('/api/icons'),
   getIconAssignments:  ()    => api.get('/api/icon_assignments'),
   saveIconAssignments: (a)   => api.post('/api/icon_assignments/save', a),
@@ -117,6 +119,7 @@ const Icon = {
   Ruler:()=>stroke(<><rect x="1.5" y="5" width="13" height="6" rx="1"/><path d="M4.5 5v2.5M7.2 5v1.6M9.9 5v2.5M12.5 5v1.6"/></>),
   Globe:()=>stroke(<><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.2 2 2.2 10 0 12M8 2c-2.2 2-2.2 10 0 12"/></>),
   Flag:()=>stroke(<path d="M3.5 14V2.5M3.5 3h8l-1.6 3 1.6 3h-8"/>),
+  Download:()=>stroke(<path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/>),
 };
 
 // Builds an "open the containing folder in SharePoint" link from a file's
@@ -1242,8 +1245,9 @@ function Information({config,map,setMap}){
                 </div>
               ))}
             </div>
-            {/* Files */}
-            <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+            {/* Files, and the product's mockup beside them */}
+            <div style={{display:'flex',gap:12,flex:1,overflow:'hidden',minHeight:0}}>
+            <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden',minWidth:0}}>
               <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8,flexShrink:0}}>
                 {[['all','All'],['indd','INDD'],['idml','IDML'],['print','Print']].map(([v,l])=>(
                   <button key={v} className={'filter-chip '+(fileType===v?'active':'')} onClick={()=>setFileType(v)}>{l}</button>
@@ -1279,6 +1283,8 @@ function Information({config,map,setMap}){
                   </div>
                 </div>
               )}
+            </div>
+            <ProductMockup product={selected} mapRev={map?.generated}/>
             </div>
           </div>
         )}
@@ -1669,6 +1675,98 @@ function LabelsBrowser({map,setMap,config}){
     </div>
   );
 }
+// -- Package mockup (the label on a photo of its pack) --------------------------------
+const mockupUrl=(path,view,rev,download)=>`/api/mockup?path=${encodeURIComponent(path)}&view=${view}&v=${rev}`+(download?'&download=1':'');
+
+function MockupView({file,info,view}){
+  const src=mockupUrl(file.path,view,info.rev);
+  const [loaded,setLoaded]=useState(null);           // the src that has finished loading
+  const [failed,setFailed]=useState(null);
+  const [exporting,setExporting]=useState(false);
+  const [exportError,setExportError]=useState('');
+  const exportPng=async()=>{
+    setExporting(true); setExportError('');
+    try{
+      const r=await fetch(mockupUrl(file.path,view,info.rev,true));
+      if(!r.ok)throw new Error();
+      const cd=r.headers.get('Content-Disposition')||'';
+      const m=/filename\*=UTF-8''([^;]+)/.exec(cd)||/filename="([^"]+)"/.exec(cd);
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(await r.blob());
+      a.download=m?decodeURIComponent(m[1]):'mockup.png';
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+    }catch{setExportError('Could not make the mockup file.');}
+    setExporting(false);
+  };
+  return(
+    <>
+      <div className="mockup-frame">
+        <img key={src} src={src} alt={`Mockup, ${view}`} onLoad={()=>setLoaded(src)} onError={()=>setFailed(src)}
+             style={{opacity:loaded===src?1:0}}/>
+        {loaded!==src&&failed!==src&&<div className="mockup-msg"><div className="spinner"/></div>}
+        {failed===src&&<div className="mockup-msg">Could not make the mockup.</div>}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+        <button type="button" className="btn btn-primary btn-sm" onClick={exportPng} disabled={exporting||failed===src}>
+          {exporting?<div className="spinner" style={{width:12,height:12}}/>:<Icon.Download/>}
+          {exporting?'Exporting…':'Export PNG'}
+        </button>
+        <span style={{fontSize:11,color:'var(--text3)'}}>2000 × 2000 px{info.views.length>1?`, ${view}`:''}</span>
+      </div>
+      {exportError&&<div style={{fontSize:12,color:'var(--danger)'}}>{exportError}</div>}
+      {info.made_from&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.4,wordBreak:'break-word'}}>Made from {info.made_from}</div>}
+    </>
+  );
+}
+
+// The product page's mockup: the product's newest label that has a mockup picture.
+function ProductMockup({product,mapRev}){
+  const [raw,setRaw]=useState(null);
+  const info=raw&&raw._for===product?raw:null;
+  const [view,setView]=useState('front');
+  useEffect(()=>{
+    setRaw(null);
+    let cancelled=false;
+    api.getProductMockup(product)
+      .then(r=>{if(!cancelled)setRaw({...r,_for:product});})
+      .catch(()=>{if(!cancelled)setRaw({available:false,reason:'Could not check for a mockup.',_for:product});});
+    return()=>{cancelled=true;};
+  },[product,mapRev]);
+  const shown=info?.views?.includes(view)?view:'front';
+  return(
+    <div className="card product-mockup">
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,minHeight:36,flexShrink:0}}>
+        <span style={{fontSize:12,fontWeight:600}}>Mockup</span>
+        {info?.available&&info.views.length>1&&(
+          <div className="fb-seg" role="group" aria-label="Side">
+            {info.views.map(v=>(
+              <button key={v} type="button" aria-pressed={shown===v} className={'fb-seg-btn'+(shown===v?' on':'')} onClick={()=>setView(v)}>
+                {v==='front'?'Front':'Back'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {info===null?(
+        <div className="mockup-frame"><div className="mockup-msg"><div className="spinner"/></div></div>
+      ):!info.available?(
+        <div style={{fontSize:12,color:'var(--text3)',lineHeight:1.45,padding:'4px 0'}}>{info.reason}</div>
+      ):(
+        <>
+          <MockupView file={{path:info.path}} info={info} view={shown}/>
+          <div style={{fontSize:11,color:'var(--text3)',lineHeight:1.4,wordBreak:'break-word'}} title={info.path}>
+            Newest label{info.packaging?` (${info.packaging}`:''}{info.date?`, ${info.date}`:''}{info.packaging?')':''}: {info.filename}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Pages / Mockup and Front / Back, kept while you click through files (until the page is reloaded).
+const previewMemory={mode:'pages',view:'front'};
+
 function FilePreviewPanel({file,sharepointBase,onDeleted}){
   const [infoRaw,setInfo]=useState(null);
   const panelRef=useRef(null);
@@ -1676,6 +1774,21 @@ function FilePreviewPanel({file,sharepointBase,onDeleted}){
   // info is only valid for the file it was fetched for; without this check the
   // first render after switching files pairs the new file with the old file's info.
   const info=infoRaw&&infoRaw._for===file?.path?infoRaw:null;
+  const [mockRaw,setMock]=useState(null);
+  const mock=mockRaw&&mockRaw._for===file?.path?mockRaw:null;
+  const [mode,setModeState]=useState(previewMemory.mode);
+  const [view,setViewState]=useState(previewMemory.view);
+  const setMode=m=>{previewMemory.mode=m; setModeState(m);};
+  const setView=v=>{previewMemory.view=v; setViewState(v);};
+  useEffect(()=>{
+    setMock(null);
+    if(!file||file.deze)return;                     // box labels have no mockup, and no switch for one
+    let cancelled=false;
+    api.getMockupInfo(file.path)
+      .then(r=>{if(!cancelled)setMock({...r,_for:file.path});})
+      .catch(()=>{if(!cancelled)setMock({available:false,reason:'Could not check for a mockup.',_for:file.path});});
+    return()=>{cancelled=true;};
+  },[file?.path]);
   useEffect(()=>{
     setInfo(null);
     if(!file)return;
@@ -1706,6 +1819,8 @@ function FilePreviewPanel({file,sharepointBase,onDeleted}){
     );
   }
   const isPdf=file.extension==='.pdf';
+  const showMockup=mode==='mockup'&&!!mock?.available;
+  const shownView=mock?.views?.includes(view)?view:'front';
   const pageCount=info?.page_count??0;
   const sizeKb=info?.size_bytes!=null?Math.round(info.size_bytes/1024):null;
   const sizeMm=info?.size_mm;
@@ -1735,7 +1850,32 @@ function FilePreviewPanel({file,sharepointBase,onDeleted}){
       </div>
       <div className="file-preview-actions"><FileActions path={file.path} onDeleted={onDeleted} sharepointBase={sharepointBase}/></div>
       <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:10,borderTop:'1px solid var(--border)',paddingTop:10,minHeight:0}}>
-        {info===null?(
+        {mock&&(
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexShrink:0}}>
+            <div className="fb-seg" role="group" aria-label="Preview">
+              <button type="button" aria-pressed={!showMockup} className={'fb-seg-btn'+(!showMockup?' on':'')} onClick={()=>setMode('pages')}>Pages</button>
+              <button type="button" aria-pressed={showMockup} aria-disabled={!mock.available}
+                      className={'fb-seg-btn'+(showMockup?' on':'')+(mock.available?'':' dim')}
+                      title={mock.available?`Shown on the ${mock.photo.replace(/_/g,' ')} picture`:mock.reason}
+                      onClick={()=>mock.available&&setMode('mockup')}>Mockup</button>
+            </div>
+            {showMockup&&mock.views.length>1&&(
+              <div className="fb-seg" role="group" aria-label="Side">
+                {mock.views.map(v=>(
+                  <button key={v} type="button" aria-pressed={shownView===v} className={'fb-seg-btn'+(shownView===v?' on':'')} onClick={()=>setView(v)}>
+                    {v==='front'?'Front':'Back'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {mock&&!mock.available&&mode==='mockup'&&(
+          <div style={{fontSize:11,color:'var(--text3)',lineHeight:1.4,flexShrink:0}}>No mockup: {mock.reason}</div>
+        )}
+        {showMockup?(
+          <MockupView file={file} info={mock} view={shownView}/>
+        ):info===null?(
           <div style={{display:'flex',justifyContent:'center',padding:20}}><div className="spinner" style={{width:18,height:18}}/></div>
         ):pageCount===0?(
           <div style={{fontSize:12,color:'var(--text3)',textAlign:'center',padding:'24px 8px'}}>
@@ -1856,36 +1996,43 @@ function Settings({config,saveConfig,setConfig,refreshMap}){
 
         {tab==='paths'&&(
           <div style={{display:'flex',flexDirection:'column',gap:8,overflowY:'auto'}}>
-            <SettingCard title="Translations folder" desc="Where language/translation JSON files are read from. Leave blank to use the app's own bundled 'translations' folder. (In the future this could point at a synced OneDrive folder, the same way the labels output folder does.)">
-              <div className="flex gap-2 items-center">
-                <input className="input" placeholder={resDirs?.translations||''} value={cfg.translationsDir||''} onChange={e=>setCfg({...cfg,translationsDir:e.target.value})} style={{flex:1,fontFamily:"'DM Mono',monospace",fontSize:12}}/>
-                <button className="btn btn-folder btn-sm" title="Browse for folder" onClick={async()=>{const pick=await api.pickDir();if(pick.ok&&pick.path)setCfg(c=>({...c,translationsDir:pick.path}));}}><Icon.Folder/></button>
-                {cfg.translationsDir&&<button className="btn btn-ghost btn-sm" title="Reset to default" onClick={()=>setCfg(c=>({...c,translationsDir:''}))}>&#8634;</button>}
+            <SettingCard title="Folders" desc="Where the app reads templates, QR codes, logos and translations from -- point one at a synced OneDrive folder to share it. Leave a field blank to use the app's own folder, which is what a new install uses.">
+              <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                {[
+                  ['templatesDir','templates','Templates','IDML template files used when creating labels'],
+                  ['qrCodesDir','qrcodes','QR codes','PNG QR code images matched to products ({product}_QR.png)'],
+                  ['logosDir','logos','Logos','Product logo files used in labels ({product}_LOGO.*)'],
+                  ['translationsDir','translations','Translations','Language/translation JSON files'],
+                ].map(([key,dirKey,label,desc])=>{
+                  const missing=resDirs?.missing?.includes(dirKey);
+                  return(
+                    <div key={key}>
+                      <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{label}</div>
+                      <div style={{fontSize:11,color:'var(--text3)',marginBottom:6}}>{desc}</div>
+                      <div className="flex gap-2 items-center">
+                        <input className="input" aria-label={`${label} folder`} placeholder={resDirs?.defaults?.[key]||''} value={cfg[key]||''} onChange={e=>setCfg({...cfg,[key]:e.target.value})} style={{flex:1,fontFamily:"'DM Mono',monospace",fontSize:12}}/>
+                        <button className="btn btn-folder btn-sm" title="Browse for folder" onClick={async()=>{const pick=await api.pickDir();if(pick.ok&&pick.path)setCfg(c=>({...c,[key]:pick.path}));}}><Icon.Folder/></button>
+                        {cfg[key]&&<button className="btn btn-ghost btn-sm" title="Reset to default" onClick={()=>setCfg(c=>({...c,[key]:''}))}>&#8634;</button>}
+                        <button className="btn btn-ghost btn-sm" title="Open in Explorer" disabled={!resDirs?.[dirKey]||missing} onClick={()=>api.openFile(resDirs[dirKey])}><Icon.External/></button>
+                      </div>
+                      {missing&&<div style={{fontSize:11,color:'var(--danger)',marginTop:4}}>Folder not found: {resDirs[dirKey]}</div>}
+                    </div>
+                  );
+                })}
               </div>
-              <div className="flex gap-2 items-center" style={{marginTop:10}}>
-                <button className="btn btn-primary" onClick={save}>Save</button>
+              <div className="flex gap-2 items-center" style={{marginTop:14}}>
+                <button className="btn btn-primary" onClick={async()=>{await save();setResDirs(await api.getResourceDirs());}}>Save</button>
                 {saved&&<span style={{fontSize:12,color:'var(--success)'}}>✓ Saved</span>}
               </div>
             </SettingCard>
-            <p style={{fontSize:12,color:'var(--text3)',marginBottom:4,marginTop:4}}>These are the other directories the app reads from and writes to. Click a path to open it in Explorer.</p>
-            {[
-              ['labels','Labels output','Where generated label files are saved'],
-              ['templates','Templates','IDML template files used when creating labels'],
-              ['qrcodes','QR Codes','PNG QR code images matched to products'],
-              ['logos','Logos','Product logo files used in labels'],
-            ].map(([key,label,desc])=>{
-              const p=resDirs?.[key];
-              return(
-                <div key={key} style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{label}</div>
-                    <div style={{fontSize:11,color:'var(--text3)',marginBottom:4}}>{desc}</div>
-                    <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:p?'var(--accent)':'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={p||''}>{p||'—'}</div>
-                  </div>
-                  <button className="btn btn-folder btn-sm" disabled={!p} onClick={()=>p&&api.openFile(p)} title="Open in Explorer"><Icon.Folder/></button>
-                </div>
-              );
-            })}
+            <div style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>Labels output</div>
+                <div style={{fontSize:11,color:'var(--text3)',marginBottom:4}}>Where generated label files are saved</div>
+                <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:resDirs?.labels?'var(--accent)':'var(--text3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={resDirs?.labels||''}>{resDirs?.labels||'—'}</div>
+              </div>
+              <button className="btn btn-folder btn-sm" disabled={!resDirs?.labels} onClick={()=>resDirs?.labels&&api.openFile(resDirs.labels)} title="Open in Explorer"><Icon.Folder/></button>
+            </div>
           </div>
         )}
 

@@ -78,7 +78,7 @@ folder and the Desktop shortcut after asking you to confirm. It does **not** tou
 - your labels or the shared OneDrive folder, and the `Documents\Etiketas` link to it
   (the junction is left in place -- deleting a junction in File Explorer is safe too, it
   only removes the link, never the folder it points to);
-- the Python packages (Pillow, PyMuPDF) -- other tools may use them.
+- the Python packages (Pillow, PyMuPDF, numpy) -- other tools may use them.
 
 Add `-Yes` to either command to skip the confirmation questions.
 

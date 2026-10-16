@@ -196,7 +196,7 @@ if ($Action -eq 'Uninstall') {
     Write-Host " Etiketas is uninstalled." -ForegroundColor Green
     Write-Host " Kept on purpose:"
     Write-Host "   - $LabelsDir (a link to the shared OneDrive folder, with all your labels)"
-    Write-Host "   - the Python packages Pillow and PyMuPDF (remove with: pip uninstall Pillow PyMuPDF)"
+    Write-Host "   - the Python packages Pillow, PyMuPDF and numpy (remove with: pip uninstall Pillow PyMuPDF numpy)"
     Write-Host " To install it again, run install.bat."
     Write-Host "======================================="
     exit 0
