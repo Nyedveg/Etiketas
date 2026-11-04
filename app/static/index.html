@@ -42,17 +42,26 @@
 html,body,#root{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Roboto',sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
-.app{display:flex;height:100vh;overflow:hidden}
-.sidebar{width:224px;min-width:224px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}
-.sidebar-logo{padding:20px 18px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
-.sidebar-logo-img{height:28px;width:auto;opacity:.92;flex-shrink:0;filter:invert(1) brightness(.15)}
+.app{--rail-w:57px;display:flex;height:100vh;overflow:hidden;position:relative}
+/* Sidebar: an icon rail that expands over the page on hover, so the page itself never reflows.
+   Keyboard focus opens it too -- :focus-visible, because :focus-within would hold it open after every click.
+   Everything that changes follows --open; --open-delay stops a cursor just crossing the rail from opening it.
+   57px centres the nav icons: 2 x (10px nav padding + 10px item padding + half a 16px icon) + 1px border. */
+.sidebar{--open:0;--open-delay:0s;position:absolute;top:0;bottom:0;left:0;z-index:10;width:var(--rail-w);overflow:hidden;white-space:nowrap;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:width .18s cubic-bezier(.4,0,.2,1) var(--open-delay),box-shadow .18s var(--open-delay)}
+.sidebar:is(:hover,:has(:focus-visible)){--open:1;--open-delay:.08s;width:224px;box-shadow:4px 0 24px var(--shadow-md)}
+.sidebar-label{opacity:var(--open);transition:opacity .15s var(--open-delay)}
+.sidebar-logo{position:relative;padding:20px 18px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
+.sidebar-logo-img{height:28px;width:auto;opacity:calc(.92*var(--open));flex-shrink:0;filter:invert(1) brightness(.15);transition:opacity .15s var(--open-delay)}
+.sidebar-logo-mark{position:absolute;left:14px;width:28px;height:28px;opacity:calc(.92*(1 - var(--open)));filter:invert(1) brightness(.15);transition:opacity .15s var(--open-delay)}
 .sidebar-logo-text{font-family:'Open Sans',sans-serif;font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.01em}
 .sidebar-logo-sub{font-size:10px;color:var(--text3);margin-top:2px;font-family:'DM Mono',monospace;letter-spacing:.04em;text-transform:uppercase}
 .sidebar-nav{flex:1;padding:10px}.sidebar-footer{padding:14px 10px;border-top:1px solid var(--border)}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s,color .15s;color:var(--text2);font-size:13px;font-weight:500;border:none;background:none;width:100%;text-align:left}
+.sidebar-stats{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;max-height:calc(20px*var(--open));margin-bottom:calc(8px*var(--open));opacity:var(--open);overflow:hidden;transition:max-height .18s var(--open-delay),margin-bottom .18s var(--open-delay),opacity .15s var(--open-delay)}
+.sidebar-footer .btn{padding-left:10px;padding-right:10px;overflow:hidden}.sidebar-footer .btn svg{flex-shrink:0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s,color .15s;color:var(--text2);font-size:13px;font-weight:500;border:none;background:none;width:100%;text-align:left;overflow:hidden}
 .nav-item:hover{background:var(--surface2);color:var(--text)}.nav-item.active{background:var(--accent-dim);color:var(--accent)}
 .nav-item .icon{width:16px;height:16px;opacity:.7;flex-shrink:0}.nav-item.active .icon{opacity:1}
-.main{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.main{flex:1;margin-left:var(--rail-w);overflow:hidden;display:flex;flex-direction:column}
 .topbar{height:52px;position:relative;display:flex;align-items:center;padding:0 24px;gap:12px;flex-shrink:0;background:var(--surface)}
 .topbar::after{content:'';position:absolute;left:0;right:0;bottom:0;height:3px;background:linear-gradient(90deg,var(--sage) 0 25%,var(--accent) 25% 50%,var(--mo) 50% 75%,var(--text) 75% 100%)}
 .topbar-title{font-family:'Open Sans',sans-serif;font-size:16px;font-weight:700;color:var(--text)}
