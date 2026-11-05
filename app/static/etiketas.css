@@ -23,9 +23,16 @@
 .product-card{padding:var(--space-3) 14px;text-align:left;transition:all var(--dur)}
 .product-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px var(--shadow-sm)}
 .product-name{font-size:var(--fs-md);font-weight:500;color:var(--text);margin-bottom:var(--space-1)}
-.lang-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);overflow-y:auto;padding:2px var(--space-2) 2px 2px;margin:-2px calc(-1*var(--space-2)) -2px -2px}
-.lang-card{padding:10px;display:flex;align-items:center;gap:var(--space-2)}
-.lang-flag{font-size:18px;line-height:1}.lang-code{font-size:var(--fs-sm);font-family:var(--font-mono);font-weight:500;color:var(--text)}.lang-name{font-size:var(--fs-xs);color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lang-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);overflow-y:auto;padding:2px var(--space-2) 2px 2px;margin:-2px calc(-1*var(--space-2)) -2px -2px}
+.lang-card{padding:var(--space-2) 10px;display:flex;align-items:center;gap:var(--space-2);font:inherit;color:var(--text);text-align:left}
+.lang-code{width:30px;flex-shrink:0;font-size:var(--fs-sm);font-family:var(--font-mono);font-weight:500;color:var(--text)}
+.lang-name{flex:1;min-width:0;font-size:var(--fs-sm);color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lang-count{flex-shrink:0;font-size:var(--fs-xs);font-family:var(--font-mono);color:var(--text3)}
+.lang-group,.lang-none{grid-column:1/-1}
+.lang-group{margin-top:var(--space-2)}.lang-group:first-child{margin-top:0}
+.lang-none{font-size:var(--fs-md);font-style:italic;color:var(--text3);padding-top:var(--space-1)}
+.lang-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border:1px solid var(--accent);border-radius:var(--radius-pill);background:var(--accent-dim);color:var(--accent);font:var(--fs-sm) var(--font-sans);cursor:pointer}
+.lang-chip b{font-family:var(--font-mono);font-weight:500}
 .size-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3)}
 .size-card{padding:var(--space-4);text-align:center;transition:all var(--dur)}
 .size-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px var(--shadow-sm)}
@@ -60,10 +67,19 @@
 .ship-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-4);margin-bottom:var(--space-5)}
 .ship-stats .stat-value{font-size:24px}
 .ship-stats .stat-card.lead .stat-value{color:var(--accent)}
-.ship-add{display:grid;grid-template-columns:minmax(220px,2fr) minmax(150px,1fr) 150px auto;gap:var(--space-3);align-items:end;margin-bottom:var(--space-5)}
+.ship-add{display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:flex-end;margin-bottom:var(--space-5)}
 .ship-add .field{margin-bottom:0}
 .ship-add .btn{height:36px}
-.ship-add-hint{grid-column:1/-1;margin-top:calc(-1*var(--space-1))}
+.ship-add-product{flex:1 1 240px;min-width:200px}
+.ship-add-num{width:130px}
+.ship-packs-empty{height:36px;display:flex;align-items:center}
+.ship-add-hint{flex-basis:100%;margin-top:calc(-1*var(--space-1))}
+.ship-group-row td{background:var(--surface2);padding-top:var(--space-2);padding-bottom:var(--space-2)}
+.ship-group-name{font-weight:600;color:var(--text);margin-right:var(--space-1)}
+.ship-profile{margin-bottom:var(--space-4)}
+.ship-profile-packs{margin-top:var(--space-4);overflow-x:auto}
+.ship-open-row>td{background:var(--surface2)}
+.ship-open{padding:var(--space-1) 0}
 .ship-section{margin-bottom:var(--space-5)}
 .ship-qty{width:92px;margin-left:auto}
 .ship-price{width:76px;margin-left:auto}
@@ -85,6 +101,40 @@
 .ship-form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-3) var(--space-4);margin-top:var(--space-3)}
 .ship-form-grid .field{margin-bottom:0}
 .ship-form-grid .wide{grid-column:1/-1}
+.ship-links{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
+.ship-link{display:inline-flex;align-items:center;gap:var(--space-1);padding-right:var(--space-1)}
+.ship-link button{border:none;background:none;color:inherit;cursor:pointer;display:flex;padding:2px;border-radius:50%}
+.ship-link button:hover{background:rgba(38,43,72,.1)}
+.ship-link-add{width:220px}
+.ship-pack-edit td{padding:var(--space-1) 6px;vertical-align:top}
+.ship-pack-edit td.num{vertical-align:middle}
+.ship-pack-edit select.input{min-width:150px}
+.ship-num{width:88px}
+.ship-per-box{width:60px}
+.ship-sheet{font-size:var(--fs-2xs);color:var(--warning);margin-top:2px;white-space:nowrap}
+.ship-use{border:none;background:none;color:var(--accent);font:inherit;font-weight:600;cursor:pointer;padding:0;margin-left:var(--space-2)}
+.ship-use:hover{text-decoration:underline}
+.ship-derived{font-size:var(--fs-2xs);color:var(--text3);margin-top:2px;white-space:nowrap}
+.ship-derived.warn{color:var(--warning)}
+.ship-warn{color:var(--warning)}
+.ship-count{white-space:nowrap}
+.ship-count b{font-weight:600;color:var(--text)}
+.ship-exact,.ship-arrow{color:var(--text3)}
+.ship-warn .ship-exact,.ship-warn .ship-arrow,.ship-warn b{color:inherit}
+.ship-stat-sub{font-size:var(--fs-2xs);color:var(--text3);margin-top:var(--space-2)}
+.table tr.ship-line td:not([rowspan]){border-bottom:none;padding-bottom:0}
+.table tr.ship-line-used td{padding-top:1px;font-size:var(--fs-2xs);line-height:1.3;color:var(--text3);min-width:128px}
+.table tbody tr.ship-line:hover td,.table tbody tr.ship-line-used:hover td{background:none}
+.table tbody tr.ship-line:hover td:first-child,.table tbody tr.ship-line-used:hover td:first-child{box-shadow:none}
+.ship-table-fit{max-height:calc(100vh - 220px);min-height:280px;overflow:auto}
+.ship-table-fit>.table>thead th{position:sticky;top:0;z-index:2;background:var(--surface);box-shadow:inset 0 -1px 0 var(--border)}
+.ship-table-fit>.table.sticky-first>thead th:first-child{z-index:3;box-shadow:1px 0 0 var(--border),inset 0 -1px 0 var(--border)}
+.ship-unit-long .input{padding-right:64px}
+.ship-sheet-line{margin-top:var(--space-1)}
+.ship-open-sheet{margin-top:var(--space-3)}
+.ship-open-sheet .ship-profile{margin-bottom:0}
+.ship-used{display:block;text-align:center;font-size:var(--fs-xs);cursor:help}
+.ship-table-edit .kind-col{width:120px}
 .ship-table-edit td{padding:var(--space-1) 6px}
 .ship-table-edit .num-col{width:88px}
 .ship-table-edit th.num{white-space:nowrap}

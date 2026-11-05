@@ -60,11 +60,33 @@ shared folder.
 
 ### The shipping data
 
-The **Shipment** page reads `shipping_data.json` from this folder, next to the
-file map, so everyone sees the same product, pallet and packaging figures. It is
-created the first time the app runs, from the values in the weight calculator
-workbook, and edited in **Settings → Shipping**. Order lines on the Shipment page
-are not shared: they stay in each person's browser.
+The **Shipment** page reads `shipping_profiles.json` from this folder, next to the
+file map, so everyone sees the same figures. It holds a profile per product with its
+packs, and lists of pallets, containers and boxes that the packs pick from, which hold
+the weights. It is edited in **Settings → Shipping**, and a product's profile also shows on
+its **Information** page. Order lines and prices on the Shipment page are not shared: they
+stay in each person's browser.
+
+It also holds a data sheet per TDS document. A new label takes its shelf life and storage
+temperatures from the product's data sheet, in the label's language, whatever the translation
+file says; **New Label** shows them before anything is created. A product with no data sheet
+keeps its translation's text.
+
+This data is the company's and only ever lives in this folder. This repository is public, so
+never commit it: `app/default_shipping.json` is deliberately just the empty shape, and if the
+file isn't here, as on a machine still syncing, the page says so and nothing is written until
+someone saves. Back the file up like any other shared document, because the app can't recreate it.
+
+`shipping_data.json`, the flat version older copies of the app read, can be deleted once
+everyone has updated.
+
+### Language codes in file names
+
+Label files use ISO 639-1 codes. A file made by a copy of the app that hasn't been updated
+may still say `EE`, `CZ`, `GR`, `UA`, `KR` or `BL`; the app reads those as the right language
+anyway. Three languages use their three-letter ISO 639-2 codes, because their two-letter ones
+mean something else on labels: Ewe (`EWE`, not `EE`), Kanuri (`KAU`, not `KR`) and Chechen
+(`CHE`, not `CE`).
 
 ## One-time setup: if you already have Etiketas data (do this once)
 
@@ -150,7 +172,7 @@ Hover over the dot for the resolved folder path and link target.
   label, deleting a file, changing settings), whichever change OneDrive
   finishes uploading *last* wins for the shared metadata files
   (`labels_map.json`, `app_config.json`, `colors_config.json`,
-  `creation_history.json`, `shipping_data.json` — each is rewritten in
+  `creation_history.json`, `shipping_profiles.json` — each is rewritten in
   full on every save, not merged). The actual label files themselves
   aren't affected by this — only the app's own bookkeeping about them.
   Clicking **Rescan** in the app rebuilds the file map from what's

@@ -39,7 +39,6 @@ const api = {
   updateProgress:      ()    => api.get('/api/update/progress'),
   getShipping:         ()    => api.get('/api/shipping'),
   saveShipping:        (s)   => api.post('/api/shipping/save', s),
-  resetShipping:       ()    => api.post('/api/shipping/reset', {}),
 };
 
 const scoreLabel = s => s>=75?{label:'Perfect',cls:'score-high'}:s>=50?{label:'Good',cls:'score-med'}:{label:'Fallback',cls:'score-low'};
@@ -58,6 +57,43 @@ const matchesSearch = (text, query) => {
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 const removeFromMap=(setMap,path)=>setMap(m=>({...m,files:(m?.files??[]).filter(f=>f.path!==path)}));
 const categoryMap=config=>Object.fromEntries((config?.products??[]).map(p=>[p.name,p.category]));
+
+// ── Languages ────────────────────────────────────────────────────────────────────────
+// Every ISO 639-1 language, so wherever the list appears it can be searched, and sorted by how often
+// a language is on label files or by name. There is one choice of sort, kept in this browser.
+const LANG_SORT_KEY='etiketas.langSort';
+const LANG_SORTS=[['used','Most used'],['alpha','A–Z']];
+const langUsage=files=>{
+  const n={};
+  for(const f of files??[])for(const c of f.languages??[])n[c]=(n[c]||0)+1;
+  return n;
+};
+const sortLangs=(langs,sort,usage)=>[...langs].sort((a,b)=>(sort==='used'?(usage[b.code]||0)-(usage[a.code]||0):0)||a.name.localeCompare(b.name));
+const langText=l=>`${l.code} ${l.iso??''} ${l.name} ${l.alt??''}`;
+// Sorted by use, the list has a clear break: languages on labels, then the rest by name.
+const langGroups=(langs,sort,usage)=>sort!=='used'?[{items:langs}]:[
+  {title:'On your labels',items:langs.filter(l=>usage[l.code])},
+  {title:'Not on any label yet',items:langs.filter(l=>!usage[l.code])},
+].filter(g=>g.items.length);
+const fileCount=n=>`${n} label file${n===1?'':'s'}`;
+function useLangSort(){
+  const [sort,setSortState]=useState(()=>storeGet(localStorage,LANG_SORT_KEY)==='alpha'?'alpha':'used');
+  const setSort=s=>{setSortState(s);storeSet(localStorage,LANG_SORT_KEY,s);};
+  return [sort,setSort];
+}
+const LangSortToggle=({sort,onChange})=>(
+  <div className="seg" role="group" aria-label="Sort languages" style={{flexShrink:0}}>
+    {LANG_SORTS.map(([v,l])=>(
+      <button key={v} type="button" aria-pressed={sort===v} className={'seg-btn'+(sort===v?' on':'')} onClick={()=>onChange(v)}>{l}</button>
+    ))}
+  </div>
+);
+// Which translation a language slot starts on: the product's own file, then the general one.
+const sameProduct=(a,b)=>!!a&&!!b&&a.toLowerCase().replace(/[^a-z0-9]/g,'')===b.toLowerCase().replace(/[^a-z0-9]/g,'');
+const translationFor=(files,code,product)=>{
+  const own=files.filter(f=>f.code===code);
+  return own.find(f=>sameProduct(f.product,product))??own.find(f=>!f.product)??own[0];
+};
 // YYYY-MM-DD in local time. The server stamps creation history with naive local time, so it
 // has to be matched against local dates: toISOString() is UTC, and in a UTC+ zone local
 // midnight is still the previous UTC day, which shifted every chart bar by one day.
@@ -209,15 +245,15 @@ const Modal=({title,onEscape,children})=>{
   const box=useRef(null);
   // Focus goes to the dialog, not to Install: it can appear while someone is typing, and Enter must not accept it.
   useEffect(()=>{box.current?.focus();},[]);
-  return(
+  // On the body: a page's entrance animation leaves a transform that would otherwise confine it to the page.
+  return ReactDOM.createPortal(
     <div className="modal-backdrop">
       <div ref={box} className="modal" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
         onKeyDown={e=>{if(e.key==='Escape'&&onEscape)onEscape();}}>
         <div className="modal-title">{title}</div>
         {children}
       </div>
-    </div>
-  );
+    </div>,document.body);
 };
 
 const RemindButtons=({onRemind})=>(
@@ -351,9 +387,9 @@ function App(){
             {view==='dashboard'&&<Dashboard map={map} config={config} refreshMap={refreshMap}/>}
             {view==='new'&&<NewLabelWizard config={config} map={map} setMap={setMap}/>}
             {view==='browse'&&<LabelsBrowser map={map} setMap={setMap} config={config}/>}
-            {view==='information'&&<Information config={config} map={map} setMap={setMap}/>}
+            {view==='information'&&<Information config={config} map={map} setMap={setMap} shipping={shipping}/>}
             {view==='shipment'&&<Shipment shipping={shipping}/>}
-            {view==='settings'&&<Settings config={config} saveConfig={saveConfig} setConfig={setConfig} refreshMap={refreshMap} shipping={shipping} saveShipping={saveShipping} setShipping={setShipping} unsaved={unsaved} checkUpdates={updates.checkNow}/>}
+            {view==='settings'&&<Settings config={config} saveConfig={saveConfig} setConfig={setConfig} refreshMap={refreshMap} shipping={shipping} saveShipping={saveShipping} setShipping={setShipping} unsaved={unsaved} checkUpdates={updates.checkNow} files={map?.files}/>}
           </div>
         </div>
       </div>
@@ -851,7 +887,7 @@ const TemplatePicker=({items,selected,onSelect,title,newName,skipped})=>(
         </div>
       ))
     ):(
-      <div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>No template found -- empty file will be created</div>
+      <div style={{fontSize:12,color:'var(--text3)',fontStyle:'italic',padding:'8px 0'}}>{skipped?'Will not be created':'No template found -- empty file will be created'}</div>
     )}
     {!skipped&&<div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Will be saved as: <span style={{fontFamily:'var(--font-mono)',color:'var(--accent)'}}>{newName}</span></div>}
   </div>
@@ -867,6 +903,8 @@ function NewLabelWizard({config,map,setMap}){
   const [loading,setLoading]=useState(false);
   const [result,setResult]=useState(null);
   const [search,setSearch]=useState('');
+  const [langSearch,setLangSearch]=useState('');
+  const [langSort,setLangSort]=useLangSort();
   const [selectedLabel,setSelectedLabel]=useState(0);
   const [selectedBox,setSelectedBox]=useState(0);
   const [reviewTab,setReviewTab]=useState('template');
@@ -878,13 +916,18 @@ function NewLabelWizard({config,map,setMap}){
   useEffect(()=>{api.getColors().then(r=>{if(r?.colors)setProdColors(r.colors);});},[]);
   useEffect(()=>{api.checkAssets().then(r=>{if(r&&!r.error)setProdAssets(r);});},[]);
   const enabledProducts=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
-  const enabledLangs=(config?.languages??[]).filter(l=>l.enabled);
+  const allLangs=config?.languages??[];
+  const usage=useMemo(()=>langUsage(map?.files),[map]);
+  const shownLangs=useMemo(()=>sortLangs(allLangs.filter(l=>l.enabled&&matchesSearch(langText(l),langSearch)),langSort,usage),[allLangs,langSearch,langSort,usage]);
+  const langOf=code=>allLangs.find(l=>l.code===code);
+  const translationsByName=useMemo(()=>[...transFiles].sort((a,b)=>a.name.localeCompare(b.name)||(a.product??'').localeCompare(b.product??'')),[transFiles]);
+  const translationOption=f=><option key={f.path} value={f.path}>{f.name} ({f.code}){f.product?` — ${f.product}`:''}{f.status==='draft'?' — draft':''}</option>;
   const productCfg=product?config.products.find(p=>p.name===product):null;
   const dimKey=dimKeyFor(productCfg);
   const sizes=dimKey?(config?.packagingSizes?.[dimKey]??[]):[];
   const filtered=enabledProducts.filter(p=>matchesSearch(p.name,search));
   useEffect(()=>{
-    setLangFiles(languages.map(code=>transFiles.find(f=>f.code===code)?.path??null));
+    setLangFiles(languages.map(code=>translationFor(transFiles,code,product)?.path??null));
   },[languages,transFiles]);
   // These two run when a step is entered and read the selections made by then.
   useEffect(()=>{
@@ -893,10 +936,11 @@ function NewLabelWizard({config,map,setMap}){
   },[step]);
   useEffect(()=>{
     if(step!==5||!product||!languages.length||!size)return;
-    setLoading(true);setSelectedLabel(0);setSelectedBox(0);
-    api.findTemplate({product,languages,packagingSize:size}).then(info=>{setTmplInfo(info);setLoading(false);});
+    // A size with no entry on the cheat sheet has no box label. It can still be picked for a one-off.
+    setLoading(true);setSelectedLabel(0);setSelectedBox(config?.boxMultipliers?.[size]?0:null);
+    api.findTemplate({product,languages,packagingSize:size,langFiles}).then(info=>{setTmplInfo(info);setLoading(false);});
   },[step]);
-  const reset=()=>{setStep(1);setProduct(null);setLanguages([]);setSize(null);setTmplInfo(null);setResult(null);setSearch('');setSelectedLabel(0);setSelectedBox(0);setReviewTab('template');setLangFiles([]);setTransFiles([]);setSku('');};
+  const reset=()=>{setStep(1);setProduct(null);setLanguages([]);setSize(null);setTmplInfo(null);setResult(null);setSearch('');setLangSearch('');setSelectedLabel(0);setSelectedBox(0);setReviewTab('template');setLangFiles([]);setTransFiles([]);setSku('');};
   const toggleLang=code=>setLanguages(prev=>prev.includes(code)?prev.filter(c=>c!==code):prev.length<3?[...prev,code]:prev);
   const handleCreate=async()=>{
     setLoading(true);
@@ -977,7 +1021,7 @@ function NewLabelWizard({config,map,setMap}){
       )}
       {step===2&&(
         <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
-          <div style={{flexShrink:0,marginBottom:12}}>
+          <div style={{flexShrink:0,marginBottom:'var(--space-3)'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
               <span style={{fontSize:13,color:'var(--text2)'}}>Select up to 3 languages</span>
               <span style={{fontFamily:'var(--font-mono)',fontSize:13,color:languages.length>0?'var(--accent)':'var(--text3)'}}>{languages.length}/3</span>
@@ -985,34 +1029,43 @@ function NewLabelWizard({config,map,setMap}){
             <div style={{height:30,display:'flex',gap:6,alignItems:'center'}}>
               {languages.length===0
                 ?<span style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>No languages selected yet</span>
-                :languages.map(code=>{
-                  const l=enabledLangs.find(x=>x.code===code);
-                  return(
-                    <span key={code} onClick={()=>toggleLang(code)} style={{background:'var(--accent-dim)',border:'1px solid var(--accent)',borderRadius:4,padding:'3px 10px',fontSize:12,fontFamily:'var(--font-mono)',color:'var(--accent)',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}>
-                      {l?.flag} {code} <span style={{opacity:.5}}>×</span>
-                    </span>
-                  );
-                })
+                :languages.map(code=>(
+                  <button key={code} type="button" className="lang-chip" title="Remove" onClick={()=>toggleLang(code)}>
+                    <b>{code}</b> {langOf(code)?.name} <span style={{opacity:.5}}>×</span>
+                  </button>
+                ))
               }
+            </div>
+            <div className="flex gap-2 items-center" style={{marginTop:'var(--space-2)'}}>
+              <div className="search-wrap" style={{flex:1}}>
+                <span className="search-icon"><Icon.Search size={14}/></span>
+                <input className="input" placeholder="Search languages..." aria-label="Search languages" value={langSearch} onChange={e=>setLangSearch(e.target.value)} autoFocus/>
+              </div>
+              <LangSortToggle sort={langSort} onChange={setLangSort}/>
             </div>
           </div>
           <div className="lang-grid" style={{flex:1,alignContent:'start'}}>
-            {enabledLangs.map(l=>{
-              const sel=languages.includes(l.code),dis=!sel&&languages.length>=3;
-              return(
-                <div key={l.code} className={'select-card lang-card '+(sel?'selected':'')+(dis?' disabled':'')}
-                  onClick={e=>{if(e.detail===1&&!dis)toggleLang(l.code);}}
-                  onDoubleClick={()=>{
-                    if(dis)return;
-                    const next=languages.includes(l.code)?languages:languages.length<3?[...languages,l.code]:languages;
-                    if(next.length>0){setLanguages(next);setStep(3);}
-                  }}>
-                  <span className="lang-flag">{l.flag}</span>
-                  <div><div className="lang-code">{l.code}</div><div className="lang-name">{l.name}</div></div>
-                  {sel&&<Icon.Check/>}
-                </div>
-              );
-            })}
+            {langGroups(shownLangs,langSort,usage).map(g=>(
+              <Fragment key={g.title??'all'}>
+                {g.title&&<div className="eyebrow lang-group">{g.title}</div>}
+                {g.items.map(l=>{
+                  const sel=languages.includes(l.code),dis=!sel&&languages.length>=3;
+                  return(
+                    <button key={l.code} type="button" disabled={dis} className={'select-card lang-card '+(sel?'selected':'')+(dis?' disabled':'')}
+                      onClick={e=>{if(e.detail<=1)toggleLang(l.code);}}
+                      onDoubleClick={()=>{
+                        const next=sel?languages:[...languages,l.code];
+                        setLanguages(next);setStep(3);
+                      }}>
+                      <span className="lang-code">{l.code}</span>
+                      <span className="lang-name" title={l.alt?`${l.name} (also: ${l.alt})`:l.name}>{l.name}</span>
+                      {sel?<Icon.Check/>:usage[l.code]>0&&<span className="lang-count" title={fileCount(usage[l.code])}>{usage[l.code]}</span>}
+                    </button>
+                  );
+                })}
+              </Fragment>
+            ))}
+            {shownLangs.length===0&&<div className="lang-none">No language matches “{langSearch.trim()}”.</div>}
           </div>
           <div className="flex mt-4 gap-2" style={{flexShrink:0}}>
             <button className="btn btn-ghost" onClick={()=>setStep(1)}>&larr; Back</button>
@@ -1028,11 +1081,10 @@ function NewLabelWizard({config,map,setMap}){
           </div>
           <div className="scroll-y">
             {languages.map((code,i)=>{
-              const l=enabledLangs.find(x=>x.code===code);
+              const l=langOf(code);
               return(
                 <div key={code} className="card-flat" style={{marginBottom:'var(--space-2)',borderColor:'var(--border2)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                    <span style={{fontSize:20}}>{l?.flag}</span>
                     <span style={{fontWeight:500,color:'var(--text)'}}>{l?.name??code}</span>
                     <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text3)',background:'var(--surface3)',padding:'2px 6px',borderRadius:3}}>{code}</span>
                     <span style={{fontSize:11,color:'var(--text3)',marginLeft:'auto'}}>Slot LANG{i+1}</span>
@@ -1042,11 +1094,10 @@ function NewLabelWizard({config,map,setMap}){
                     value={langFiles[i]??''}
                     onChange={e=>{const v=e.target.value||null;setLangFiles(prev=>{const n=[...prev];n[i]=v;return n;})}}>
                     <option value=''>— Skip (keep template text) —</option>
-                    {transFiles.map(f=>(
-                      <option key={f.path} value={f.path}>{f.flag} {f.name} ({f.code}){f.product?` — ${f.product}`:''}{f.status==='draft'?' — draft':''}</option>
-                    ))}
+                    {translationsByName.some(f=>f.code===code)&&<optgroup label={l?.name??code}>{translationsByName.filter(f=>f.code===code).map(translationOption)}</optgroup>}
+                    {translationsByName.some(f=>f.code!==code)&&<optgroup label="Other languages">{translationsByName.filter(f=>f.code!==code).map(translationOption)}</optgroup>}
                   </select>
-                  {(()=>{const sel=transFiles.find(f=>f.path===langFiles[i]);return sel?.product&&sel.product!==product?(<div style={{marginTop:6,fontSize:11,color:'var(--warning)',display:'flex',alignItems:'center',gap:5}}><span>⚠</span><span>This file is for <strong>{sel.product}</strong>, not <strong>{product}</strong>. The text may not match.</span></div>):null;})()}
+                  {(()=>{const sel=transFiles.find(f=>f.path===langFiles[i]);return sel?.product&&!sameProduct(sel.product,product)?(<div style={{marginTop:6,fontSize:11,color:'var(--warning)',display:'flex',alignItems:'center',gap:5}}><span>⚠</span><span>This file is for <strong>{sel.product}</strong>, not <strong>{product}</strong>. The text may not match.</span></div>):null;})()}
                   {(()=>{const sel=transFiles.find(f=>f.path===langFiles[i]);return sel?.status==='draft'?(<div style={{marginTop:6,fontSize:11,color:'var(--warning)',display:'flex',alignItems:'center',gap:5}}><span>⚠</span><span>This translation is marked <strong>draft</strong> — some fields may still be blank. Check it in Etiketas+ before using it on a real label.</span></div>):null;})()}
                 </div>
               );
@@ -1105,8 +1156,20 @@ function NewLabelWizard({config,map,setMap}){
         <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
           <div style={{flexShrink:0}}>
             <div className="review-row"><span className="review-label">Product</span><span className="review-value" style={{fontWeight:500}}>{product}</span></div>
-            <div className="review-row"><span className="review-label">Languages</span><span className="review-value" style={{fontFamily:'var(--font-mono)'}}>{languages.map(c=>{const l=enabledLangs.find(x=>x.code===c);return (l?.flag??'')+' '+c;}).join('  .  ')}</span></div>
+            <div className="review-row"><span className="review-label">Languages</span><span className="review-value">{languages.map(c=>`${c} ${langOf(c)?.name??''}`.trim()).join(' · ')}</span></div>
             <div className="review-row"><span className="review-label">Size</span><span className="review-value">{size} <span style={{color:'var(--text3)',fontFamily:'var(--font-mono)',fontSize:11}}>{tmplInfo?.dimensions}</span></span></div>
+            {tmplInfo?.shelfLife?.texts?.length>0&&(
+              <div className="review-row"><span className="review-label">Shelf life</span>
+                <span className="review-value">
+                  {[...new Set(tmplInfo.shelfLife.texts.map(t=>t.text||'–'))].join(' · ')}{' '}
+                  <span style={{color:'var(--text3)',fontSize:11}}>{tmplInfo.shelfLife.sheet?`from the data sheet for ${tmplInfo.shelfLife.sheet}`:'from the translation, as there is no data sheet'}</span>
+                  {tmplInfo.shelfLife.texts.some(t=>t.kept)&&<div className="ship-warn" style={{fontSize:11,marginTop:2}}>&#9888; The data sheet says {tmplInfo.shelfLife.months} months, but the {tmplInfo.shelfLife.texts.filter(t=>t.kept).map(t=>t.code).join(', ')} text can't be changed automatically. Check it on the label.</div>}
+                </span>
+              </div>
+            )}
+            {tmplInfo?.shelfLife?.sheet&&tmplInfo.shelfLife.storageMin!=null&&(
+              <div className="review-row"><span className="review-label">Storage</span><span className="review-value">{fmtStorage(tmplInfo.shelfLife)} <span style={{color:'var(--text3)',fontSize:11}}>from the data sheet</span></span></div>
+            )}
             <div className="divider" style={{margin:'12px 0'}}/>
             <div className="tabs" style={{marginBottom:'var(--space-3)'}}>
               {['template','related'].map(t=>(
@@ -1128,7 +1191,7 @@ function NewLabelWizard({config,map,setMap}){
                 {(selectedLabel===null)!==(selectedBox===null)&&(
                   <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:'var(--radius-sm)',background:'rgba(var(--warning-rgb),.1)',border:'1px solid rgba(var(--warning-rgb),.25)',fontSize:12,color:'var(--warning)',marginTop:4}}>
                     <span style={{fontSize:14}}>⚠</span>
-                    {selectedLabel===null?'Only the box label will be created — packaging label is skipped.':'Only the packaging label will be created — box label is skipped.'}
+                    {selectedLabel===null?'Only the box label will be created — packaging label is skipped.':config?.boxMultipliers?.[size]?'Only the packaging label will be created — box label is skipped.':`${size} packs have no box label, so only the packaging label will be created.`}
                   </div>
                 )}
               </>
@@ -1176,9 +1239,7 @@ function NewLabelWizard({config,map,setMap}){
                   const transOps=(ops.translations??[])
                     .map((val,i)=>{
                       if(val===null||val===undefined)return null;
-                      const code=languages[i];
-                      const l=config?.languages?.find(x=>x.code===code);
-                      return {key:`lang${i+1}`,label:`${l?.flag??''} ${code??''}`,val};
+                      return {key:`lang${i+1}`,label:languages[i]??'',val};
                     }).filter(Boolean);
                   const opRows=[
                     {key:'colors', label:'Color swatches', val:ops.colors},
@@ -1272,14 +1333,27 @@ function SizeTable({config,dimKey}){
               <div style={{fontSize:11,fontWeight:600,fontFamily:'var(--font-display)',color:'var(--text)',marginTop:2}}>{box}</div>
             </div>
           ))}
+          {[...new Set(Object.values(config?.packagingSizes??{}).flat())].filter(sz=>!config?.boxMultipliers?.[sz]).map(sz=>(
+            <div key={sz} style={{background:'var(--surface3)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 11px',textAlign:'center',minWidth:64}}>
+              <div style={{fontSize:11,fontFamily:'var(--font-mono)',color:'var(--text3)'}}>{sz}</div>
+              <div style={{fontSize:11,fontFamily:'var(--font-display)',color:'var(--text3)',marginTop:2}}>No box</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
-function Information({config,map,setMap}){
+function Information({config,map,setMap,shipping}){
   const removeFile=p=>removeFromMap(setMap,p);
   const [selected,setSelected]=useState(null);
+  const [detail,setDetail]=useState('files');
+  const profiles=useMemo(()=>selected?(shipping?.products??[]).filter(p=>p.links?.includes(selected)):[],[shipping,selected]);
+  const sheets=useMemo(()=>{
+    if(!selected)return [];
+    const own=(shipping?.tds??[]).filter(t=>t.labels?.includes(selected));
+    return own.length?own:[...new Set(profiles.flatMap(p=>tdsOf(p,shipping)))];     // TerraFol: only Periterra's document, through the profile they share
+  },[shipping,selected,profiles]);
   const [search,setSearch]=useState('');
   const [colors,setColors]=useState({});
   const [assets,setAssets]=useState({});
@@ -1421,7 +1495,22 @@ function Information({config,map,setMap}){
                 </div>
               ))}
             </div>
-            {/* Files, and the product's mockup beside them */}
+            <div className="seg" role="group" aria-label="Show" style={{alignSelf:'flex-start',flexShrink:0,marginBottom:'var(--space-3)'}}>
+              {[['files','Files',prodFiles.length],['shipping','Shipping',profiles.length+sheets.length]].map(([v,l,n])=>(
+                <button key={v} type="button" aria-pressed={detail===v} className={'seg-btn'+(detail===v?' on':'')} onClick={()=>setDetail(v)}>
+                  {l} <span className="mono muted" style={{fontSize:'var(--fs-xs)'}}>{n}</span>
+                </button>
+              ))}
+            </div>
+            {detail==='shipping'?(
+              <div style={{flex:1,overflowY:'auto',minHeight:0}}>
+                {profiles.length===0
+                  ?<div className="muted" style={{fontSize:'var(--fs-md)',fontStyle:'italic',marginBottom:'var(--space-4)'}}>No shipping data for {selected} yet. Add it in Settings &rarr; Shipping.</div>
+                  :profiles.map(p=><ShippingProfile key={p.id} product={p} shipping={shipping}/>)}
+                {sheets.map(t=><TdsCard key={t.id} sheet={t}/>)}
+              </div>
+            ):(
+            /* Files, and the product's mockup beside them */
             <div style={{display:'flex',gap:'var(--space-4)',flex:1,overflow:'hidden',minHeight:0}}>
             <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden',minWidth:0}}>
               <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:'var(--space-3)',flexShrink:0}}>
@@ -1462,6 +1551,7 @@ function Information({config,map,setMap}){
             </div>
             <ProductMockup product={selected} mapRev={map?.generated}/>
             </div>
+            )}
           </div>
         )}
       </div>
@@ -1735,13 +1825,14 @@ function LabelsBrowser({map,setMap,config}){
   const ctx=useMemo(()=>({catOf}),[catOf]);
   const langName=useMemo(()=>Object.fromEntries((config?.languages??[]).map(l=>[l.code,l.name])),[config]);
   const entries=useMemo(()=>files.map(f=>({f,hay:searchText(f,langName)})),[files,langName]);
-  // Every language that has files, configured ones first in their usual order.
+  const [langSort,setLangSort]=useLangSort();
+  const langByCode=useMemo(()=>Object.fromEntries((config?.languages??[]).map(l=>[l.code,l])),[config]);
+  // Every language that has files, in the chosen order. Always by use across all files,
+  // not the counts shown beside them, which change with the other filters and would reshuffle the list.
   const langOptions=useMemo(()=>{
-    const present=new Set(files.flatMap(f=>f.languages??[]));
-    const configured=(config?.languages??[]).map(l=>l.code).filter(c=>present.has(c));
-    const extra=[...present].filter(c=>!configured.includes(c)).sort();
-    return [...configured,...extra];
-  },[files,config]);
+    const usage=langUsage(files);
+    return sortLangs(Object.keys(usage).map(c=>langByCode[c]??{code:c,name:c}),langSort,usage).map(l=>l.code);
+  },[files,langByCode,langSort]);
   const deferredSearch=useDeferredValue(search);   // keep typing responsive; the list catches up
   const sorted=useMemo(
     ()=>sortFiles(filterFiles(entries,filters,deferredSearch,ctx).map(e=>e.f),sort,catOf),
@@ -1768,19 +1859,27 @@ function LabelsBrowser({map,setMap,config}){
   const formatOpts=opt('formats',FORMAT_OPTIONS,(v,l)=>tag(v,l));
   const sizeOpts=opt('sizes',SIZE_OPTIONS,(v,l)=><span className="fb-mono">{l}</span>);
   const statusOpts=opt('status',STATUS_OPTIONS,(v,l)=>tag(STATUS_TONE[v],l,STATUS_HINT[v]));
-  const langOpts=langOptions.map(code=>({value:code,label:langName[code]||code,search:`${code} ${langName[code]||''}`,count:counts.langs[code]??0,
+  const langOpts=langOptions.map(code=>({value:code,label:langName[code]||code,search:langText(langByCode[code]??{code,name:''}),count:counts.langs[code]??0,
     node:<><span className="fb-code">{code}</span><span>{langName[code]||''}</span></>}));
   const menu=(id,Ico,opts,extra)=>(
     <FacetMenu id={id} name={FACET_NAME[id]} Ico={Ico} options={opts} selected={filters[id]} onToggle={v=>toggleIn(id,v)} onClear={()=>clearKey(id)}
       open={openFacet===id} onOpen={setOpenFacet} {...extra}/>
   );
   const langMode=(
-    <span className="fb-mode" role="group" aria-label="Match">
-      Match
-      {['all','any'].map(m=>(
-        <button key={m} type="button" aria-pressed={filters.langMode===m} className={filters.langMode===m?'on':''} onClick={()=>setFilters(f=>({...f,langMode:m}))}>{m}</button>
-      ))}
-    </span>
+    <div className="fb-pop-modes">
+      <span className="fb-mode" role="group" aria-label="Match">
+        Match
+        {['all','any'].map(m=>(
+          <button key={m} type="button" aria-pressed={filters.langMode===m} className={filters.langMode===m?'on':''} onClick={()=>setFilters(f=>({...f,langMode:m}))}>{m}</button>
+        ))}
+      </span>
+      <span className="fb-mode" role="group" aria-label="Sort">
+        Sort
+        {LANG_SORTS.map(([v,l])=>(
+          <button key={v} type="button" aria-pressed={langSort===v} className={langSort===v?'on':''} onClick={()=>setLangSort(v)}>{l}</button>
+        ))}
+      </span>
+    </div>
   );
 
   const searching=deferredSearch.trim()!=='';
@@ -2091,9 +2190,26 @@ function NumInput({value,onChange,className='',...rest}){
     onChange={e=>{const t=e.target.value;setText(t);const n=parseNum(t);if(!Number.isNaN(n))onChange(n);}}/>;
 }
 
-// ── Shipment: the weight calculator ──────────────────────────────────────────────────
-// What one order line comes to. Every coefficient belongs to the item, because they differ row by
-// row in the calculator this replaces (the same pack size can have different boxes and containers).
+// ── Shipment: the data ───────────────────────────────────────────────────────────────
+// A profile is a product with its packs, whatever the pack. Packs point at the catalogues of pallets,
+// containers and boxes, which hold the weights. `links` names the label products a profile belongs to;
+// a profile with none is a shipping-only product, which the rest of the app never sees. `tds` names the
+// data sheets it follows. All of this lives in the shared folder, never in this public repo.
+const byId=list=>Object.fromEntries((list??[]).map(x=>[x.id,x]));
+const profileName=p=>p.variant?`${p.name} · ${p.variant}`:p.name;
+const byProfileName=(a,b)=>profileName(a).localeCompare(profileName(b));
+const SHIP_GROUPS=['MO','PAM','CE','NON'];
+// One entry per pack, with what the calculator needs read through to the catalogues.
+const shipEntries=shipping=>{
+  const pallets=byId(shipping?.pallets),containers=byId(shipping?.containers),boxes=byId(shipping?.boxes);
+  return (shipping?.products??[]).flatMap(p=>(p.packs??[]).map(k=>{
+    const pallet=pallets[k.palletId],container=containers[k.containerId],box=boxes[k.boxId];
+    return {id:k.id,product:p,pack:k,pallet,container,box,unit:p.unit,density:p.unit==='kg'?1:p.density,strapWeight:p.strapWeight,
+      packSize:k.packSize,palletSize:k.palletSize,palletWeight:pallet?.weight??0,containerWeight:container?.weight??0,
+      unitsPerBox:box?k.unitsPerBox:0,boxWeight:box?.weight??0};
+  }));
+};
+// What one order line comes to.
 const perUnit=(a,b)=>b>0?a/b:0;
 const shipCalc=(it,qty)=>{
   const q=qty||0;
@@ -2103,18 +2219,129 @@ const shipCalc=(it,qty)=>{
 };
 const fmtNum=(n,digits=2)=>n==null||Number.isNaN(n)?'–':n.toLocaleString(undefined,{maximumFractionDigits:digits});
 const fmtPack=it=>`${fmtNum(it.packSize,3)} ${it.unit}`;
-// The checked ADR class where there is one, then the original. Only a real class counts: "netaikoma"
-// (checked, does not apply) means no class, and it must not fall back to the unchecked value.
-const adrOf=it=>{
-  const v=(it.adrVerified||it.adrClass||'').trim();
-  return /^\d(\.\d)?$/.test(v)?v:null;
+const fmtMonths=m=>m>0?`${fmtNum(m)} months`:'–';
+const fmtStorage=p=>p.storageMin==null&&p.storageMax==null?'–':`${p.storageMin??'?'} to ${p.storageMax??'?'} °C`;
+const adrOf=p=>p.adrClass||null;
+const isWhole=n=>Math.abs(n-Math.round(n))<1e-6;
+// Part of a box or pallet still takes a whole one.
+const wholeUp=n=>Math.max(0,Math.ceil(n-1e-6));
+// A count as it works out and as it is needed: "2,08 → 3". A whole number is only said once.
+const ShipCount=({n,whole=wholeUp(n),title})=>{
+  if(isWhole(n)&&Math.round(n)===whole)return <span className="ship-count"><b>{fmtNum(whole)}</b></span>;
+  const exact=fmtNum(n,Math.abs(n-Math.round(n))<.005?4:2);
+  return(
+    <span className="ship-count" title={title??`Works out at ${exact}, so ${fmtNum(whole)} are needed`}>
+      <span className="ship-exact">{exact}</span><span className="ship-arrow" aria-hidden="true"> → </span><b>{fmtNum(whole)}</b>
+    </span>
+  );
 };
+// The pallet, container or box a line's weight is worked out from.
+const ShipUsed=({item,weight})=>item?<>{item.name} · {fmtNum(weight,4)} kg</>:'–';
+const packsPerPallet=k=>k.palletSize>0&&k.packSize>0?k.palletSize/k.packSize:null;
+// The value that turns up most often, blanks included: "most packs this size have no box" is an answer.
+const mostCommon=list=>{
+  const seen=new Map();
+  let best=null,top=0;
+  for(const v of list){
+    const n=(seen.get(v)||0)+1;
+    seen.set(v,n);
+    if(n>top){top=n;best=v;}
+  }
+  return best;
+};
+const tdsOf=(p,shipping)=>{
+  const all=byId(shipping?.tds);
+  return (p.tds??[]).map(id=>all[id]).filter(Boolean);
+};
+const tdsSource=t=>[t.code,t.version&&`v${t.version}`,t.revised&&`revised ${t.revised}`].filter(Boolean).join(' · ')||'no version given';
 const groupBadge=g=>{
-  const c={PAM:'badge-pam',MO:'badge-mo','Trąša':'badge-ce'}[g]??'badge-neutral';
+  const c={PAM:'badge-pam',MO:'badge-mo',CE:'badge-ce'}[g]??'badge-neutral';
   return g?<span className={`badge ${c}`}>{g}</span>:null;
 };
-const byProductThenPack=(a,b)=>a.product.localeCompare(b.product)||a.packSize-b.packSize;
+const AirBadge=({p})=>p.airTransport?<span className="badge badge-ok">Allowed</span>:<span className="badge badge-danger">Not allowed</span>;
 
+// A pack's units per box, from the same cheat sheet the box labels are named by.
+const packSizeKey=(size,unit)=>size>=1?`${size}${unit}`:`${Math.round(size*1000)}${unit==='L'?'ml':'g'}`;
+const unitsPerBoxOnSheet=(config,size,unit)=>{
+  const m=/x(\d+)$/.exec(config?.boxMultipliers?.[packSizeKey(size,unit)]??'');
+  return m?Number(m[1]):null;
+};
+// A size labels come in, with no entry on the cheat sheet: 20 L, which has no box label.
+const noBoxOnSheet=(config,size,unit)=>{
+  const key=packSizeKey(size,unit);
+  return Object.values(config?.packagingSizes??{}).some(list=>list.includes(key))&&!config?.boxMultipliers?.[key];
+};
+
+// What is on a pallet, in a container, in a box: a pack per row.
+function ShipPackTable({product,shipping}){
+  const entries=useMemo(()=>shipEntries({...shipping,products:[product]}).sort((a,b)=>a.packSize-b.packSize),[product,shipping]);
+  return(
+    <table className="table dense">
+      <thead><tr><th>Pack</th><th className="num">Pallet holds</th><th>Pallet</th><th>Container</th><th>Box</th><th className="num">Per box</th><th className="num">Full pallet</th></tr></thead>
+      <tbody>
+        {entries.map(it=>(
+          <tr key={it.id}>
+            <td className="mono nowrap">{fmtPack(it)}</td>
+            <td className="num nowrap">{fmtNum(it.palletSize)} {it.unit} <span className="mono muted">{fmtNum(packsPerPallet(it),2)} packs</span></td>
+            <td className="nowrap">{it.pallet?.name??'–'} <span className="mono muted">{fmtNum(it.palletWeight)} kg</span></td>
+            <td>{it.container?.name??'–'} <span className="mono muted">{fmtNum(it.containerWeight,4)} kg</span></td>
+            <td>{it.box?<>{it.box.name} <span className="mono muted">{fmtNum(it.boxWeight,4)} kg</span></>:<span className="muted">No box</span>}</td>
+            <td className="num">{it.box?fmtNum(it.unitsPerBox):'–'}</td>
+            <td className="num" style={{fontWeight:600}}>{fmtNum(shipCalc(it,it.palletSize).totalKg)} kg</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// Everything the shipping data says about one product. Also what the Information page shows.
+function ShippingProfile({product:p,shipping}){
+  const adr=adrOf(p);
+  return(
+    <div className="card ship-profile">
+      <div className="flex items-center gap-2">
+        <div className="card-title">{profileName(p)}</div>
+        {groupBadge(p.group)}
+      </div>
+      <dl className="facts">
+        <div><dt>Shelf life</dt><dd>{fmtMonths(p.shelfLifeMonths)}</dd></div>
+        <div><dt>Customs code</dt><dd className="mono">{p.customsCode||'–'}</dd></div>
+        <div><dt>Country of origin</dt><dd className="mono">{p.origin||'–'}</dd></div>
+        <div><dt>Storage</dt><dd>{fmtStorage(p)}</dd></div>
+        <div><dt>ADR class</dt><dd>{adr?<span className="badge badge-wip">{adr}</span>:'None'}</dd></div>
+        {adr&&<div><dt>Packing group</dt><dd className="mono">{p.packingGroup||'–'}</dd></div>}
+        <div><dt>Air transport</dt><dd><AirBadge p={p}/></dd></div>
+        {p.unit==='L'&&<div><dt>Density</dt><dd className="mono">{p.density!=null?fmtNum(p.density,3):'–'}</dd></div>}
+        {p.subgroup&&<div className="wide"><dt>Subgroup</dt><dd>{p.subgroup}</dd></div>}
+        {p.note&&<div className="wide"><dt>Note</dt><dd>{p.note}</dd></div>}
+      </dl>
+      <div className="ship-profile-packs"><ShipPackTable product={p} shipping={shipping}/></div>
+    </div>
+  );
+}
+
+// What one TDS document says.
+function TdsCard({sheet:t}){
+  const facts=[['Type',t.type,true],['Application',t.application],['Form',t.form],['Colour',t.colour],['Odour',t.odour],['pH',t.ph],['Density',t.density&&`${t.density} g/cm³`],
+    ['Concentration',t.concentration],['Shelf life',fmtMonths(t.shelfLifeMonths)],['Storage',fmtStorage(t)],['Packaging',t.packaging],['Hazard classification',t.hazard,true],['File',t.file,true]];
+  return(
+    <div className="card ship-profile">
+      <div className="flex items-center gap-2" style={{flexWrap:'wrap'}}>
+        <div className="card-title">{t.name}</div>
+        <span className="eyebrow">Data sheet</span>
+        <span className="mono muted" style={{fontSize:'var(--fs-xs)'}}>{tdsSource(t)}</span>
+        {t.older&&<span className="badge badge-wip" title="No newer document was found for this product">Older document</span>}
+        {t.organic&&<span className="badge badge-ok">Organic farming</span>}
+      </div>
+      <dl className="facts">
+        {facts.filter(([,v])=>v&&v!=='–').map(([label,v,wide])=><div key={label} className={wide?'wide':undefined}><dt>{label}</dt><dd>{v}</dd></div>)}
+      </dl>
+    </div>
+  );
+}
+
+// ── Shipment: the page ───────────────────────────────────────────────────────────────
 // Order lines are kept in this browser, like an open worksheet: they survive a reload, and one
 // person's order doesn't appear on anyone else's screen the way a shared file would.
 const SHIPMENT_KEY='etiketas.shipment';
@@ -2128,104 +2355,147 @@ function Shipment({shipping}){
   const [tab,setTabState]=useState(shipmentMemory.tab);
   const setTab=t=>{shipmentMemory.tab=t;setTabState(t);};
   if(shipping?.error)return <div className="alert alert-error">{shipping.error}. Close whatever has it open, then reload this page.</div>;
+  if(!shipping?.products?.length)return(
+    <div className="empty-state" style={{padding:'var(--space-8) var(--space-5)'}}>
+      <p>No shipping data yet</p>
+      <div className="hint">It is read from shipping_profiles.json in the labels folder. If OneDrive is still syncing, wait a moment and reload; otherwise add products in Settings &rarr; Shipping.</div>
+    </div>
+  );
   return(
     <div>
       <div className="tabs">
-        {[['calc','Calculator'],['products','Product data'],['reference','Pallets & packaging']].map(([t,l])=>(
+        {[['calc','Calculator'],['products','Product data'],['sheets','Data sheets'],['reference','Pallets & packaging']].map(([t,l])=>(
           <button key={t} className={`tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>{l}</button>
         ))}
       </div>
       <div key={tab} className="view-anim">
-        {tab==='calc'&&<ShipCalculator items={shipping.items}/>}
-        {tab==='products'&&<ShipProducts items={shipping.items}/>}
-        {tab==='reference'&&<ShipReference tables={shipping.tables}/>}
+        {tab==='calc'&&<ShipCalculator shipping={shipping}/>}
+        {tab==='products'&&<ShipProducts shipping={shipping}/>}
+        {tab==='sheets'&&<ShipDataSheets shipping={shipping}/>}
+        {tab==='reference'&&<ShipReference shipping={shipping}/>}
       </div>
     </div>
   );
 }
 
-const StatCard=({label,value,unit,lead})=>(
+const StatCard=({label,value,unit,lead,sub})=>(
   <div className={'stat-card'+(lead?' lead':'')}>
     <div className="stat-label">{label}</div>
     <div className="stat-value">{value}{unit&&<span className="stat-unit">{unit}</span>}</div>
+    {sub&&<div className="ship-stat-sub">{sub}</div>}
   </div>
 );
 
-function ShipCalculator({items}){
+// Pick a product, then one of its packs: everything for a product is in one place.
+function ShipCalculator({shipping}){
   const [lines,setLines]=useState(readShipment);
   useEffect(()=>{try{localStorage.setItem(SHIPMENT_KEY,JSON.stringify(lines));}catch{/* storage unavailable: lines last until reload */}},[lines]);
-  const byId=useMemo(()=>Object.fromEntries(items.map(i=>[i.id,i])),[items]);
-  const products=useMemo(()=>[...new Set(items.map(i=>i.product))].sort((a,b)=>a.localeCompare(b)),[items]);
-  const [product,setProduct]=useState('');
-  const [itemId,setItemId]=useState('');
+  const entries=useMemo(()=>shipEntries(shipping),[shipping]);
+  const entryOf=useMemo(()=>byId(entries),[entries]);
+  const products=useMemo(()=>(shipping.products??[]).filter(p=>p.packs?.length).sort(byProfileName),[shipping]);
+  const groupsOfProducts=useMemo(()=>{
+    const known=SHIP_GROUPS.filter(g=>products.some(p=>p.group===g));
+    const other=[...new Set(products.map(p=>p.group))].filter(g=>!SHIP_GROUPS.includes(g));
+    return [...known,...other];
+  },[products]);
+  const [productId,setProductId]=useState('');
+  const [packId,setPackId]=useState('');
   const [qty,setQty]=useState(null);
-  const packs=useMemo(()=>items.filter(i=>i.product===product).sort((a,b)=>a.packSize-b.packSize),[items,product]);
-  const picked=byId[itemId];
-  const pickProduct=name=>{
-    setProduct(name);
-    const options=items.filter(i=>i.product===name);
-    setItemId(options.length===1?options[0].id:'');
+  const [price,setPrice]=useState(null);
+  const product=products.find(p=>p.id===productId);
+  const packs=useMemo(()=>entries.filter(e=>e.product.id===productId).sort((a,b)=>a.packSize-b.packSize),[entries,productId]);
+  const picked=entryOf[packId];
+  const pickProduct=id=>{
+    setProductId(id);
+    const own=entries.filter(e=>e.product.id===id);
+    setPackId(own.length===1?own[0].id:'');
   };
   const canAdd=!!picked&&qty>0;
+  const partPack=picked&&qty>0&&!isWhole(qty/picked.packSize);
   const addLine=()=>{
     if(!canAdd)return;
-    setLines(ls=>ls.some(l=>l.itemId===itemId)
-      ?ls.map(l=>l.itemId===itemId?{...l,qty:l.qty+qty}:l)    // same product and pack: one line, added up
-      :[...ls,{itemId,qty,price:picked.price??null}]);
-    setQty(null);
+    setLines(ls=>ls.some(l=>l.itemId===packId)
+      ?ls.map(l=>l.itemId===packId?{...l,qty:(l.qty||0)+qty,price:price??l.price}:l)    // same product and pack: one line, added up
+      :[...ls,{itemId:packId,qty,price}]);
+    setQty(null);setPrice(null);
   };
   const updateLine=(id,change)=>setLines(ls=>ls.map(l=>l.itemId===id?{...l,...change}:l));
   const removeLine=id=>setLines(ls=>ls.filter(l=>l.itemId!==id));
   const clearLines=()=>{if(window.confirm('Remove every line from this shipment?'))setLines([]);};
 
   const rows=lines.map(l=>{
-    const it=byId[l.itemId];
-    return {l,it,c:it?shipCalc(it,l.qty):null,cost:it&&l.price!=null?l.qty*l.price:null};
+    const it=entryOf[l.itemId];
+    return {l,it,c:it?shipCalc(it,l.qty):null,cost:it&&l.price!=null?(l.qty||0)*l.price:null};
   });
   const known=rows.filter(r=>r.it);
+  const gone=rows.filter(r=>!r.it);
+  // The lines of one product stay together, whatever order they were added in.
+  const lineGroups=[];
+  for(const r of [...known].sort((a,b)=>byProfileName(a.it.product,b.it.product)||a.it.packSize-b.it.packSize)){
+    const last=lineGroups[lineGroups.length-1];
+    if(last?.product===r.it.product)last.rows.push(r);
+    else lineGroups.push({product:r.it.product,rows:[r]});
+  }
   const sum=key=>known.reduce((n,r)=>n+r.c[key],0);
+  // Each line rounded up, then added: boxes hold one product, so parts of them can't be put together.
+  const wholeSum=key=>known.reduce((n,r)=>n+wholeUp(r.c[key]),0);
+  const exactNote=key=>isWhole(sum(key))&&Math.round(sum(key))===wholeSum(key)?null:`${fmtNum(sum(key))} exact`;
+  // Pallets can be shared, though, which is the one count that can come out lower.
+  const sharedPallets=wholeUp(sum('pallets'));
+  const palletNote=[exactNote('pallets'),sharedPallets<wholeSum('pallets')?`${fmtNum(sharedPallets)} if part pallets share`:null].filter(Boolean).join(' · ');
   const totalCost=known.reduce((n,r)=>n+(r.cost??0),0);
   const anyPrice=known.some(r=>r.cost!=null);
-  const adrLines=known.filter(r=>adrOf(r.it));
-  const adrClasses=[...new Set(adrLines.map(r=>adrOf(r.it)))].sort();
-  const noAir=known.filter(r=>!r.it.airTransport);
-  const label=it=>`${it.product} ${fmtPack(it)}${it.variant?` (${it.variant})`:''}`;
+  const shipped=lineGroups.map(g=>g.product);
+  const adrClasses=[...new Set(shipped.map(adrOf).filter(Boolean))].sort();
+  const noAir=shipped.filter(p=>!p.airTransport);
   return(
     <>
       <div className="card ship-add">
-        <div className="field">
+        <div className="field ship-add-product">
           <label htmlFor="ship-product">Product</label>
-          <select id="ship-product" className="input" value={product} onChange={e=>pickProduct(e.target.value)}>
+          <select id="ship-product" className="input" value={productId} onChange={e=>pickProduct(e.target.value)}>
             <option value="">Choose a product…</option>
-            {products.map(p=><option key={p} value={p}>{p}</option>)}
+            {groupsOfProducts.map(g=>(
+              <optgroup key={g} label={g||'No group'}>
+                {products.filter(p=>p.group===g).map(p=><option key={p.id} value={p.id}>{profileName(p)}</option>)}
+              </optgroup>
+            ))}
           </select>
         </div>
         <div className="field">
-          <label htmlFor="ship-pack">Pack size</label>
-          <select id="ship-pack" className="input" value={itemId} disabled={!product} onChange={e=>setItemId(e.target.value)}>
-            <option value="">{product?'Choose a pack…':'—'}</option>
-            {packs.map(i=><option key={i.id} value={i.id}>{fmtPack(i)}{i.variant?` · ${i.variant}`:''}</option>)}
-          </select>
+          <span className="field-label">Pack</span>
+          {product?(
+            <div className="seg ship-packs" role="group" aria-label="Pack">
+              {packs.map(e=><button key={e.id} type="button" aria-pressed={packId===e.id} className={'seg-btn'+(packId===e.id?' on':'')} onClick={()=>setPackId(e.id)}>{fmtPack(e)}</button>)}
+            </div>
+          ):<div className="hint ship-packs-empty">Choose a product first</div>}
         </div>
-        <div className="field">
-          <label htmlFor="ship-qty">Order{picked?` (${picked.unit})`:''}</label>
+        <div className="field ship-add-num">
+          <label htmlFor="ship-qty">Order{product?` (${product.unit})`:''}</label>
           <NumInput id="ship-qty" value={qty} onChange={setQty} placeholder="0" onKeyDown={e=>{if(e.key==='Enter')addLine();}}/>
+        </div>
+        <div className="field ship-add-num">
+          <label htmlFor="ship-new-price">Price per {product?.unit??'L or kg'}</label>
+          <NumInput id="ship-new-price" value={price} onChange={setPrice} placeholder="–" onKeyDown={e=>{if(e.key==='Enter')addLine();}}/>
         </div>
         <button className="btn btn-primary" disabled={!canAdd} onClick={addLine}>Add line</button>
         {picked&&(
           <div className="hint ship-add-hint">
-            A pallet holds {fmtNum(picked.palletSize)} {picked.unit} · density {fmtNum(picked.density,3)} ·{' '}
-            {picked.unitsPerBox>0?`${fmtNum(picked.unitsPerBox)} per box`:'no boxes'}
+            A pallet holds {fmtNum(picked.palletSize)} {picked.unit} ({fmtNum(packsPerPallet(picked),2)} packs) ·{' '}
+            {picked.unit==='L'?`density ${fmtNum(picked.density,3)} · `:''}
+            {picked.box?`${fmtNum(picked.unitsPerBox)} per box`:'no boxes'}
+            {partPack&&<span className="ship-warn"> · {fmtNum(qty)} {picked.unit} is {fmtNum(qty/picked.packSize,2)} packs of {fmtPack(picked)}, not a whole number</span>}
+            <div>Weighed with: {[picked.pallet?.name,picked.container?.name,picked.box?.name??'no box'].filter(Boolean).join(' · ')}</div>
           </div>
         )}
       </div>
 
       <div className="ship-stats">
         <StatCard label="Total weight" value={fmtNum(sum('totalKg'))} unit="kg" lead/>
-        <StatCard label="Pallets" value={fmtNum(sum('pallets'))}/>
+        <StatCard label="Pallets" value={fmtNum(wholeSum('pallets'))} sub={palletNote}/>
         <StatCard label="Product weight" value={fmtNum(sum('productKg'))} unit="kg"/>
-        <StatCard label="Containers" value={fmtNum(sum('units'),1)}/>
-        <StatCard label="Boxes" value={fmtNum(sum('boxes'),1)}/>
+        <StatCard label="Containers" value={fmtNum(wholeSum('units'))} sub={exactNote('units')}/>
+        <StatCard label="Boxes" value={fmtNum(wholeSum('boxes'))} sub={exactNote('boxes')}/>
         <StatCard label="Total price" value={anyPrice?fmtNum(totalCost):'–'}/>
       </div>
 
@@ -2237,13 +2507,12 @@ function ShipCalculator({items}){
         {lines.length===0?(
           <div className="empty-state" style={{padding:'var(--space-8) var(--space-5)'}}>
             <p>No lines yet</p>
-            <div className="hint">Choose a product, a pack size and an amount above.</div>
+            <div className="hint">Choose a product, a pack and an amount above.</div>
           </div>
         ):(
-          <table className="table dense sticky-first">
+          <table className="table dense">
             <thead>
               <tr>
-                <th rowSpan={2}>Product</th>
                 <th rowSpan={2} className="nowrap">Pack</th>
                 <th rowSpan={2} className="num">Order</th>
                 <th colSpan={2} className="th-group">Pallets</th>
@@ -2263,37 +2532,55 @@ function ShipCalculator({items}){
                 <th className="num group-start">Qty</th><th className="num">kg</th>
               </tr>
             </thead>
-            <tbody>
-              {rows.map(({l,it,c,cost})=>!it?(
-                <tr key={l.itemId}>
-                  <td colSpan={15} className="muted">This line's product is no longer in the shipping data.</td>
-                  <td><button className="ship-remove" aria-label="Remove line" onClick={()=>removeLine(l.itemId)}><Icon.Close size={12}/></button></td>
+            {lineGroups.map(({product:p,rows:group})=>(
+              <tbody key={p.id}>
+                <tr className="ship-group-row">
+                  <td colSpan={11}><span className="ship-group-name">{profileName(p)}</span> {groupBadge(p.group)}</td>
+                  <td className="num">{group.length>1?fmtNum(group.reduce((n,r)=>n+r.c.totalKg,0)):''}</td>
+                  <td colSpan={3}/>
                 </tr>
-              ):(
-                <tr key={l.itemId}>
-                  <td className="ship-name">{it.product}{it.variant&&<div className="hint">{it.variant}</div>}</td>
-                  <td className="mono nowrap">{fmtPack(it)}</td>
-                  <td className="num"><div className="input-unit ship-qty"><NumInput aria-label={`Order for ${label(it)}`} value={l.qty} onChange={v=>updateLine(l.itemId,{qty:v})}/><span>{it.unit}</span></div></td>
-                  <td className="num group-start">{fmtNum(c.pallets)}</td><td className="num">{fmtNum(c.palletKg)}</td>
-                  <td className="num group-start">{fmtNum(it.density,3)}</td><td className="num">{fmtNum(c.productKg)}</td>
-                  <td className="num group-start">{fmtNum(c.units,1)}</td><td className="num">{fmtNum(c.containerKg)}</td>
-                  <td className="num group-start">{fmtNum(c.boxes,1)}</td><td className="num">{fmtNum(c.boxKg)}</td>
-                  <td className="num group-start">{fmtNum(c.strapKg)}</td>
-                  <td className="num" style={{fontWeight:600,color:'var(--text)'}}>{fmtNum(c.totalKg)}</td>
-                  <td className="num"><NumInput className="ship-price" aria-label={`Price for ${label(it)}`} value={l.price} placeholder="–" onChange={v=>updateLine(l.itemId,{price:v})}/></td>
-                  <td className="num">{cost==null?'–':fmtNum(cost)}</td>
-                  <td><button className="ship-remove" aria-label={`Remove ${label(it)}`} onClick={()=>removeLine(l.itemId)}><Icon.Close size={12}/></button></td>
-                </tr>
-              ))}
-            </tbody>
+                {group.map(({l,it,c,cost})=>(
+                  <Fragment key={l.itemId}>
+                    <tr className="ship-line">
+                      <td rowSpan={2} className="mono nowrap">{fmtPack(it)}</td>
+                      <td rowSpan={2} className="num"><div className="input-unit ship-qty"><NumInput aria-label={`Order for ${profileName(p)} ${fmtPack(it)}`} value={l.qty} onChange={v=>updateLine(l.itemId,{qty:v})}/><span>{it.unit}</span></div></td>
+                      <td className="num group-start"><ShipCount n={c.pallets}/></td><td className="num">{fmtNum(c.palletKg)}</td>
+                      <td rowSpan={2} className="num group-start">{fmtNum(it.density,3)}</td><td rowSpan={2} className="num">{fmtNum(c.productKg)}</td>
+                      <td className={'num group-start'+(isWhole(c.units)?'':' ship-warn')} title={isWhole(c.units)?undefined:`This order isn't a whole number of ${fmtPack(it)} packs`}><ShipCount n={c.units}/></td><td className="num">{fmtNum(c.containerKg)}</td>
+                      <td className="num group-start"><ShipCount n={c.boxes}/></td><td className="num">{fmtNum(c.boxKg)}</td>
+                      <td rowSpan={2} className="num group-start">{fmtNum(c.strapKg)}</td>
+                      <td rowSpan={2} className="num" style={{fontWeight:600,color:'var(--text)'}}>{fmtNum(c.totalKg)}</td>
+                      <td rowSpan={2} className="num"><NumInput className="ship-price" aria-label={`Price for ${profileName(p)} ${fmtPack(it)}`} value={l.price} placeholder="–" onChange={v=>updateLine(l.itemId,{price:v})}/></td>
+                      <td rowSpan={2} className="num">{cost==null?'–':fmtNum(cost)}</td>
+                      <td rowSpan={2}><button className="ship-remove" aria-label={`Remove ${profileName(p)} ${fmtPack(it)}`} onClick={()=>removeLine(l.itemId)}><Icon.Close size={12}/></button></td>
+                    </tr>
+                    <tr className="ship-line-used">
+                      <td colSpan={2} className="group-start"><ShipUsed item={it.pallet} weight={it.palletWeight}/></td>
+                      <td colSpan={2} className="group-start"><ShipUsed item={it.container} weight={it.containerWeight}/></td>
+                      <td colSpan={2} className="group-start">{it.box?<ShipUsed item={it.box} weight={it.boxWeight}/>:'No box'}</td>
+                    </tr>
+                  </Fragment>
+                ))}
+              </tbody>
+            ))}
+            {gone.length>0&&(
+              <tbody>
+                {gone.map(({l})=>(
+                  <tr key={l.itemId}>
+                    <td colSpan={14} className="muted">This line's product or pack is no longer in the shipping data.</td>
+                    <td><button className="ship-remove" aria-label="Remove line" onClick={()=>removeLine(l.itemId)}><Icon.Close size={12}/></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            )}
             <tfoot>
               <tr>
-                <td colSpan={2}>Total</td>
-                <td className="num">{fmtNum(known.reduce((n,r)=>n+r.l.qty,0))}</td>
-                <td className="num group-start">{fmtNum(sum('pallets'))}</td><td className="num">{fmtNum(sum('palletKg'))}</td>
+                <td>Total</td>
+                <td className="num">{fmtNum(known.reduce((n,r)=>n+(r.l.qty||0),0))}</td>
+                <td className="num group-start"><ShipCount n={sum('pallets')} whole={wholeSum('pallets')} title={`Each line rounded up, then added. ${fmtNum(sharedPallets)} if part pallets share.`}/></td><td className="num">{fmtNum(sum('palletKg'))}</td>
                 <td className="num group-start"/><td className="num">{fmtNum(sum('productKg'))}</td>
-                <td className="num group-start">{fmtNum(sum('units'),1)}</td><td className="num">{fmtNum(sum('containerKg'))}</td>
-                <td className="num group-start">{fmtNum(sum('boxes'),1)}</td><td className="num">{fmtNum(sum('boxKg'))}</td>
+                <td className="num group-start"><ShipCount n={sum('units')} whole={wholeSum('units')} title="Each line rounded up, then added"/></td><td className="num">{fmtNum(sum('containerKg'))}</td>
+                <td className="num group-start"><ShipCount n={sum('boxes')} whole={wholeSum('boxes')} title="Each line rounded up, then added"/></td><td className="num">{fmtNum(sum('boxKg'))}</td>
                 <td className="num group-start">{fmtNum(sum('strapKg'))}</td>
                 <td className="num">{fmtNum(sum('totalKg'))}</td>
                 <td/>
@@ -2305,30 +2592,29 @@ function ShipCalculator({items}){
         )}
       </div>
 
-      {known.length>0&&(
+      {shipped.length>0&&(
         <>
           <p className="section-title">Shipping details</p>
-          {(adrLines.length>0||noAir.length>0)&&(
+          {(adrClasses.length>0||noAir.length>0)&&(
             <div className="ship-alerts">
-              {adrLines.length>0&&<div className="alert alert-warning">ADR goods in this shipment: class {adrClasses.join(', ')}.</div>}
-              {noAir.length>0&&<div className="alert alert-warning">Cannot go by air: {noAir.map(r=>label(r.it)).join(', ')}.</div>}
+              {adrClasses.length>0&&<div className="alert alert-warning">ADR goods in this shipment: class {adrClasses.join(', ')}.</div>}
+              {noAir.length>0&&<div className="alert alert-warning">Cannot go by air: {noAir.map(profileName).join(', ')}.</div>}
             </div>
           )}
           <div className="card table-scroll ship-section">
             <table className="table dense">
-              <thead><tr><th>Product</th><th>Pack</th><th>Customs code</th><th>Origin</th><th>ADR class</th><th>Packing group</th><th>Air</th><th>Storage</th><th>Shelf life</th></tr></thead>
+              <thead><tr><th>Product</th><th>Customs code</th><th>Origin</th><th>ADR class</th><th>Packing group</th><th>Air</th><th>Storage</th><th>Shelf life</th></tr></thead>
               <tbody>
-                {known.map(({it})=>(
-                  <tr key={it.id}>
-                    <td className="ship-name">{it.product}</td>
-                    <td className="mono nowrap">{fmtPack(it)}</td>
-                    <td className="mono nowrap">{it.customsCode||'–'}</td>
-                    <td className="mono">{it.origin||'–'}</td>
-                    <td>{adrOf(it)?<span className="badge badge-wip">{adrOf(it)}</span>:<span className="muted">None</span>}</td>
-                    <td className="mono">{it.packingGroup||'–'}</td>
-                    <td>{it.airTransport?<span className="badge badge-ok">Allowed</span>:<span className="badge badge-danger">Not allowed</span>}</td>
-                    <td className="nowrap">{it.storage||'–'}</td>
-                    <td>{it.shelfLifeNew!=null?`${fmtNum(it.shelfLifeNew,1)} m.`:(it.shelfLife||'–')}</td>
+                {shipped.map(p=>(
+                  <tr key={p.id}>
+                    <td className="ship-name">{profileName(p)}</td>
+                    <td className="mono nowrap">{p.customsCode||'–'}</td>
+                    <td className="mono">{p.origin||'–'}</td>
+                    <td>{adrOf(p)?<span className="badge badge-wip">{adrOf(p)}</span>:<span className="muted">None</span>}</td>
+                    <td className="mono">{p.packingGroup||'–'}</td>
+                    <td><AirBadge p={p}/></td>
+                    <td className="nowrap">{fmtStorage(p)}</td>
+                    <td className="nowrap">{fmtMonths(p.shelfLifeMonths)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2340,15 +2626,22 @@ function ShipCalculator({items}){
   );
 }
 
-// Everything the calculator holds about each product and pack, to look things up.
-function ShipProducts({items}){
+// Every product with its details; clicking one shows its packs.
+function ShipProducts({shipping}){
   const [search,setSearch]=useState('');
   const [group,setGroup]=useState('all');
-  const groups=useMemo(()=>[...new Set(items.map(i=>i.group).filter(Boolean))],[items]);
-  const shown=useMemo(()=>items
-    .filter(i=>group==='all'||i.group===group)
-    .filter(i=>matchesSearch(`${i.product} ${i.variant} ${i.customsCode} ${i.subgroup}`,search))
-    .sort(byProductThenPack),[items,group,search]);
+  const [open,setOpen]=useState(null);
+  const [sort,setSortState]=useState(shipmentMemory.productSort??'az');
+  const setSort=s=>{shipmentMemory.productSort=s;setSortState(s);};
+  const all=shipping.products??[];
+  const groups=useMemo(()=>[...new Set(all.map(p=>p.group).filter(Boolean))],[all]);
+  // New products go on the end of the list, so its own order is the order they were entered in.
+  const shown=useMemo(()=>{
+    const list=all
+      .filter(p=>group==='all'||p.group===group)
+      .filter(p=>matchesSearch(`${p.name} ${p.variant} ${p.customsCode} ${p.subgroup} ${(p.links??[]).join(' ')}`,search));
+    return sort==='az'?list.sort(byProfileName):sort==='newest'?list.reverse():list;
+  },[all,group,search,sort]);
   return(
     <>
       <div className="fb">
@@ -2362,39 +2655,43 @@ function ShipProducts({items}){
               <button key={g} type="button" aria-pressed={group===g} className={'seg-btn'+(group===g?' on':'')} onClick={()=>setGroup(g)}>{g==='all'?'All':g}</button>
             ))}
           </div>
-          <span className="fb-total">{shown.length} of {items.length} rows · edit in Settings → Shipping</span>
+          <div className="seg" role="group" aria-label="Sort">
+            {[['az','A–Z'],['newest','Newest'],['oldest','Oldest']].map(([k,l])=>(
+              <button key={k} type="button" aria-pressed={sort===k} className={'seg-btn'+(sort===k?' on':'')} onClick={()=>setSort(k)}>{l}</button>
+            ))}
+          </div>
+          <span className="fb-total">{shown.length} of {all.length} products · edit in Settings → Shipping</span>
         </div>
       </div>
-      <div className="card table-scroll">
+      <div className="card table-scroll ship-table-fit">
         <table className="table dense sticky-first">
           <thead>
             <tr>
-              <th>Product</th><th>Pack</th><th>Group</th><th>Subgroup</th><th>Customs code</th><th>Origin</th>
-              <th>Shelf life</th><th className="nowrap">From 2025-06-01</th><th>Storage</th>
-              <th>ADR</th><th>ADR checked</th><th>Packing group</th><th>Air</th>
-              <th className="num">Pallet size</th><th className="num">Density</th><th>Note</th>
+              <th>Product</th><th>Packs</th><th>Group</th><th>Subgroup</th><th>Customs code</th><th>Origin</th>
+              <th>Shelf life</th><th>Storage</th><th>ADR</th><th>Packing group</th><th>Air</th>
+              <th className="num">Density</th><th>Note</th>
             </tr>
           </thead>
           <tbody>
-            {shown.map(i=>(
-              <tr key={i.id}>
-                <td className="ship-name">{i.product}{i.variant&&<div className="hint">{i.variant}</div>}</td>
-                <td className="mono nowrap">{fmtPack(i)}</td>
-                <td>{groupBadge(i.group)}</td>
-                <td><div className="ship-clip" title={i.subgroup}>{i.subgroup||'–'}</div></td>
-                <td className="mono nowrap">{i.customsCode||'–'}</td>
-                <td className="mono">{i.origin||'–'}</td>
-                <td><div className="ship-clip" title={i.shelfLife}>{i.shelfLife||'–'}</div></td>
-                <td className="mono">{i.shelfLifeNew!=null?`${fmtNum(i.shelfLifeNew,1)} m.`:'–'}</td>
-                <td className="nowrap">{i.storage||'–'}</td>
-                <td className="mono">{i.adrClass||'–'}</td>
-                <td className="mono">{i.adrVerified||'–'}</td>
-                <td className="mono">{i.packingGroup||'–'}</td>
-                <td>{i.airTransport?<span className="badge badge-ok">Allowed</span>:<span className="badge badge-danger">Not allowed</span>}</td>
-                <td className="num">{fmtNum(i.palletSize)} {i.unit}</td>
-                <td className="num">{fmtNum(i.density,3)}</td>
-                <td><div className="ship-clip" title={i.note}>{i.note||''}</div></td>
-              </tr>
+            {shown.map(p=>(
+              <Fragment key={p.id}>
+                <tr className={open===p.id?'row-selected':''} style={{cursor:'pointer'}} onClick={()=>setOpen(o=>o===p.id?null:p.id)}>
+                  <td className="ship-name">{p.name}{p.variant&&<div className="hint">{p.variant}</div>}</td>
+                  <td className="mono nowrap">{[...(p.packs??[])].sort((a,b)=>a.packSize-b.packSize).map(k=>fmtNum(k.packSize,3)).join(' · ')} {p.unit}</td>
+                  <td>{groupBadge(p.group)}</td>
+                  <td><div className="ship-clip" title={p.subgroup}>{p.subgroup||'–'}</div></td>
+                  <td className="mono nowrap">{p.customsCode||'–'}</td>
+                  <td className="mono">{p.origin||'–'}</td>
+                  <td className="nowrap">{fmtMonths(p.shelfLifeMonths)}{(p.tds??[]).length===0&&<span className="muted" title="No data sheet is linked, so this hasn't been checked against a document"> *</span>}</td>
+                  <td className="nowrap">{fmtStorage(p)}</td>
+                  <td className="mono">{p.adrClass||'None'}</td>
+                  <td className="mono">{p.packingGroup||'–'}</td>
+                  <td><AirBadge p={p}/></td>
+                  <td className="num">{p.unit==='L'?fmtNum(p.density,3):'–'}</td>
+                  <td><div className="ship-clip" title={p.note}>{p.note||''}</div></td>
+                </tr>
+                {open===p.id&&<tr className="ship-open-row"><td colSpan={13}><div className="ship-open"><ShipPackTable product={p} shipping={shipping}/>{tdsOf(p,shipping).map(t=><div key={t.id} className="ship-open-sheet"><TdsCard sheet={t}/></div>)}</div></td></tr>}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -2403,30 +2700,84 @@ function ShipProducts({items}){
   );
 }
 
-// The reference tables: pallets, packing, container and box weights.
-const refCell=(col,v)=>v==null||v===''?<span className="muted">–</span>:col.type==='number'?fmtNum(v,4):v;
-function ShipReference({tables}){
+// Every TDS document on file; clicking one shows what it says.
+function ShipDataSheets({shipping}){
+  const [search,setSearch]=useState('');
+  const [open,setOpen]=useState(null);
+  const all=shipping.tds??[];
+  const shown=useMemo(()=>all.filter(t=>matchesSearch(`${t.name} ${t.code} ${t.type} ${t.file}`,search)).sort((a,b)=>a.name.localeCompare(b.name)),[all,search]);
   return(
-    <div className="ship-ref-grid">
-      {tables.map(t=>(
-        <div key={t.id} className="card ship-ref-card">
-          <div className="ship-ref-head">
-            <div className="card-title">{t.title}</div>
-            {t.note&&<div className="hint">{t.note}</div>}
+    <>
+      <div className="fb">
+        <div className="fb-row">
+          <div className="fb-search">
+            <span className="fb-search-ico"><Icon.Search size={15}/></span>
+            <input className="input" type="text" value={search} placeholder="Search data sheets…" aria-label="Search data sheets" onChange={e=>setSearch(e.target.value)}/>
           </div>
-          <table className="table dense">
-            <thead><tr>{t.columns.map(c=><th key={c.key} className={c.type==='number'?'num':''}>{c.label}</th>)}</tr></thead>
-            <tbody>
-              {t.rows.map((r,i)=>(
-                <tr key={i}>{t.columns.map(c=><td key={c.key} className={c.type==='number'?'num':''}>{refCell(c,r[c.key])}</td>)}</tr>
-              ))}
-            </tbody>
-          </table>
+          <span className="fb-total">{shown.length} of {all.length}{shipping.tdsReadOn?` · read from the TDS documents on ${shipping.tdsReadOn}`:''} · edit in Settings → Shipping</span>
         </div>
-      ))}
-    </div>
+      </div>
+      <div className="card table-scroll ship-table-fit">
+        <table className="table dense sticky-first">
+          <thead><tr><th>Product</th><th>Code</th><th>Version</th><th>Revised</th><th>Shelf life</th><th>Storage</th><th>Form</th><th>pH</th><th>Density</th><th>Packaging</th><th>Hazard classification</th></tr></thead>
+          <tbody>
+            {shown.map(t=>(
+              <Fragment key={t.id}>
+                <tr className={open===t.id?'row-selected':''} style={{cursor:'pointer'}} onClick={()=>setOpen(o=>o===t.id?null:t.id)}>
+                  <td className="ship-name">{t.name}{t.older&&<div className="hint">Older document</div>}</td>
+                  <td className="mono">{t.code||'–'}</td>
+                  <td className="mono">{t.version||'–'}</td>
+                  <td className="mono nowrap">{t.revised||'–'}</td>
+                  <td className="nowrap">{fmtMonths(t.shelfLifeMonths)}</td>
+                  <td className="nowrap">{fmtStorage(t)}</td>
+                  <td>{t.form||'–'}</td>
+                  <td className="mono nowrap">{t.ph||'–'}</td>
+                  <td className="mono nowrap">{t.density||'–'}</td>
+                  <td className="nowrap">{t.packaging||'–'}</td>
+                  <td><div className="ship-clip" title={t.hazard}>{t.hazard||'–'}</div></td>
+                </tr>
+                {open===t.id&&<tr className="ship-open-row"><td colSpan={11}><div className="ship-open"><TdsCard sheet={t}/></div></td></tr>}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
+
+// The catalogues the packs pick from, then the workbook's other reference tables.
+const SHIP_CATALOGUES=[
+  {key:'pallets',title:'Pallets',usedBy:'palletId',hint:'Only a pallet with a weight can be picked for a pack.',columns:[
+    {key:'name',label:'Pallet',type:'text'},{key:'weight',label:'Weight (kg)',type:'number'},{key:'height',label:'Height (cm)',type:'number'},{key:'width',label:'Width (cm)',type:'number'},{key:'length',label:'Length (cm)',type:'number'}]},
+  {key:'containers',title:'Containers and bags',usedBy:'containerId',columns:[
+    {key:'name',label:'Container or bag',type:'text'},{key:'kind',label:'Kind',type:'kind'},{key:'forSize',label:'For pack size',type:'number'},{key:'weight',label:'Weight (kg)',type:'number'}]},
+  {key:'boxes',title:'Boxes',usedBy:'boxId',columns:[
+    {key:'name',label:'Box',type:'text'},{key:'weight',label:'Weight (kg)',type:'number'}]},
+];
+const refCell=(col,v)=>v==null||v===''?<span className="muted">–</span>:col.type==='number'?fmtNum(v,4):col.type==='kind'?(v==='bag'?'Bag':'Container'):v;
+const RefTable=({title,hint,columns,rows})=>(
+  <div className="card ship-ref-card">
+    <div className="ship-ref-head">
+      <div className="card-title">{title}</div>
+      {hint&&<div className="hint">{hint}</div>}
+    </div>
+    <table className="table dense">
+      <thead><tr>{columns.map(c=><th key={c.key} className={c.type==='number'?'num':''}>{c.label}</th>)}</tr></thead>
+      <tbody>
+        {rows.map((r,i)=>(
+          <tr key={r.id??i}>{columns.map(c=><td key={c.key} className={c.type==='number'?'num':''}>{refCell(c,r[c.key])}</td>)}</tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+const ShipReference=({shipping})=>(
+  <div className="ship-ref-grid">
+    {SHIP_CATALOGUES.map(c=><RefTable key={c.key} title={c.title} hint={c.hint} columns={c.columns} rows={shipping[c.key]??[]}/>)}
+    {(shipping.tables??[]).map(t=><RefTable key={t.id} title={t.title} hint={t.note} columns={t.columns} rows={t.rows}/>)}
+  </div>
+);
 
 // ── Settings ─────────────────────────────────────────────────────────────────────────
 const SettingCard=({title,desc,children,danger})=>(
@@ -2457,7 +2808,7 @@ const SavedNote=({show,children='✓ Saved'})=>show?<span className="saved-note"
 
 const SETTINGS_TABS=[['products','Products'],['colors','Colors'],['icons','Icons'],['shipping','Shipping'],['languages','Languages'],['general','General'],['paths','Paths']];
 
-function Settings({config,saveConfig,setConfig,refreshMap,shipping,saveShipping,setShipping,unsaved,checkUpdates}){
+function Settings({config,saveConfig,setConfig,refreshMap,shipping,saveShipping,setShipping,unsaved,checkUpdates,files}){
   const [tab,setTab]=useState('products');
   const [cfg,setCfg]=useState(config);
   const [saved,setSaved]=useState(false);
@@ -2479,8 +2830,8 @@ function Settings({config,saveConfig,setConfig,refreshMap,shipping,saveShipping,
         {tab==='products'&&<ProductsTab {...shared} setConfig={setConfig}/>}
         {tab==='colors'&&<ColorsTab cfg={cfg}/>}
         {tab==='icons'&&<IconsTab cfg={cfg}/>}
-        {tab==='shipping'&&<ShippingTab draft={shipDraft} setDraft={setShipDraft} dirty={shipDirty} saveShipping={saveShipping} setShipping={setShipping}/>}
-        {tab==='languages'&&<LanguagesTab {...shared}/>}
+        {tab==='shipping'&&<ShippingTab draft={shipDraft} setDraft={setShipDraft} dirty={shipDirty} saveShipping={saveShipping} config={config}/>}
+        {tab==='languages'&&<LanguagesTab {...shared} files={files}/>}
         {tab==='general'&&<GeneralTab {...shared} setConfig={setConfig} refreshMap={refreshMap} checkUpdates={checkUpdates}/>}
         {tab==='paths'&&<PathsTab {...shared}/>}
       </div>
@@ -2720,35 +3071,66 @@ function IconsTab({cfg}){
   );
 }
 
-function LanguagesTab({cfg,setCfg,save,saved}){
-  const [newLang,setNewLang]=useState({code:'',name:'',flag:''});
-  const updL=(i,k,v)=>{const l=[...cfg.languages];l[i]={...l[i],[k]:v};setCfg({...cfg,languages:l});};
-  const remL=i=>setCfg({...cfg,languages:cfg.languages.filter((_,j)=>j!==i)});
-  const addL=()=>{if(!newLang.code.trim()||!newLang.name.trim())return;setCfg({...cfg,languages:[...cfg.languages,{...newLang,enabled:true}]});setNewLang({code:'',name:'',flag:''});};
+function LanguagesTab({cfg,setCfg,save,saved,files}){
+  const [search,setSearch]=useState('');
+  const [sort,setSort]=useLangSort();
+  const [newLang,setNewLang]=useState({code:'',name:''});
+  const usage=useMemo(()=>langUsage(files),[files]);
+  const shown=useMemo(()=>sortLangs(cfg.languages.filter(l=>matchesSearch(langText(l),search)),sort,usage),[cfg.languages,search,sort,usage]);
+  const setEnabled=(code,enabled)=>setCfg({...cfg,languages:cfg.languages.map(l=>l.code===code?{...l,enabled}:l)});
+  const remove=code=>setCfg({...cfg,languages:cfg.languages.filter(l=>l.code!==code)});
+  const code=newLang.code.trim().toUpperCase(),name=newLang.name.trim();
+  const clash=cfg.languages.find(l=>l.code===code)??cfg.languages.find(l=>l.iso?.toUpperCase()===code);
+  const problem=!code?'':!/^[A-Z]{2,3}$/.test(code)?'A code is 2 or 3 letters.'
+    :['BL','KR','CZ','EE','GR','UA'].includes(code)?`${code} is how older labels wrote another language.`:clash?`${code} is already ${clash.name}.`:'';
+  const add=()=>{
+    if(!code||!name||problem)return;
+    setCfg({...cfg,languages:[...cfg.languages,{code,name,enabled:true}]});
+    setNewLang({code:'',name:''});
+    setSearch('');
+  };
   return(
     <div className="page-fill">
+      <div className="flex gap-2 items-center" style={{flexShrink:0,marginBottom:'var(--space-3)'}}>
+        <div className="search-wrap" style={{flex:'1 1 auto',maxWidth:380}}>
+          <span className="search-icon"><Icon.Search size={14}/></span>
+          <input className="input" placeholder="Search languages..." aria-label="Search languages" value={search} onChange={e=>setSearch(e.target.value)}/>
+        </div>
+        <LangSortToggle sort={sort} onChange={setSort}/>
+        <span className="hint ml-auto">Languages switched on are offered in New Label.</span>
+      </div>
+      <div className="hint" style={{flexShrink:0,marginBottom:'var(--space-3)'}}>Language codes follow the ISO 639 standard: the two-letter ISO 639-1 codes, except Ewe (EWE), Kanuri (KAU) and Chechen (CHE), which use their three-letter ISO 639-2 codes because their two-letter ones mean something else on labels.</div>
       <div className="scroll-y">
-        {cfg.languages.map((l,i)=>(
-          <div key={l.code+i} className="list-row">
-            <label className="toggle"><input type="checkbox" checked={l.enabled} onChange={e=>updL(i,'enabled',e.target.checked)}/><span className="toggle-slider"/></label>
-            <span style={{fontSize:18,lineHeight:1}}>{l.flag}</span>
-            <span className="mono" style={{fontSize:'var(--fs-md)',fontWeight:600,width:30,flexShrink:0,color:'var(--accent)'}}>{l.code}</span>
-            <span style={{flex:1,fontSize:'var(--fs-md)',color:'var(--text2)'}}>{l.name}</span>
-            <button className="btn btn-danger btn-sm" onClick={()=>remL(i)} aria-label={`Remove ${l.name}`}>✕</button>
+        {langGroups(shown,sort,usage).map(g=>(
+          <div key={g.title??'all'} style={{marginBottom:'var(--space-5)'}}>
+            {g.title&&<div className="eyebrow" style={{marginBottom:'var(--space-2)'}}>{g.title}</div>}
+            {g.items.map(l=>(
+              <div key={l.code} className="list-row">
+                <label className="toggle"><input type="checkbox" aria-label={`Offer ${l.name} in New Label`} checked={l.enabled} onChange={e=>setEnabled(l.code,e.target.checked)}/><span className="toggle-slider"/></label>
+                <span className="mono" style={{fontSize:'var(--fs-md)',fontWeight:600,width:36,flexShrink:0,color:'var(--accent)'}}>{l.code}</span>
+                <span style={{flex:1,minWidth:0,fontSize:'var(--fs-md)',color:'var(--text2)'}} title={l.alt?`Also: ${l.alt}`:undefined}>
+                  {l.name}
+                  {l.iso&&l.iso!==l.code.toLowerCase()&&<span className="mono muted" style={{fontSize:'var(--fs-xs)',marginLeft:'var(--space-2)'}} title={`ISO 639-1 code ${l.iso}. Labels write this language as ${l.code}.`}>ISO {l.iso}</span>}
+                </span>
+                {usage[l.code]>0&&<span className="mono muted" style={{fontSize:'var(--fs-xs)',flexShrink:0}}>{fileCount(usage[l.code])}</span>}
+                {!l.iso&&<button className="btn btn-danger btn-sm" onClick={()=>remove(l.code)} aria-label={`Remove ${l.name}`}>✕</button>}
+              </div>
+            ))}
           </div>
         ))}
+        {shown.length===0&&<div className="muted" style={{fontSize:'var(--fs-md)',fontStyle:'italic'}}>No language matches “{search.trim()}”.</div>}
       </div>
       <div style={{flexShrink:0,borderTop:'1px solid var(--border)',marginTop:'var(--space-3)',paddingTop:'var(--space-4)',display:'flex',flexDirection:'column',gap:'var(--space-2)'}}>
-        <div className="eyebrow">Add language</div>
+        <div className="eyebrow">Add a language that isn't in ISO 639-1</div>
         <div className="flex gap-2 items-center">
-          <input className="input" placeholder="🏳 Flag" value={newLang.flag} onChange={e=>setNewLang({...newLang,flag:e.target.value})} style={{width:72}}/>
-          <input className="input" placeholder="Code" value={newLang.code} onChange={e=>setNewLang({...newLang,code:e.target.value.toUpperCase()})} style={{width:72}}/>
-          <input className="input" placeholder="Full name" value={newLang.name} onChange={e=>setNewLang({...newLang,name:e.target.value})} style={{flex:1}}/>
-          <button className="btn btn-primary" onClick={addL}>Add</button>
+          <input className={'input'+(problem?' invalid':'')} placeholder="Code" aria-label="Language code" value={newLang.code} onChange={e=>setNewLang({...newLang,code:e.target.value.toUpperCase()})} style={{width:84}}/>
+          <input className="input" placeholder="Full name" aria-label="Language name" value={newLang.name} onChange={e=>setNewLang({...newLang,name:e.target.value})} style={{flex:1}}/>
+          <button className="btn btn-primary" disabled={!code||!name||!!problem} onClick={add}>Add</button>
         </div>
+        {problem&&<div style={{fontSize:'var(--fs-sm)',color:'var(--danger)'}}>{problem}</div>}
       </div>
       <div className="action-bar">
-        <span className="mono muted" style={{fontSize:'var(--fs-xs)'}}>{cfg.languages.filter(l=>l.enabled).length}/{cfg.languages.length} enabled</span>
+        <span className="mono muted" style={{fontSize:'var(--fs-xs)'}}>{cfg.languages.filter(l=>l.enabled).length}/{cfg.languages.length} switched on</span>
         <span className="ml-auto"><SavedNote show={saved}/></span>
         <button className="btn btn-primary" onClick={save}>Save changes</button>
       </div>
@@ -2858,70 +3240,215 @@ function PathsTab({cfg,setCfg,save,saved}){
 }
 
 // ── Settings: shipping data ──────────────────────────────────────────────────────────
-const SHIP_FORM=[
-  {title:'Product',fields:[['product','Product','text'],['variant','Variant','text','If rows share a pack size'],['packSize','Pack size','number'],['unit','Unit','unit'],['group','Group','text'],['subgroup','Subgroup','text']]},
-  {title:'Weights',fields:[['palletSize','Pallet size (L or kg)','number'],['density','Density (kg per L)','number'],['palletWeight','Pallet weight (kg)','number'],['containerWeight','Container or bag weight (kg)','number'],['unitsPerBox','Units per box (0 = no boxes)','number'],['boxWeight','Box weight (kg)','number'],['strapWeight','Strap per pallet (kg)','number'],['price','Price per L or kg','number']]},
-  {title:'Shipping details',fields:[['customsCode','Customs code','text'],['origin','Country of origin','text'],['shelfLife','Shelf life','text'],['shelfLifeNew','Shelf life from 2025-06-01 (years)','number'],['storage','Storage and transport','text'],['adrClass','ADR class','text'],['adrVerified','ADR class, checked','text'],['packingGroup','Packing group','text'],['airTransport','Air transport allowed','bool'],['note','Note','note']]},
+const SHIP_IDENTITY=[
+  ['name','Name','text'],['variant','Variant','text','If two versions ship'],['unit','Unit','unit'],['group','Group','group'],
+  ['shelfLifeMonths','Shelf life','months'],['density','Density (kg per L)','number'],['strapWeight','Strap per pallet (kg)','number'],
 ];
-const shipItemProblem=i=>!i.product?.trim()?'needs a name':!(i.packSize>0)?'needs a pack size':!(i.palletSize>0)?'needs a pallet size':null;
-const newShipItem=()=>({id:'item-'+Date.now().toString(36),product:'New product',variant:'',packSize:1,unit:'L',palletSize:480,density:1,palletWeight:22.5,containerWeight:0,unitsPerBox:0,boxWeight:0,strapWeight:0.9,price:null,shelfLife:'',shelfLifeNew:null,origin:'LT',customsCode:'',group:'',subgroup:'',storage:'',adrClass:'',adrVerified:'',packingGroup:'',airTransport:true,note:''});
+const SHIP_DETAILS=[
+  ['customsCode','Customs code','text'],['origin','Country of origin','text'],['storageMin','Storage from','celsius'],['storageMax','Storage to','celsius'],
+  ['adrClass','ADR class','adr'],['packingGroup','Packing group','pg'],['airTransport','Air transport allowed','bool'],
+  ['subgroup','Subgroup','long'],['note','Note','long'],
+];
+const TDS_FIELDS=[
+  ['name','Product','text'],['code','Code','text'],['version','Version','text'],['revised','Revised','text','YYYY-MM-DD'],
+  ['shelfLifeMonths','Shelf life','months'],['storageMin','Storage from','celsius'],['storageMax','Storage to','celsius'],
+  ['form','Form','text'],['colour','Colour','text'],['odour','Odour','text'],['ph','pH','text'],['density','Density (g/cm³)','text'],
+  ['packaging','Packaging','text'],['concentration','Concentration','text'],['organic','Suitable for organic farming','bool'],['older','Older document','bool'],
+  ['type','Type','long'],['application','Application','long'],['hazard','Hazard classification','long'],['file','File','text'],['folder','Folder','text'],
+];
+const ADR_CLASSES=['1','2','3','4.1','4.2','4.3','5.1','5.2','6.1','6.2','7','8','9'];
 
-function ShippingTab({draft,setDraft,dirty,saveShipping,setShipping}){
+const shipProblem=p=>{
+  if(!p.name?.trim())return 'needs a name';
+  if(p.packs?.length&&p.unit==='L'&&!(p.density>0))return 'needs a density';
+  if(p.packs?.length&&!(p.strapWeight>0))return 'needs a strap weight';
+  for(const k of p.packs??[]){
+    if(!(k.packSize>0))return 'has a pack with no size';
+    const size=`${k.packSize} ${p.unit}`;
+    if(!(k.palletSize>0))return `${size} needs to say what a pallet holds`;
+    if(!k.palletId)return `${size} needs a pallet`;
+    if(!k.containerId)return `${size} needs a container`;
+    if(k.boxId&&!(k.unitsPerBox>0))return `${size} needs units per box`;
+  }
+  const sizes=(p.packs??[]).map(k=>k.packSize);
+  return new Set(sizes).size<sizes.length?'has two packs of the same size':null;
+};
+const duplicateProduct=draft=>{
+  const seen=new Set();
+  for(const p of draft.products??[]){
+    const key=profileName(p).trim().toLowerCase();
+    if(seen.has(key))return p;
+    seen.add(key);
+  }
+  return null;
+};
+const catalogueUse=(draft,field)=>{
+  const n={};
+  for(const p of draft.products??[])for(const k of p.packs??[])if(k[field])n[k[field]]=(n[k[field]]||0)+1;
+  return n;
+};
+const catalogueProblem=draft=>{
+  for(const c of SHIP_CATALOGUES){
+    const used=catalogueUse(draft,c.usedBy);
+    for(const r of draft[c.key]??[]){
+      if(!r.name?.trim())return `${c.title}: a row needs a name.`;
+      if(used[r.id]&&!(r.weight>0))return `${c.title}: ${r.name} is used by ${used[r.id]} pack${used[r.id]===1?'':'s'} and needs a weight.`;
+    }
+  }
+  return null;
+};
+const newId=prefix=>`${prefix}-${Date.now().toString(36)}${Math.floor(Math.random()*1296).toString(36)}`;
+const blankPack=()=>({id:newId('pack'),packSize:null,palletSize:null,palletId:null,containerId:null,boxId:null,unitsPerBox:null});
+// What the rest of the data says, so a new entry starts from how things are done here.
+const usualStrap=(draft,unit)=>mostCommon((draft.products??[]).filter(p=>p.unit===unit&&p.strapWeight>0).map(p=>p.strapWeight));
+const containerKind=unit=>unit==='kg'?'bag':'container';
+const usualPack=(draft,unit,size,skipId)=>{
+  if(!(size>0))return {};
+  const others=(draft.products??[]).filter(p=>p.unit===unit).flatMap(p=>p.packs??[]).filter(k=>k.id!==skipId);
+  const same=others.filter(k=>k.packSize===size);
+  const made=(draft.containers??[]).filter(c=>c.forSize===size&&c.kind===containerKind(unit)).map(c=>c.id);
+  const boxId=mostCommon(same.map(k=>k.boxId))??null;
+  return {
+    palletSize:mostCommon(same.map(k=>k.palletSize))??null,
+    palletId:mostCommon((same.length?same:others).map(k=>k.palletId))??null,
+    containerId:mostCommon(same.map(k=>k.containerId).filter(id=>made.includes(id)))??made[0]??null,
+    boxId,
+    unitsPerBox:boxId?mostCommon(same.filter(k=>k.boxId===boxId).map(k=>k.unitsPerBox))??null:null,
+  };
+};
+// A pack after its size or unit changes. Blank, or only what the old size and unit would have filled in, follows; a choice someone made stays.
+const refillPack=(draft,config,k,fromUnit,unit,size)=>{
+  const was=usualPack(draft,fromUnit,k.packSize,k.id),now=usualPack(draft,unit,size,k.id);
+  const follow=f=>k[f]==null||k[f]===was[f]?now[f]??null:k[f];
+  const boxId=follow('boxId');
+  const onSheet=size>0?unitsPerBoxOnSheet(config,size,unit):null;
+  return {packSize:size,palletSize:follow('palletSize'),palletId:follow('palletId'),containerId:follow('containerId'),boxId,
+    unitsPerBox:boxId?onSheet??(boxId===k.boxId?k.unitsPerBox:now.unitsPerBox??null):null};
+};
+// A label product's data sheets, the ones that suit the unit first: BioSplito has a powder and a liquid.
+const sheetsForLabel=(draft,name,unit)=>{
+  const all=(draft.tds??[]).filter(t=>t.labels?.includes(name));
+  const fit=all.filter(t=>(t.form||'').toLowerCase().startsWith('powder')===(unit==='kg'));
+  return fit.length?fit:all;
+};
+const fromSheet=sheet=>sheet?{shelfLifeMonths:sheet.shelfLifeMonths??null,storageMin:sheet.storageMin??null,storageMax:sheet.storageMax??null}:{};
+const newProfile=(name,link,draft)=>{
+  const unit=link?.unit??'L';
+  const sheets=link?sheetsForLabel(draft,link.name,unit):[];
+  const sibling=link?(draft.products??[]).find(p=>p.links?.includes(link.name)&&p.shelfLifeMonths):null;
+  return {id:newId('product'),name,variant:'',links:link?[link.name]:[],tds:sheets.map(t=>t.id),unit,group:link?.category??'',subgroup:'',density:null,strapWeight:usualStrap(draft,unit),
+    shelfLifeMonths:sibling?.shelfLifeMonths??null,origin:'LT',customsCode:'',storageMin:null,storageMax:null,adrClass:'',packingGroup:'',airTransport:true,note:'',packs:[blankPack()],...fromSheet(sheets[0])};
+};
+const blankSheet=()=>({id:newId('tds'),name:'',labels:[],code:'',version:'',revised:'',file:'',folder:'',older:false,type:'',application:'',form:'',colour:'',odour:'',ph:'',density:'',concentration:'',shelfLifeMonths:null,storageMin:null,storageMax:null,packaging:'',hazard:'',organic:false});
+
+function ShippingTab({draft,setDraft,dirty,saveShipping,config}){
   const [section,setSection]=useState('items');
   const [saved,setSaved]=useState(false);
   const [error,setError]=useState('');
   if(!draft||draft.error)return <div className="alert alert-error">{draft?.error??'The shipping data could not be read'}. Close whatever has it open, then reload this page.</div>;
-  const problems=draft.items.map(i=>[i,shipItemProblem(i)]).filter(([,p])=>p);
+  const badProduct=(draft.products??[]).find(shipProblem);
+  const twin=duplicateProduct(draft);
+  const problem=badProduct?`${profileName(badProduct)||'A product'} ${shipProblem(badProduct)}.`
+    :twin?`Two products are called ${profileName(twin)}. Give one a variant.`
+    :(draft.tds??[]).some(t=>!t.name?.trim())?'A data sheet needs a product name.'
+    :catalogueProblem(draft);
   const save=async()=>{
     setError('');
     const r=await saveShipping(draft);
     if(r.ok){setSaved(true);setTimeout(()=>setSaved(false),2000);}
     else setError(r.error||'Could not save');
   };
-  const reset=async()=>{
-    if(!window.confirm('Replace all shipping data with the values from the original calculator?\n\nThis changes it for everyone who shares this folder, and cannot be undone.'))return;
-    const r=await api.resetShipping();
-    if(r.ok){setShipping(r.shipping);setDraft(r.shipping);}
-    else setError(r.error||'Could not reset');
-  };
   return(
     <div className="page-fill">
       <div className="flex items-center gap-3" style={{flexShrink:0,marginBottom:'var(--space-4)'}}>
         <div className="seg" role="group" aria-label="Section">
-          {[['items','Products'],['tables','Pallets & packaging']].map(([s,l])=>(
+          {[['items','Products'],['tables','Pallets & packaging'],['sheets','Data sheets']].map(([s,l])=>(
             <button key={s} type="button" aria-pressed={section===s} className={'seg-btn'+(section===s?' on':'')} onClick={()=>setSection(s)}>{l}</button>
           ))}
         </div>
-        <span className="hint">Saved as shipping_data.json in the labels folder, next to the file map, and shared with everyone who uses it.</span>
+        <span className="hint">Saved as shipping_profiles.json in the labels folder, next to the file map, and shared with everyone who uses it.</span>
         <button className="btn btn-folder btn-sm ml-auto" style={{flexShrink:0}} onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}><Icon.Folder/>Open folder</button>
       </div>
-      {section==='items'
-        ?<ShipItemsEditor draft={draft} setDraft={setDraft}/>
-        :<ShipTablesEditor draft={draft} setDraft={setDraft}/>}
-      {(problems.length>0||error)&&(
-        <div className="alert alert-error" style={{flexShrink:0,marginTop:'var(--space-3)'}}>
-          {error||`${problems[0][0].product||'A product'} ${problems[0][1]}${problems.length>1?`, and ${problems.length-1} more`:''}. Fix this before saving.`}
-        </div>
-      )}
+      {section==='items'&&<ShipProductsEditor draft={draft} setDraft={setDraft} config={config}/>}
+      {section==='tables'&&<ShipTablesEditor draft={draft} setDraft={setDraft}/>}
+      {section==='sheets'&&<ShipSheetsEditor draft={draft} setDraft={setDraft} config={config}/>}
+      {(problem||error)&&<div className="alert alert-error" style={{flexShrink:0,marginTop:'var(--space-3)'}}>{error||`${problem} Fix this before saving.`}</div>}
       <div className="action-bar">
-        <button className="btn btn-ghost" onClick={reset} title="Replace the shipping data with the values from the original calculator">↺ Reset to calculator values</button>
         <span className="ml-auto"><SavedNote show={saved}/>{dirty&&!saved&&<span className="badge badge-wip">Unsaved changes</span>}</span>
-        <button className="btn btn-primary" disabled={!dirty||problems.length>0} onClick={save}>Save changes</button>
+        <button className="btn btn-primary" disabled={!dirty||!!problem} onClick={save}>Save changes</button>
       </div>
     </div>
   );
 }
 
-function ShipItemsEditor({draft,setDraft}){
+// A new profile starts from a label product, which fills in what the app already knows about it,
+// or from just a name: products that ship but never get a label stay out of the label side altogether.
+function AddShipProduct({config,draft,onCreate,onOpen,onClose}){
+  const [kind,setKind]=useState('label');
+  const [linkName,setLinkName]=useState('');
+  const [name,setName]=useState('');
+  const appProducts=useMemo(()=>[...(config?.products??[])].sort((a,b)=>a.name.localeCompare(b.name)),[config]);
+  const link=appProducts.find(p=>p.name===linkName);
+  const existing=link?(draft.products??[]).filter(p=>p.links?.includes(link.name)):[];
+  const clash=kind==='new'&&(draft.products??[]).find(p=>p.name.trim().toLowerCase()===name.trim().toLowerCase());
+  const preview=link?newProfile(link.name,link,draft):null;
+  const canCreate=kind==='label'?!!link:!!name.trim()&&!clash;
+  const create=()=>{
+    if(!canCreate)return;
+    onCreate(kind==='label'?newProfile(link.name,link,draft):newProfile(name.trim(),null,draft));
+  };
+  return(
+    <Modal title="Add a shipping product" onEscape={onClose}>
+      <div className="seg modal-section" role="group" aria-label="Kind of product">
+        <button type="button" aria-pressed={kind==='label'} className={'seg-btn'+(kind==='label'?' on':'')} onClick={()=>setKind('label')}>A label product</button>
+        <button type="button" aria-pressed={kind==='new'} className={'seg-btn'+(kind==='new'?' on':'')} onClick={()=>setKind('new')}>A new product</button>
+      </div>
+      {kind==='label'?(
+        <div className="field modal-section" style={{marginBottom:0}}>
+          <label htmlFor="ship-link">Product</label>
+          <select id="ship-link" className="input" value={linkName} onChange={e=>setLinkName(e.target.value)}>
+            <option value="">Choose a product…</option>
+            {['MO','PAM','CE'].map(cat=>(
+              <optgroup key={cat} label={cat}>{appProducts.filter(p=>p.category===cat).map(p=><option key={p.name} value={p.name}>{p.name}</option>)}</optgroup>
+            ))}
+          </select>
+          {preview
+            ?<div className="hint">Fills in: unit {preview.unit} · group {preview.group} · shelf life {preview.shelfLifeMonths?fmtMonths(preview.shelfLifeMonths):'not in a data sheet'}{preview.storageMin!=null?` · storage ${fmtStorage(preview)}`:''}</div>
+            :<div className="hint">Fills in its unit, group, and from its data sheet the shelf life and storage.</div>}
+          {existing.length>0&&(
+            <div className="alert alert-warning" style={{marginTop:'var(--space-2)'}}>
+              <span>{link.name} is already in {profileName(existing[0])}. Add packs to it there, or make a new one only if it ships as a separate version.</span>
+              <button type="button" className="btn btn-ghost btn-sm" style={{flexShrink:0}} onClick={()=>onOpen(existing[0].id)}>Open it</button>
+            </div>
+          )}
+        </div>
+      ):(
+        <div className="field modal-section" style={{marginBottom:0}}>
+          <label htmlFor="ship-new-name">Name</label>
+          <input id="ship-new-name" className={'input'+(clash?' invalid':'')} value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')create();}}/>
+          {clash
+            ?<div style={{fontSize:'var(--fs-sm)',color:'var(--danger)'}}>There is already a product called {clash.name}.</div>
+            :<div className="hint">For products that ship but never get a label. It stays here, out of New Label and the label product list.</div>}
+        </div>
+      )}
+      <div className="flex gap-2 modal-section">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn btn-primary ml-auto" disabled={!canCreate} onClick={create}>Add product</button>
+      </div>
+    </Modal>
+  );
+}
+
+function ShipProductsEditor({draft,setDraft,config}){
   const [search,setSearch]=useState('');
   const [selectedId,setSelectedId]=useState(null);
-  const shown=useMemo(()=>draft.items.filter(i=>matchesSearch(`${i.product} ${i.variant} ${i.customsCode}`,search)).sort(byProductThenPack),[draft.items,search]);
-  const item=draft.items.find(i=>i.id===selectedId);
-  const setItems=items=>setDraft({...draft,items});
-  const update=(k,v)=>setItems(draft.items.map(i=>i.id===selectedId?{...i,[k]:v}:i));
-  const add=fresh=>{setItems([...draft.items,fresh]);setSelectedId(fresh.id);setSearch('');};
-  const remove=()=>{setItems(draft.items.filter(i=>i.id!==selectedId));setSelectedId(null);};
-  const fullPallet=item?shipCalc(item,item.palletSize):null;
+  const [adding,setAdding]=useState(false);
+  const shown=useMemo(()=>(draft.products??[]).filter(p=>matchesSearch(`${p.name} ${p.variant} ${p.customsCode} ${(p.links??[]).join(' ')}`,search)).sort(byProfileName),[draft.products,search]);
+  const groups=[...SHIP_GROUPS,...new Set(shown.map(p=>p.group).filter(g=>!SHIP_GROUPS.includes(g)))];
+  const product=(draft.products??[]).find(p=>p.id===selectedId);
+  const setProducts=products=>setDraft({...draft,products});
+  const update=change=>setProducts(draft.products.map(p=>p.id===selectedId?{...p,...change}:p));
+  const add=fresh=>{setProducts([...(draft.products??[]),fresh]);setSelectedId(fresh.id);setSearch('');setAdding(false);};
   return(
     <div className="ship-edit">
       <div className="ship-edit-list">
@@ -2929,53 +3456,320 @@ function ShipItemsEditor({draft,setDraft}){
           <span className="search-icon"><Icon.Search size={14}/></span>
           <input className="input" placeholder="Search..." aria-label="Search products" value={search} onChange={e=>setSearch(e.target.value)}/>
         </div>
-        <div className="scroll-y pick-list">
-          {shown.map(i=>(
-            <button key={i.id} className={'pick-row'+(i.id===selectedId?' on':'')} onClick={()=>setSelectedId(i.id)}>
-              <span className="pick-row-name" title={i.variant?`${i.product} (${i.variant})`:i.product}>{i.product}{i.variant&&<span className="muted"> · {i.variant}</span>}</span>
-              <span className="mono muted" style={{fontSize:'var(--fs-2xs)',flexShrink:0}}>{fmtPack(i)}</span>
-              {shipItemProblem(i)&&<span className="dot" style={{background:'var(--danger)'}} title={shipItemProblem(i)}/>}
-            </button>
-          ))}
-          {shown.length===0&&<div className="muted" style={{fontSize:'var(--fs-sm)',fontStyle:'italic',padding:'var(--space-2) var(--space-1)'}}>No products match.</div>}
+        <div className="scroll-y">
+          {groups.map(g=>{
+            const inGroup=shown.filter(p=>p.group===g);
+            return inGroup.length===0?null:(
+              <div key={g||'none'} style={{marginBottom:'var(--space-4)'}}>
+                {g?<CategoryHeading cat={g}/>:<div className="eyebrow" style={{marginBottom:'var(--space-2)'}}>No group</div>}
+                <div className="pick-list">
+                  {inGroup.map(p=>(
+                    <button key={p.id} className={'pick-row'+(p.id===selectedId?' on':'')} onClick={()=>setSelectedId(p.id)}>
+                      <span className="pick-row-name" title={profileName(p)}>{p.name}{p.variant&&<span className="muted"> · {p.variant}</span>}</span>
+                      {shipProblem(p)
+                        ?<span className="dot" style={{background:'var(--danger)'}} title={shipProblem(p)}/>
+                        :<span className="mono muted" style={{fontSize:'var(--fs-2xs)',flexShrink:0}}>{(p.packs??[]).length} {(p.packs??[]).length===1?'pack':'packs'}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {shown.length===0&&<div className="muted" style={{fontSize:'var(--fs-sm)',fontStyle:'italic',padding:'var(--space-2) var(--space-1)'}}>No products{search?' match':' yet'}.</div>}
         </div>
-        <button className="btn btn-ghost btn-sm" style={{flexShrink:0}} onClick={()=>add(newShipItem())}>+ Add product</button>
+        <button className="btn btn-ghost btn-sm" style={{flexShrink:0}} onClick={()=>setAdding(true)}>+ Add product</button>
       </div>
-      {!item?(
+      {!product?(
         <div className="muted" style={{flex:1,fontSize:'var(--fs-md)',fontStyle:'italic',paddingTop:'var(--space-2)'}}>Select a product to edit its shipping data.</div>
       ):(
-        <div className="ship-edit-form scroll-y" key={item.id}>
-          {SHIP_FORM.map(group=>(
-            <div key={group.title} className="card-flat">
-              <div className="flex items-center justify-between gap-3">
-                <div className="card-title">{group.title}</div>
-                {group.title==='Weights'&&<span className="hint">A full pallet weighs {fmtNum(fullPallet.totalKg)} kg</span>}
-                {group.title==='Product'&&(
-                  <div className="flex gap-2">
-                    <button className="btn btn-ghost btn-sm" onClick={()=>add({...item,id:newShipItem().id,variant:item.variant?`${item.variant} (copy)`:'copy'})}>Duplicate</button>
-                    <button className="btn btn-danger btn-sm" onClick={remove}>Delete</button>
-                  </div>
-                )}
-              </div>
-              <div className="ship-form-grid">
-                {group.fields.map(([k,label,type,placeholder])=>(
-                  <div key={k} className={`field${type==='note'?' wide':''}`}>
-                    <label htmlFor={`ship-${k}`}>{label}</label>
-                    {type==='number'?<NumInput id={`ship-${k}`} value={item[k]} onChange={v=>update(k,v)}/>
-                    :type==='unit'?(
-                      <select id={`ship-${k}`} className="input" value={item[k]} onChange={e=>update(k,e.target.value)}><option>L</option><option>kg</option></select>
-                    ):type==='bool'?(
-                      <label className="toggle"><input id={`ship-${k}`} type="checkbox" checked={!!item[k]} onChange={e=>update(k,e.target.checked)}/><span className="toggle-slider"/></label>
-                    ):type==='note'?(
-                      <textarea id={`ship-${k}`} className="input" rows={2} value={item[k]??''} onChange={e=>update(k,e.target.value)}/>
-                    ):(
-                      <input id={`ship-${k}`} className="input" placeholder={placeholder} value={item[k]??''} onChange={e=>update(k,e.target.value)}/>
-                    )}
-                  </div>
-                ))}
-              </div>
+        <ShipProductForm key={product.id} product={product} draft={draft} config={config} update={update}
+          onDuplicate={()=>add({...product,id:newId('product'),variant:product.variant?`${product.variant} (copy)`:'copy',packs:(product.packs??[]).map(k=>({...k,id:newId('pack')}))})}
+          onDelete={()=>{setProducts(draft.products.filter(p=>p.id!==selectedId));setSelectedId(null);}}/>
+      )}
+      {adding&&<AddShipProduct config={config} draft={draft} onCreate={add} onOpen={id=>{setSelectedId(id);setSearch('');setAdding(false);}} onClose={()=>setAdding(false)}/>}
+    </div>
+  );
+}
+
+// One field of a form; the type says which control it gets.
+function ShipField({spec:[k,label,type,placeholder],value,set,disabled,hint}){
+  const id=`ship-${k}`;
+  return(
+    <div className={`field${type==='long'?' wide':''}`}>
+      <label htmlFor={id}>{label}</label>
+      {type==='number'?<NumInput id={id} value={value} onChange={set}/>
+      :type==='months'?<div className="input-unit ship-unit-long"><NumInput id={id} value={value} onChange={set}/><span>months</span></div>
+      :type==='celsius'?<div className="input-unit"><NumInput id={id} value={value} onChange={set}/><span>°C</span></div>
+      :type==='unit'?(
+        <select id={id} className="input" value={value} onChange={e=>set(e.target.value)}><option>L</option><option>kg</option></select>
+      ):type==='group'?(
+        <select id={id} className="input" value={value??''} onChange={e=>set(e.target.value)}>
+          <option value="">—</option>
+          {[...new Set([...SHIP_GROUPS,value].filter(Boolean))].map(g=><option key={g}>{g}</option>)}
+        </select>
+      ):type==='adr'?(
+        <select id={id} className="input" value={value??''} onChange={e=>set(e.target.value)}>
+          <option value="">None</option>
+          {[...new Set([...ADR_CLASSES,value].filter(Boolean))].map(c=><option key={c}>{c}</option>)}
+        </select>
+      ):type==='pg'?(
+        <select id={id} className="input" disabled={disabled} value={value??''} onChange={e=>set(e.target.value)}>
+          <option value="">{disabled?'Not applicable':'—'}</option>
+          {['I','II','III'].map(g=><option key={g}>{g}</option>)}
+        </select>
+      ):type==='bool'?(
+        <label className="toggle"><input id={id} type="checkbox" checked={!!value} onChange={e=>set(e.target.checked)}/><span className="toggle-slider"/></label>
+      ):type==='long'?(
+        <textarea id={id} className="input" rows={3} value={value??''} onChange={e=>set(e.target.value)}/>
+      ):(
+        <input id={id} className="input" placeholder={placeholder} value={value??''} onChange={e=>set(e.target.value)}/>
+      )}
+      {hint}
+    </div>
+  );
+}
+const FieldNote=({children,onUse})=><div className="ship-sheet">{children}{onUse&&<button type="button" className="ship-use" onClick={onUse}>Use</button>}</div>;
+
+// Things picked from a list, shown as chips: label products on a profile, data sheets on a profile, label products on a data sheet.
+function LinkChips({values,options,isGone,goneTitle,keptTitle,onChange,label,addFirst,addMore}){
+  const nameOf=v=>options.find(o=>o.value===v)?.label??v;
+  return(
+    <div className="ship-links">
+      {values.map(v=>(
+        <span key={v} className={`badge ${isGone?.(v)?'badge-danger':'badge-ok'} ship-link`} title={isGone?.(v)?goneTitle:keptTitle}>
+          {nameOf(v)}<button type="button" aria-label={`Unlink ${nameOf(v)}`} onClick={()=>onChange(values.filter(x=>x!==v))}><Icon.Close size={10}/></button>
+        </span>
+      ))}
+      <select className="input ship-link-add" aria-label={label} value="" onChange={e=>e.target.value&&onChange([...values,e.target.value])}>
+        <option value="">{values.length?addMore:addFirst}</option>
+        {options.filter(o=>!values.includes(o.value)).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function ShipProductForm({product:p,draft,config,update,onDuplicate,onDelete}){
+  const labelOptions=useMemo(()=>(config?.products??[]).map(x=>({value:x.name,label:x.name})).sort((a,b)=>a.label.localeCompare(b.label)),[config]);
+  const sheetOptions=useMemo(()=>(draft.tds??[]).map(t=>({value:t.id,label:t.name})).sort((a,b)=>a.label.localeCompare(b.label)),[draft.tds]);
+  const links=p.links??[];
+  const sheets=tdsOf(p,draft);
+  // What a newly linked data sheet knows, for the fields still blank.
+  const fillBlanks=sheet=>{
+    const known=fromSheet(sheet);
+    return Object.fromEntries(Object.entries(known).filter(([k])=>p[k]==null));
+  };
+  // The name follows the links until someone has typed their own.
+  const setLinks=next=>{
+    const added=next.filter(n=>!links.includes(n));
+    const found=added.flatMap(n=>sheetsForLabel(draft,n,p.unit)).filter(t=>!(p.tds??[]).includes(t.id));
+    // A data sheet a link brought along goes with it, unless another link still needs it.
+    const removed=links.filter(n=>!next.includes(n));
+    const dropped=(draft.tds??[]).filter(t=>t.labels?.some(l=>removed.includes(l))&&!t.labels.some(l=>next.includes(l))).map(t=>t.id);
+    update({links:next,...(next.length&&(!p.name?.trim()||p.name===links.join(' / '))?{name:next.join(' / ')}:{}),tds:[...(p.tds??[]).filter(id=>!dropped.includes(id)),...found.map(t=>t.id)],...fillBlanks(found[0])});
+  };
+  const setSheets=next=>{
+    const added=(draft.tds??[]).find(t=>next.includes(t.id)&&!(p.tds??[]).includes(t.id));
+    update({tds:next,...fillBlanks(added)});
+  };
+  const setUnit=unit=>update({unit,
+    density:unit==='kg'?null:p.density,
+    strapWeight:p.strapWeight==null||p.strapWeight===usualStrap(draft,p.unit)?usualStrap(draft,unit):p.strapWeight,
+    packs:(p.packs??[]).map(k=>({...k,...refillPack(draft,config,k,p.unit,unit,k.packSize)}))});
+  const setAdr=adrClass=>update({adrClass,...(adrClass?{}:{packingGroup:''})});
+  const setters={unit:setUnit,adrClass:setAdr};
+  // Where this differs from what it is linked to. These only inform: a figure may differ on purpose.
+  const other=links.map(n=>(config?.products??[]).find(x=>x.name===n)).find(x=>x?.unit&&x.unit!==p.unit);
+  const months=sheets.find(t=>t.shelfLifeMonths&&t.shelfLifeMonths!==p.shelfLifeMonths);
+  const stored=sheets.find(t=>t.storageMin!=null&&(t.storageMin!==p.storageMin||t.storageMax!==p.storageMax));
+  const dense=p.unit==='L'&&p.density==null?sheets.find(t=>t.density):null;      // it varies by batch: a guide while blank, not a check
+  const hints={
+    unit:other&&<FieldNote>{other.name}'s labels are in {other.unit}</FieldNote>,
+    shelfLifeMonths:months&&<FieldNote onUse={()=>update({shelfLifeMonths:months.shelfLifeMonths})}>Data sheet: {fmtMonths(months.shelfLifeMonths)}</FieldNote>,
+    storageMin:stored&&<FieldNote onUse={()=>update({storageMin:stored.storageMin,storageMax:stored.storageMax})}>Data sheet: {fmtStorage(stored)}</FieldNote>,
+    density:dense&&<FieldNote>Data sheet: {dense.density}</FieldNote>,
+  };
+  const fields=list=>list.filter(([k])=>!(k==='density'&&p.unit==='kg')).map(spec=>(
+    <ShipField key={spec[0]} spec={spec} value={p[spec[0]]} set={setters[spec[0]]??(v=>update({[spec[0]]:v}))} disabled={spec[0]==='packingGroup'&&!p.adrClass} hint={hints[spec[0]]}/>
+  ));
+  return(
+    <div className="ship-edit-form scroll-y">
+      <div className="card-flat">
+        <div className="flex items-center justify-between gap-3">
+          <div className="card-title">Product</div>
+          <div className="flex gap-2">
+            <button className="btn btn-ghost btn-sm" onClick={onDuplicate}>Duplicate</button>
+            <button className="btn btn-danger btn-sm" onClick={onDelete}>Delete</button>
+          </div>
+        </div>
+        <div className="ship-form-grid">
+          <div className="field wide">
+            <span className="field-label">Label products</span>
+            <LinkChips values={links} options={labelOptions} isGone={n=>!labelOptions.some(o=>o.value===n)} goneTitle="There is no label product with this name any more" keptTitle="Its Information page shows this profile"
+              onChange={setLinks} label="Link a label product" addFirst="Link a label product…" addMore="Link another…"/>
+            {!links.length&&<div className="hint">Shipping only: this product doesn't appear anywhere else in the app.</div>}
+          </div>
+          {fields(SHIP_IDENTITY)}
+        </div>
+      </div>
+      <ShipPacksEditor product={p} draft={draft} config={config} update={update}/>
+      <div className="card-flat">
+        <div className="card-title">Shipping details</div>
+        <div className="ship-form-grid">{fields(SHIP_DETAILS)}</div>
+      </div>
+      <div className="card-flat">
+        <div className="card-title">Data sheets</div>
+        <div className="ship-form-grid">
+          <div className="field wide">
+            <LinkChips values={p.tds??[]} options={sheetOptions} isGone={id=>!sheetOptions.some(o=>o.value===id)} goneTitle="This data sheet has been removed" onChange={setSheets} label="Link a data sheet" addFirst="Link a data sheet…" addMore="Link another…"/>
+            {sheets.map(t=><div key={t.id} className="hint ship-sheet-line">{t.name}: {tdsSource(t)} · {fmtMonths(t.shelfLifeMonths)} · {fmtStorage(t)}{t.packaging?` · ${t.packaging}`:''}</div>)}
+            {!sheets.length&&<div className="hint">None linked, so nothing here has been checked against a document.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A product's packs, one per size. Picking a size fills in what other products of that size use;
+// pallet, container and box come from the catalogues, which hold their weights, and the units per
+// box come from the label cheat sheet.
+function ShipPacksEditor({product:p,draft,config,update}){
+  const packs=p.packs??[];
+  const pallets=draft.pallets??[],containers=draft.containers??[],boxes=draft.boxes??[];
+  const entries=byId(shipEntries({...draft,products:[p]}));
+  const setPack=(id,change)=>update({packs:packs.map(k=>k.id===id?{...k,...change}:k)});
+  const setSize=(k,size)=>setPack(k.id,refillPack(draft,config,k,p.unit,p.unit,size));
+  const setBox=(k,boxId)=>setPack(k.id,{boxId:boxId||null,unitsPerBox:boxId?unitsPerBoxOnSheet(config,k.packSize,p.unit)??usualPack(draft,p.unit,k.packSize,k.id).unitsPerBox??k.unitsPerBox:null});
+  const addPack=()=>update({packs:[...packs,blankPack()]});
+  // Bags for what is sold by weight, containers for liquids, the other kind after them.
+  const kinds=p.unit==='kg'?[['bag','Bags'],['container','Containers']]:[['container','Containers'],['bag','Bags']];
+  return(
+    <div className="card-flat">
+      <div className="flex items-center justify-between gap-3">
+        <div className="card-title">Packs</div>
+        <button className="btn btn-ghost btn-sm" onClick={addPack}>+ Add pack</button>
+      </div>
+      {!pallets.length||!containers.length?(
+        <div className="hint" style={{marginTop:'var(--space-2)'}}>Add pallets and containers under Pallets &amp; packaging first, then pick them here.</div>
+      ):null}
+      {packs.length===0?(
+        <div className="hint" style={{marginTop:'var(--space-2)'}}>No packs, so this product won't be in the calculator. Add one for each size it ships in.</div>
+      ):(
+        <div className="table-scroll" style={{marginTop:'var(--space-2)'}}>
+          <table className="table dense ship-pack-edit">
+            <thead><tr><th>Size</th><th>Pallet holds</th><th>Pallet</th><th>Container or bag</th><th>Box</th><th>Per box</th><th className="num">Full pallet</th><th aria-label="Remove"/></tr></thead>
+            <tbody>
+              {[...packs].sort((a,b)=>(a.packSize??1e9)-(b.packSize??1e9)).map(k=>{
+                const sheet=k.packSize>0?unitsPerBoxOnSheet(config,k.packSize,p.unit):null;
+                const pickable=pallets.filter(x=>x.weight>0||x.id===k.palletId);
+                const made=containers.filter(x=>k.packSize>0&&x.forSize===k.packSize&&x.kind===containerKind(p.unit));
+                const container=containers.find(x=>x.id===k.containerId);
+                const count=packsPerPallet(k),boxCount=count!=null&&k.boxId&&k.unitsPerBox>0?count/k.unitsPerBox:null;
+                const uneven=(count!=null&&!isWhole(count))||(boxCount!=null&&!isWhole(boxCount));
+                return(
+                  <tr key={k.id}>
+                    <td><div className="input-unit ship-num"><NumInput className={k.packSize>0?'':'invalid'} aria-label="Pack size" value={k.packSize} onChange={v=>setSize(k,v)}/><span>{p.unit}</span></div></td>
+                    <td>
+                      <div className="input-unit ship-num"><NumInput className={k.palletSize>0?'':'invalid'} aria-label="What a pallet holds" value={k.palletSize} onChange={v=>setPack(k.id,{palletSize:v})}/><span>{p.unit}</span></div>
+                      {count!=null&&<div className={'ship-derived'+(uneven?' warn':'')} title={uneven?'A pallet would hold part of a pack or box. Check the size, what a pallet holds, or the units per box.':undefined}>{fmtNum(count,2)} packs{boxCount!=null?` · ${fmtNum(boxCount,2)} boxes`:''}</div>}
+                    </td>
+                    <td>
+                      <select className={'input'+(k.palletId?'':' invalid')} aria-label="Pallet" value={k.palletId??''} onChange={e=>setPack(k.id,{palletId:e.target.value||null})}>
+                        <option value="">Choose…</option>
+                        {pickable.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight)} kg</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      <select className={'input'+(k.containerId?'':' invalid')} aria-label="Container or bag" value={k.containerId??''} onChange={e=>setPack(k.id,{containerId:e.target.value||null})}>
+                        <option value="">Choose…</option>
+                        {made.length>0&&<optgroup label={`For ${fmtNum(k.packSize,3)} ${p.unit}`}>{made.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}</optgroup>}
+                        {kinds.map(([kind,label])=>{
+                          const rest=containers.filter(x=>x.kind===kind&&!made.includes(x));
+                          return rest.length?<optgroup key={kind} label={made.length?`Other ${label.toLowerCase()}`:label}>{rest.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}</optgroup>:null;
+                        })}
+                      </select>
+                      {container?.forSize>0&&k.packSize>0&&container.forSize!==k.packSize&&<FieldNote>Made for {fmtNum(container.forSize,3)} {p.unit}</FieldNote>}
+                    </td>
+                    <td>
+                      <select className="input" aria-label="Box" value={k.boxId??''} onChange={e=>setBox(k,e.target.value)}>
+                        <option value="">No box</option>
+                        {boxes.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}
+                      </select>
+                      {k.boxId&&k.packSize>0&&noBoxOnSheet(config,k.packSize,p.unit)&&<FieldNote>This size has no box label</FieldNote>}
+                    </td>
+                    <td>
+                      <NumInput className="ship-per-box" aria-label="Units per box" disabled={!k.boxId} value={k.boxId?k.unitsPerBox:null} placeholder={k.boxId?'':'–'} onChange={v=>setPack(k.id,{unitsPerBox:v})}/>
+                      {k.boxId&&sheet!=null&&k.unitsPerBox!==sheet&&<div className="ship-sheet" title="The label cheat sheet's figure for this size">sheet: {sheet}</div>}
+                    </td>
+                    <td className="num" style={{fontWeight:600}}>{fmtNum(shipCalc(entries[k.id],k.palletSize).totalKg)} kg</td>
+                    <td><button className="ship-remove" aria-label={`Remove ${k.packSize??'new'} ${p.unit} pack`} onClick={()=>update({packs:packs.filter(x=>x.id!==k.id)})}><Icon.Close size={12}/></button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The data sheets: what the TDS documents say, kept here so they can be read and linked without opening each one.
+function ShipSheetsEditor({draft,setDraft,config}){
+  const [search,setSearch]=useState('');
+  const [selectedId,setSelectedId]=useState(null);
+  const rows=draft.tds??[];
+  const shown=useMemo(()=>rows.filter(t=>matchesSearch(`${t.name} ${t.code} ${t.file}`,search)).sort((a,b)=>(a.name||'').localeCompare(b.name||'')),[rows,search]);
+  const sheet=rows.find(t=>t.id===selectedId);
+  const labelOptions=useMemo(()=>(config?.products??[]).map(x=>({value:x.name,label:x.name})).sort((a,b)=>a.label.localeCompare(b.label)),[config]);
+  const setRows=next=>setDraft({...draft,tds:next});
+  const update=change=>setRows(rows.map(t=>t.id===selectedId?{...t,...change}:t));
+  const add=()=>{const fresh=blankSheet();setRows([...rows,fresh]);setSelectedId(fresh.id);setSearch('');};
+  const remove=()=>{
+    setDraft({...draft,tds:rows.filter(t=>t.id!==selectedId),products:(draft.products??[]).map(p=>p.tds?.includes(selectedId)?{...p,tds:p.tds.filter(id=>id!==selectedId)}:p)});
+    setSelectedId(null);
+  };
+  const usedBy=sheet?(draft.products??[]).filter(p=>p.tds?.includes(sheet.id)):[];
+  return(
+    <div className="ship-edit">
+      <div className="ship-edit-list">
+        <div className="search-wrap" style={{flexShrink:0}}>
+          <span className="search-icon"><Icon.Search size={14}/></span>
+          <input className="input" placeholder="Search..." aria-label="Search data sheets" value={search} onChange={e=>setSearch(e.target.value)}/>
+        </div>
+        <div className="scroll-y">
+          <div className="pick-list">
+            {shown.map(t=>(
+              <button key={t.id} className={'pick-row'+(t.id===selectedId?' on':'')} onClick={()=>setSelectedId(t.id)}>
+                <span className="pick-row-name" title={t.name}>{t.name||<span className="muted">New data sheet</span>}</span>
+                <span className="mono muted" style={{fontSize:'var(--fs-2xs)',flexShrink:0}}>{t.shelfLifeMonths?`${t.shelfLifeMonths} mo`:''}</span>
+              </button>
+            ))}
+          </div>
+          {shown.length===0&&<div className="muted" style={{fontSize:'var(--fs-sm)',fontStyle:'italic',padding:'var(--space-2) var(--space-1)'}}>No data sheets{search?' match':' yet'}.</div>}
+        </div>
+        <button className="btn btn-ghost btn-sm" style={{flexShrink:0}} onClick={add}>+ Add data sheet</button>
+      </div>
+      {!sheet?(
+        <div className="muted" style={{flex:1,fontSize:'var(--fs-md)',fontStyle:'italic',paddingTop:'var(--space-2)'}}>
+          Select a data sheet to edit it.{draft.tdsReadOn?` These were read from the TDS documents on ${draft.tdsReadOn}; when a document is revised, update its entry here.`:''}
+        </div>
+      ):(
+        <div key={sheet.id} className="ship-edit-form scroll-y">
+          <div className="card-flat">
+            <div className="flex items-center justify-between gap-3">
+              <div className="card-title">Data sheet</div>
+              <button className="btn btn-danger btn-sm" onClick={remove}>Delete</button>
             </div>
-          ))}
+            <div className="ship-form-grid">
+              <div className="field wide">
+                <span className="field-label">Label products</span>
+                <LinkChips values={sheet.labels??[]} options={labelOptions} isGone={n=>!labelOptions.some(o=>o.value===n)} goneTitle="There is no label product with this name any more" onChange={labels=>update({labels})} label="Link a label product" addFirst="Link a label product…" addMore="Link another…"/>
+                <div className="hint">{usedBy.length?`Linked from ${usedBy.map(profileName).join(', ')}.`:'No shipping product links to this yet.'}</div>
+              </div>
+              {TDS_FIELDS.map(spec=><ShipField key={spec[0]} spec={spec} value={sheet[spec[0]]} set={v=>update({[spec[0]]:v})}/>)}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2983,11 +3777,44 @@ function ShipItemsEditor({draft,setDraft}){
 }
 
 function ShipTablesEditor({draft,setDraft}){
+  const setCatalogue=(key,rows)=>setDraft({...draft,[key]:rows});
   const setRows=(tid,rows)=>setDraft({...draft,tables:draft.tables.map(t=>t.id===tid?{...t,rows}:t)});
+  const cell=(c,r,set)=>c.type==='number'
+    ?<NumInput aria-label={c.label} value={r[c.key]??null} onChange={set}/>
+    :c.type==='kind'
+      ?<select className="input" aria-label={c.label} value={r[c.key]??'container'} onChange={e=>set(e.target.value)}><option value="container">Container</option><option value="bag">Bag</option></select>
+      :<input className="input" aria-label={c.label} value={r[c.key]??''} onChange={e=>set(e.target.value)}/>;
+  const numClass=c=>c.type==='number'?'num-col':c.type==='kind'?'kind-col':'';
   return(
     <div className="scroll-y">
       <div className="ship-ref-grid wide">
-        {draft.tables.map(t=>(
+        {SHIP_CATALOGUES.map(cat=>{
+          const rows=draft[cat.key]??[];
+          const used=catalogueUse(draft,cat.usedBy);
+          return(
+            <div key={cat.key} className="card-flat">
+              <div className="card-title">{cat.title}</div>
+              <div className="hint">{cat.hint??'Picked for each pack. Changing a weight here changes every pack using it.'}</div>
+              <table className="table ship-table-edit" style={{marginTop:'var(--space-2)'}}>
+                <thead><tr>{cat.columns.map(c=><th key={c.key} className={c.type==='number'?'num':''}>{c.label}</th>)}<th/></tr></thead>
+                <tbody>
+                  {rows.map(r=>(
+                    <tr key={r.id}>
+                      {cat.columns.map(c=><td key={c.key} className={numClass(c)}>{cell(c,r,v=>setCatalogue(cat.key,rows.map(x=>x.id===r.id?{...x,[c.key]:v}:x)))}</td>)}
+                      <td>
+                        {used[r.id]
+                          ?<span className="mono muted ship-used" title={`Used by ${used[r.id]} pack${used[r.id]===1?'':'s'}, so it can't be removed`}>{used[r.id]}</span>
+                          :<button className="ship-remove" aria-label={`Remove ${r.name||'row'}`} onClick={()=>setCatalogue(cat.key,rows.filter(x=>x.id!==r.id))}><Icon.Close size={12}/></button>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button className="btn btn-ghost btn-sm mt-3" onClick={()=>setCatalogue(cat.key,[...rows,{id:newId(cat.key),name:'',weight:null,...(cat.key==='containers'?{kind:'container'}:{})}])}>+ Add row</button>
+            </div>
+          );
+        })}
+        {(draft.tables??[]).map(t=>(
           <div key={t.id} className="card-flat">
             <div className="card-title">{t.title}</div>
             {t.note&&<div className="hint">{t.note}</div>}
@@ -2996,16 +3823,7 @@ function ShipTablesEditor({draft,setDraft}){
               <tbody>
                 {t.rows.map((r,i)=>(
                   <tr key={i}>
-                    {t.columns.map(c=>{
-                      const set=v=>setRows(t.id,t.rows.map((x,j)=>j===i?{...x,[c.key]:v}:x));
-                      return(
-                        <td key={c.key} className={c.type==='number'?'num-col':''}>
-                          {c.type==='number'
-                            ?<NumInput aria-label={c.label} value={r[c.key]??null} onChange={set}/>
-                            :<input className="input" aria-label={c.label} value={r[c.key]??''} onChange={e=>set(e.target.value)}/>}
-                        </td>
-                      );
-                    })}
+                    {t.columns.map(c=><td key={c.key} className={numClass(c)}>{cell(c,r,v=>setRows(t.id,t.rows.map((x,j)=>j===i?{...x,[c.key]:v}:x)))}</td>)}
                     <td><button className="ship-remove" aria-label="Remove row" onClick={()=>setRows(t.id,t.rows.filter((_,j)=>j!==i))}><Icon.Close size={12}/></button></td>
                   </tr>
                 ))}

@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs, quote, unquote
 
 import organizer
-from labelnames import Catalogue, label_entry, label_kind, norm_name, pack_amount, take_date
+from labelnames import Catalogue, LANG_ALIASES, label_entry, label_kind, norm_name, pack_amount, take_date
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 # Project layout: this file lives in app/ (code, default config, the web UI in app/static/);
@@ -36,7 +36,7 @@ CFG_FILE     = LABELS_DIR / "app_config.json"
 COLORS_FILE  = LABELS_DIR / "colors_config.json"
 ICON_ASSIGN_FILE = LABELS_DIR / "icon_assignments.json"
 HISTORY_FILE = LABELS_DIR / "creation_history.json"
-SHIPPING_FILE = LABELS_DIR / "shipping_data.json"
+SHIPPING_FILE = LABELS_DIR / "shipping_profiles.json"
 DEFAULT_CFG_FILE = APP_DIR / "default_config.json"
 DEFAULT_SHIPPING_FILE = APP_DIR / "default_shipping.json"
 PORT       = 7842
@@ -81,10 +81,26 @@ def save_json(p, data):
     finally:
         tmp.unlink(missing_ok=True)
 
+def _upgrade_saved_config(cfg):
+    """Bring a config saved by an earlier version up to date, however it is being read."""
+    # Labels moved to ISO codes: an entry under an old code becomes today's, staying on or off as it was.
+    languages = cfg.get("languages", [])
+    have = {l["code"] for l in languages}
+    cfg["languages"] = [{**l, "code": LANG_ALIASES.get(l["code"], l["code"])} for l in languages
+                        if l["code"] not in LANG_ALIASES or LANG_ALIASES[l["code"]] not in have]
+    # The cheat sheet said 40, but 250 ml boxes hold 32: it is what the real box labels say.
+    boxes = cfg.get("boxMultipliers", {})
+    if boxes.get("250ml") == "250mlx40":
+        boxes["250ml"] = "250mlx32"
+    # 20 L packs have no box label, so the size has no entry.
+    if boxes.get("20L") == "20Lx1":
+        del boxes["20L"]
+    return cfg
+
 def load_config():
     """The live config, or the bundled default if none has been saved yet."""
     cfg = load_json(CFG_FILE)
-    return cfg if cfg is not None else load_json(DEFAULT_CFG_FILE, {})
+    return _upgrade_saved_config(cfg) if cfg is not None else load_json(DEFAULT_CFG_FILE, {})
 
 def append_history(entry):
     history = load_json(HISTORY_FILE, None)
@@ -128,16 +144,14 @@ def get_icon_assignments(products: list) -> dict:
     return assignments
 
 def load_shipping():
-    """The shipping data (LABELS_DIR/shipping_data.json), next to the file map and shared the
-    same way. Seeded once from the bundled default, which came from the weight calculator
-    workbook. None if the file exists but can't be read: it is never replaced in that case."""
+    """The shipping data, next to the file map and shared the same way. It is the company's, so it is
+    only ever in that folder: the bundled file is just its empty shape. If the folder has none, nothing
+    is written until someone saves. On a machine still syncing, an empty file would compete with the real one."""
     data = load_json(SHIPPING_FILE)
-    if data is None and not SHIPPING_FILE.exists():
-        data = load_json(DEFAULT_SHIPPING_FILE, {"items": [], "tables": []})
-        save_json(SHIPPING_FILE, data)
-    return data
+    if data is not None or SHIPPING_FILE.exists():
+        return data
+    return load_json(DEFAULT_SHIPPING_FILE)
 
-# ── Sync status (best-effort: is LABELS_DIR a link into a synced folder?) ──────
 def _onedrive_running():
     if os.name != "nt":
         return False
@@ -723,8 +737,8 @@ def apply_footer_content(pkg, translations, footer_values=None):
     than the translation file -- the same translation can be reused across
     different markets/production batches, each with its own SKU, so SKU belongs
     to the label being created, not the shared translated text. Shelf life is the
-    opposite: it's a property of the product/translation, not the batch, so it's
-    still sourced from the translation file, first non-blank one wins across the
+    opposite: it's a property of the product, not the batch, so it comes through the
+    translations (see apply_data_sheet), first non-blank one wins across the
     selected languages."""
     sku_value = (footer_values or {}).get('sku', '')
     shelf_value = next((t.get('footer', {}).get('exp_date_value', '')
@@ -884,21 +898,112 @@ def list_translations(translations_dir: Path = None):
         return files
     for f in sorted(translations_dir.rglob("*.json")):
         try:
-            meta = load_json(f, {}).get('meta', {})
+            data = load_json(f, {})
+            meta = data.get('meta', {})
+            code = meta.get('code', f.stem)
             files.append({
                 "filename": f.name,
                 "path":     str(f),
-                "code":     meta.get('code', f.stem),
+                "code":     LANG_ALIASES.get(code, code),      # Etiketas+ writes these files; it may use the older codes
                 "name":     meta.get('name', f.stem),
-                "flag":     meta.get('flag', ''),
                 "product":  meta.get('product', None),
                 # Set by Etiketas+ when it authors a file. Missing/unknown status is
                 # treated as draft -- conservative, since completeness is unverified.
                 "status":   meta.get('status') or 'draft',
             })
         except Exception:
-            files.append({"filename": f.name, "path": str(f), "code": f.stem, "name": f.stem, "flag": "", "product": None, "status": "draft"})
+            files.append({"filename": f.name, "path": str(f), "code": LANG_ALIASES.get(f.stem, f.stem), "name": f.stem, "product": None, "status": "draft"})
     return files
+
+# ── Shelf life from the data sheets ────────────────────────────────────────────
+# A number of months, in every language with a translation file. Any other text is left as it is:
+# PERIPLUS_LEAF_LT says "4 metai", and putting 36 in front of that would say 36 years.
+_MONTHS = re.compile(r"(\d+)\s+((?:de\s+)?(?:months?|monate?|mois|meses|mesi|maand(?:en)?|měsíc\w*|mesiac\w*|mesec\w*|miesi\w*|mjesec\w*"
+                     r"|mėn\w*|mēne\w*|kuud?|hónap\w*|luni|ay|месе\w*|місяц\w*|μήν\w*)(?!\w))", re.I)
+# Two temperatures, however the language joins them: "+5 – +30 °C", "+5 °C a +30 °C", "+5 bis +30 °C".
+_TEMPERATURES = re.compile(r"\+\d+((?:\s*°\s*C)?\s+\S+\s+)\+\d+(?=\s*°\s*C)")
+
+def _counted(one, few, many):
+    """Slavic counting: the word depends on how the number ends."""
+    def form(n, word):
+        if n % 10 == 1 and n % 100 != 11:
+            return one
+        return few if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else many
+    return form
+
+def _lithuanian(n, word):
+    """A footer says "24 mėnesiai"; a storage sentence, "galima laikyti 24 mėnesius"."""
+    if n % 10 == 0 or 11 <= n % 100 <= 19:
+        return "mėnesių"
+    if word in ("mėnesius", "mėnesį"):
+        return "mėnesį" if n % 10 == 1 else "mėnesius"
+    return "mėnuo" if n % 10 == 1 else "mėnesiai"
+
+# The languages whose word changes between the numbers a shelf life can be. In the others, changing
+# the number is enough from 6 months up.
+_MONTH_FORMS = {
+    "HR": _counted("mjesec", "mjeseca", "mjeseci"),
+    "PL": _counted("miesiąc", "miesiące", "miesięcy"),
+    "UK": _counted("місяць", "місяці", "місяців"),
+    "LT": _lithuanian,
+    "RO": lambda n, word: "luni" if 0 < n % 100 < 20 else "de luni",
+}
+
+def shelf_life_text(text, months, code):
+    """`text` with the number of months it mentions changed to `months`, the rest staying: "24 mėnesiai"
+    becomes "18 mėnesių". None if it mentions no number of months, so can't safely be changed."""
+    m = _MONTHS.search(text or "")
+    if not m:
+        return None
+    if int(m.group(1)) == months:
+        return text
+    form = _MONTH_FORMS.get(code)
+    return f"{text[:m.start()]}{months} {form(months, m.group(2)) if form else m.group(2)}{text[m.end():]}"
+
+def storage_text(text, sheet, code):
+    """A translation's storage sentence, which states the shelf life and temperatures, saying the data sheet's."""
+    text = shelf_life_text(text, sheet["shelfLifeMonths"], code) or text
+    low, high = sheet.get("storageMin"), sheet.get("storageMax")
+    if low is None or high is None:
+        return text
+    signed = lambda n: f"+{n}" if n > 0 else str(n)
+    return _TEMPERATURES.sub(lambda m: f"{signed(low)}{m.group(1)}{signed(high)}", text, count=1)
+
+def data_sheet_for_label(product, prod_cfg):
+    """The data sheet that gives a label product its shelf life: its own, else that of the shipping
+    product it shares (TerraFol has Periterra's). None if there is none, or its sheets disagree."""
+    shipping = load_shipping() or {}
+    sheets = shipping.get("tds") or []
+    found = [t for t in sheets if product in (t.get("labels") or [])]
+    if not found:
+        linked = {i for p in shipping.get("products") or [] if product in (p.get("links") or []) for i in p.get("tds") or []}
+        found = [t for t in sheets if t.get("id") in linked]
+    # BioSplito has a powder's data sheet and a liquid's: the label product is one of them.
+    powder = prod_cfg.get("unit") == "kg"
+    found = [t for t in found if (t.get("form") or "").lower().startswith("powder") == powder] or found
+    found = [t for t in found if t.get("shelfLifeMonths")]
+    return found[0] if found and len({t["shelfLifeMonths"] for t in found}) == 1 else None
+
+def apply_data_sheet(product, prod_cfg, lang_files, translations):
+    """Puts the data sheet's shelf life and storage into the translations picked for a new label, each in
+    its own language; everywhere a label shows them reads from there. Returns what it did, for the wizard."""
+    sheet = data_sheet_for_label(product, prod_cfg)
+    texts = []
+    for path, trans in zip(lang_files, translations):
+        if not trans:
+            continue
+        code = (trans.get("meta") or {}).get("code") or Path(path).stem.rsplit("_", 1)[-1]
+        code = LANG_ALIASES.get(code, code)
+        footer, storage = trans.get("footer") or {}, trans.get("storage") or {}
+        value = footer.get("exp_date_value", "")
+        text = shelf_life_text(value, sheet["shelfLifeMonths"], code) if sheet else None
+        if text:
+            footer["exp_date_value"] = text
+        if sheet and storage.get("value"):
+            storage["value"] = storage_text(storage["value"], sheet, code)
+        texts.append({"code": code, "text": text or value, "kept": bool(sheet and not text)})
+    return {"months": sheet["shelfLifeMonths"] if sheet else None, "sheet": sheet["name"] if sheet else None, "texts": texts,
+            "storageMin": sheet.get("storageMin") if sheet else None, "storageMax": sheet.get("storageMax") if sheet else None}
 
 # ── Label creation ─────────────────────────────────────────────────────────────
 def _pick_template(explicit_path, skip, all_pool, files, target, prods):
@@ -951,6 +1056,7 @@ def create_label(product, languages, packaging_size, config, label_template_path
                    if i in icon_lib and (ICONS_DIR / icon_lib[i]["svg"]).is_file()]
     # Pre-load translation data for each slot (None = skip)
     translations = [load_json(lf) if lf else None for lf in (lang_files or [])]
+    apply_data_sheet(product, prod_cfg, lang_files or [], translations)
 
     def make_file(tmpl, dest_dir, dest_name, is_label):
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -1652,10 +1758,16 @@ def merged_config():
             save_json(CFG_FILE, default)
         return default
     sync_products(cfg, default)
-    have_langs = {l["code"] for l in cfg.get("languages", [])}
-    new_langs = [l for l in default.get("languages", []) if l["code"] not in have_langs]
-    if new_langs:
-        cfg["languages"] = cfg.get("languages", []) + new_langs
+    _upgrade_saved_config(cfg)
+    have_langs = {l["code"]: l for l in cfg["languages"]}
+    for lang in default.get("languages", []):
+        have = have_langs.get(lang["code"])
+        if have is None:
+            cfg["languages"].append(lang)
+        else:       # saved before languages carried these
+            for key in ("iso", "alt"):
+                if key in lang:
+                    have.setdefault(key, lang[key])
     for key in ("dimensions", "packagingSizes", "boxMultipliers"):
         for k, v in default.get(key, {}).items():
             if k not in cfg.get(key, {}):
@@ -1971,7 +2083,6 @@ class Handler(BaseHTTPRequestHandler):
         "/api/colors/save":          "api_colors_save",
         "/api/icon_assignments/save":"api_icon_assignments_save",
         "/api/shipping/save":        "api_shipping_save",
-        "/api/shipping/reset":       "api_shipping_reset",
         "/api/update/install":       "api_update_install",
         "/api/find_template":        "api_find_template",
         "/api/create":               "api_create",
@@ -2008,17 +2119,9 @@ class Handler(BaseHTTPRequestHandler):
 
     @_ok_json
     def api_shipping_save(self, body):
-        if not isinstance(body.get("items"), list) or not isinstance(body.get("tables"), list):
-            raise ValueError("Shipping data must have items and tables")
+        if not all(isinstance(body.get(k), list) for k in ("products", "pallets", "containers", "boxes", "tables")):
+            raise ValueError("Shipping data must have products, pallets, containers, boxes and tables")
         save_json(SHIPPING_FILE, body)
-
-    @_ok_json
-    def api_shipping_reset(self, body):
-        default = load_json(DEFAULT_SHIPPING_FILE)
-        if default is None:
-            raise ValueError("The bundled shipping data could not be read")
-        save_json(SHIPPING_FILE, default)
-        return {"shipping": default}
 
     @_ok_json
     def api_update_install(self, body):
@@ -2029,6 +2132,7 @@ class Handler(BaseHTTPRequestHandler):
         product  = body.get("product")
         languages= body.get("languages", [])
         size     = body.get("packagingSize")
+        lang_files = body.get("langFiles") or []
         prods    = cfg.get("products", [])
         prod_cfg = next((p for p in prods if p["name"]==product), None)
         if not prod_cfg:
@@ -2043,6 +2147,7 @@ class Handler(BaseHTTPRequestHandler):
             "labels": [{"file":f,"score":s,"reasons":r} for f,s,r in label_results],
             "boxes":  [{"file":f,"score":s,"reasons":r} for f,s,r in box_results],
             "dimensions": dims,
+            "shelfLife": apply_data_sheet(product, prod_cfg, lang_files, [load_json(lf) if lf else None for lf in lang_files]),
         })
 
     def api_create(self, body):

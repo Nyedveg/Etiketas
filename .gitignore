@@ -24,3 +24,7 @@ desktop.ini
 # Stray pip cache dir -- can land here if `pip install` is ever run with this
 # folder as the working directory (observed while testing install.ps1)
 /pip/
+
+# Company data, such as the weight calculator workbook. This repo is public: shipping data
+# lives in the shared folder only.
+assets/*.xlsx

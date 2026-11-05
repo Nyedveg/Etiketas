@@ -23,6 +23,8 @@ import filecmp
 import json
 import os
 import shutil
+import stat
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -31,6 +33,7 @@ from labelnames import Catalogue, label_entry, label_kind, pack_amount, parse_st
 DEFAULT_LABELS_DIR = Path.home() / "Documents" / "Etiketas"
 UNSORTED = "unsorted"
 RESORT_LOG = "resort_log.json"
+HISTORY = "creation_history.json"
 
 # -- Destination builder -------------------------------------------------------
 def build_destination(info: dict, labels_dir: Path, cat: Catalogue = None) -> Path:
@@ -166,7 +169,7 @@ def resort(labels_dir: Path, cat: Catalogue, apply: bool = False, keep_newest: b
                         discard(dest)
                         recycled.append(rel(dest))
                     dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(src), str(dest))
+                    os.rename(src, dest)
                     done.append({"from": rel(src), "to": rel(dest)})
                 except (OSError, RuntimeError) as exc:
                     errors.append((rel(src), str(exc)))
@@ -184,6 +187,40 @@ def resort(labels_dir: Path, cat: Catalogue, apply: bool = False, keep_newest: b
             "replaced": [(rel(a), rel(b)) for a, b in replaced],
             "discarded": [rel(a) for a in discarded],
             "errors": errors, "left": left, "applied": bool(done or recycled)}
+
+# -- After files move ----------------------------------------------------------
+def _rewrite_history(labels_dir: Path, renamed: dict):
+    """Keep the creation history's Open buttons working after files moved. Its paths are absolute,
+    each with the home folder of whoever created the label, so they are matched from the labels folder down."""
+    path = labels_dir / HISTORY
+    try:
+        history = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    for entry in history:
+        for f in entry.get("files") or []:
+            head, sep, tail = (f.get("path") or "").rpartition("\\Etiketas\\")
+            if sep and tail in renamed:
+                f["path"] = head + sep + renamed[tail]
+                f["filename"] = Path(renamed[tail]).name
+    path.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _prune_empty(labels_dir: Path, folders):
+    """Remove folders that moving files out of left empty, and parents that that leaves empty."""
+    labels_dir = Path(labels_dir)
+    for folder in sorted(folders, key=lambda f: len(f.parts), reverse=True):
+        while folder != labels_dir and labels_dir in folder.parents:
+            try:
+                if any(folder.iterdir()):
+                    break
+                try:
+                    folder.rmdir()
+                except PermissionError:     # a read-only flag, which OneDrive folders can carry, blocks it even when empty
+                    os.chmod(folder, stat.S_IWRITE)
+                    folder.rmdir()
+            except OSError:      # already gone, or really can't be removed
+                break
+            folder = folder.parent
 
 def _read_log(labels_dir: Path) -> list:
     try:
@@ -212,9 +249,16 @@ def undo_resort(labels_dir: Path) -> dict:
             skipped.append((m["to"], "original location is occupied"))
         else:
             dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(src), str(dest))
+            try:
+                os.rename(src, dest)
+            except OSError as exc:
+                skipped.append((m["to"], str(exc)))
+                continue
             restored += 1
     (labels_dir / RESORT_LOG).write_text(json.dumps(log[:-1], ensure_ascii=False, indent=2), encoding="utf-8")
+    moved_back = [m for m in log[-1]["moves"] if (labels_dir / m["from"]).exists()]
+    _rewrite_history(labels_dir, {m["to"]: m["from"] for m in moved_back})
+    _prune_empty(labels_dir, {(labels_dir / m["to"]).parent for m in moved_back})
     return {"restored": restored, "skipped": skipped, "recycled": log[-1].get("recycled", [])}
 
 # -- Entry point ---------------------------------------------------------------
@@ -250,6 +294,9 @@ if __name__ == "__main__":
                         help="Move the files of the last applied --resort back where they were")
     args   = parser.parse_args()
     tgt    = Path(args.target)
+    # Names hold letters a console's code page may not have; that must not stop a run halfway.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
 
     if args.undo_resort:
         result = undo_resort(tgt)

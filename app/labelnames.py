@@ -19,8 +19,11 @@ RE_MON      = re.compile(r'^(0[1-9]|1[0-2])$')
 RE_BLEED    = re.compile(r'\+2mm', re.I)
 RE_SPACED_DATE = re.compile(r'(?<=_)((?:19|20)\d{2}) (0[1-9]|1[0-2])(?=_|$)')   # "2025 11" for "2025_11"
 
-# Language codes that were used in filenames for a language that has another, correct code.
-LANG_ALIASES = {"BL": "BG"}      # BL was written for Bulgarian
+# Labels use ISO 639-1 codes. These are how they used to be written, which can still turn up: an old
+# archive being read in, a colleague's older copy of the app.
+# EE and KR are ISO codes of other languages (Ewe, Kanuri), which is why those two use their three-letter
+# ISO 639-2 codes here: an old Estonian label must never be taken for an Ewe one.
+LANG_ALIASES = {"BL": "BG", "KR": "HR", "CZ": "CS", "EE": "ET", "GR": "EL", "UA": "UK"}
 
 def norm_name(s: str) -> str:
     """Case/space/punctuation-insensitive key, for matching product names to
@@ -42,8 +45,9 @@ class Catalogue:
     a label size belongs to for that product (None if it can't say)."""
     def __init__(self, products=(), languages=(), pack_for_dims=None):
         self._by_key = {norm_name(p["name"]): p for p in products}
-        self.languages = {l["code"] for l in languages} | set(LANG_ALIASES)
         self.categories = {p["category"] for p in products}      # CE, MO, PAM: also written into names as a tag
+        # A category tag in a name is never a language, even where ISO gives those letters to one (CE is Chechen).
+        self.languages = ({l["code"] for l in languages} | set(LANG_ALIASES)) - self.categories
         self.pack_for_dims = pack_for_dims
 
     def product(self, name: str):
@@ -117,7 +121,7 @@ def parse_stem(stem: str, cat: Catalogue = None):
         return None
     packaging = parts[idx]; idx += 1
     langs = []
-    while idx < len(parts) and RE_LANG.match(parts[idx]):
+    while idx < len(parts) and (RE_LANG.match(parts[idx]) or (cat and parts[idx] in cat.languages)):   # a few codes have 3 letters
         langs.append(LANG_ALIASES.get(parts[idx], parts[idx])); idx += 1
     if not langs and cat:                        # older order: Product_LANG_Pack_...
         prod, langs = _trailing_langs(prod, cat)
