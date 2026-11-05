@@ -5,7 +5,7 @@ Run with:  python app/etiketas.py   (or double-click Etiketas.vbs / Start_Etiket
 Opens at:  http://127.0.0.1:7842
 """
 
-import ctypes, html, io, json, mimetypes, os, re, shutil, socket, stat, sys, threading, time, traceback, webbrowser, subprocess, zipfile
+import ctypes, html, io, json, mimetypes, os, re, shutil, socket, stat, sys, tempfile, threading, time, traceback, webbrowser, subprocess, urllib.request, zipfile
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -36,7 +36,9 @@ CFG_FILE     = LABELS_DIR / "app_config.json"
 COLORS_FILE  = LABELS_DIR / "colors_config.json"
 ICON_ASSIGN_FILE = LABELS_DIR / "icon_assignments.json"
 HISTORY_FILE = LABELS_DIR / "creation_history.json"
+SHIPPING_FILE = LABELS_DIR / "shipping_data.json"
 DEFAULT_CFG_FILE = APP_DIR / "default_config.json"
+DEFAULT_SHIPPING_FILE = APP_DIR / "default_shipping.json"
 PORT       = 7842
 
 
@@ -124,6 +126,16 @@ def get_icon_assignments(products: list) -> dict:
     if not ICON_ASSIGN_FILE.exists():   # never overwrite a file that merely failed to read
         save_json(ICON_ASSIGN_FILE, assignments)
     return assignments
+
+def load_shipping():
+    """The shipping data (LABELS_DIR/shipping_data.json), next to the file map and shared the
+    same way. Seeded once from the bundled default, which came from the weight calculator
+    workbook. None if the file exists but can't be read: it is never replaced in that case."""
+    data = load_json(SHIPPING_FILE)
+    if data is None and not SHIPPING_FILE.exists():
+        data = load_json(DEFAULT_SHIPPING_FILE, {"items": [], "tables": []})
+        save_json(SHIPPING_FILE, data)
+    return data
 
 # ── Sync status (best-effort: is LABELS_DIR a link into a synced folder?) ──────
 def _onedrive_running():
@@ -1522,6 +1534,95 @@ def trash_path(p):
         # freedesktop trash-cli fallback
         subprocess.run(["gio", "trash", str(path)], check=True)
 
+# ── Updates ────────────────────────────────────────────────────────────────────
+# An update is a run of the installer, the one place that knows how to replace this app safely.
+# It records the commit it installed in VERSION_FILE; a copy without that record (a source
+# checkout) never offers to update. Every new commit on the branch counts as an update, the
+# same as running install.bat by hand.
+UPDATE_REPO          = "Nyedveg/Etiketas"
+UPDATE_BRANCH        = "main"
+UPDATE_COMMITS_URL   = f"https://api.github.com/repos/{UPDATE_REPO}/commits?sha={UPDATE_BRANCH}&per_page=30"
+UPDATE_INSTALLER_URL = f"https://raw.githubusercontent.com/{UPDATE_REPO}/{UPDATE_BRANCH}/install.ps1"
+UPDATE_CHECK_TTL     = 600   # seconds; GitHub allows 60 anonymous requests an hour per network
+VERSION_FILE         = BASE_DIR / "installed_version.txt"
+# Outside the app folder, because they have to outlive the swap.
+UPDATE_TEMP          = Path(tempfile.gettempdir())
+UPDATE_SCRIPT        = UPDATE_TEMP / "etiketas_update.ps1"
+UPDATE_STATUS_FILE   = UPDATE_TEMP / "etiketas_update_status.json"
+UPDATE_LOG           = UPDATE_TEMP / "etiketas_update.log"
+_BREAKAWAY           = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+_update_checked      = {"at": 0.0, "result": None}
+_update_proc         = None
+
+def _download(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "Etiketas-updater"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return r.read()
+
+def installed_commit():
+    try:
+        text = VERSION_FILE.read_text(encoding="ascii").strip()
+    except (OSError, UnicodeError):
+        return None
+    return text if re.fullmatch(r"[0-9a-f]{40}", text) else None
+
+def check_for_update(force=False):
+    """What GitHub has beyond the installed commit. Not being able to ask is not worth
+    interrupting anyone for: there is just nothing to offer until the next check."""
+    commit = installed_commit()
+    if commit is None:
+        return {"managed": False, "available": False}
+    if not force and _update_checked["result"] and time.time() - _update_checked["at"] < UPDATE_CHECK_TTL:
+        return _update_checked["result"]
+    base = {"managed": True, "current": commit[:7]}
+    try:
+        commits = json.loads(_download(UPDATE_COMMITS_URL))
+        shas = [c["sha"] for c in commits]
+        new = commits[:shas.index(commit)] if commit in shas else commits
+        result = {**base, "available": bool(new), "latest": shas[0][:7], "truncated": commit not in shas,
+                  "changes": [{"message": c["commit"]["message"].partition("\n")[0],
+                               "date": c["commit"]["committer"]["date"]} for c in new]}
+    except Exception:
+        return {**base, "available": False, "error": "Could not reach GitHub to check for updates."}
+    _update_checked.update(at=time.time(), result=result)
+    return result
+
+def start_update():
+    """Runs the latest installer, the same one install.bat fetches, on this copy of the app."""
+    global _update_proc
+    if installed_commit() is None:
+        raise ValueError("This copy of Etiketas was not set up by the installer, so it cannot update itself.")
+    if _update_proc and _update_proc.poll() is None:
+        return
+    script = _download(UPDATE_INSTALLER_URL)
+    if b"Etiketas installer" not in script:     # a proxy's login page, say
+        raise ValueError("The download from GitHub was not the Etiketas installer.")
+    UPDATE_SCRIPT.write_bytes(script)
+    save_json(UPDATE_STATUS_FILE, {"state": "running", "step": "Starting"})
+    cmd = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(UPDATE_SCRIPT),
+           "Update", "-Yes", "-Relaunch", "-InstallDir", str(BASE_DIR), "-StatusFile", str(UPDATE_STATUS_FILE)]
+    # Not started from the app folder: a process working in a folder stops it being moved.
+    with open(UPDATE_LOG, "wb") as log:
+        spawn = dict(cwd=UPDATE_TEMP, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+        try:
+            # The installer stops this server and must outlive it. Python's launchers can keep the
+            # app in a job that dies with them, which would take the installer down too.
+            _update_proc = subprocess.Popen(cmd, creationflags=_NO_WINDOW | _BREAKAWAY, **spawn)
+        except OSError:     # this job doesn't allow leaving
+            _update_proc = subprocess.Popen(cmd, creationflags=_NO_WINDOW, **spawn)
+
+def update_progress():
+    exited = _update_proc is not None and _update_proc.poll() is not None   # checked before reading the file
+    try:
+        status = json.loads(UPDATE_STATUS_FILE.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        return {"state": "idle"}
+    except (OSError, ValueError):   # being rewritten right now
+        status = {"state": "running", "step": ""}
+    if status.get("state") == "running" and exited:
+        status = {"state": "failed", "error": "The installer stopped before it finished."}
+    return {**status, "log": str(UPDATE_LOG)}
+
 # ── Config merging ─────────────────────────────────────────────────────────────
 def sync_products(cfg, default):
     """Add the products the default config has and cfg lacks, and bring existing
@@ -1695,10 +1796,24 @@ class Handler(BaseHTTPRequestHandler):
         "/api/product_mockup":  "api_product_mockup",
         "/api/file_info":       "api_file_info",
         "/api/export":          "api_export",
+        "/api/shipping":        "api_shipping",
+        "/api/update/check":    "api_update_check",
+        "/api/update/progress": "api_update_progress",
     }
 
     def api_config(self):
         self.send_json(merged_config())
+
+    def api_shipping(self):
+        with _WRITE_LOCK:     # the first read also writes the seed file
+            data = load_shipping()
+        self.send_json(data if data is not None else {"error": f"Could not read {SHIPPING_FILE}"})
+
+    def api_update_check(self):
+        self.send_json(check_for_update(force=self._arg("force") == "1"))
+
+    def api_update_progress(self):
+        self.send_json(update_progress())
 
     def api_map(self):
         self.send_json(load_json(MAP_FILE, {"generated": None, "files": []}))
@@ -1827,7 +1942,8 @@ class Handler(BaseHTTPRequestHandler):
     def api_export(self):
         cfg = load_config()
         payload = json.dumps({"config": cfg, "colors": load_json(COLORS_FILE, {}),
-                              "icon_assignments": get_icon_assignments(cfg.get("products", []))},
+                              "icon_assignments": get_icon_assignments(cfg.get("products", [])),
+                              "shipping": load_json(SHIPPING_FILE, {})},
                              ensure_ascii=False, indent=2).encode("utf-8")
         self._send(200, payload, "application/json",
                    {"Content-Disposition": 'attachment; filename="etiketas_export.json"'})
@@ -1854,6 +1970,9 @@ class Handler(BaseHTTPRequestHandler):
         "/api/config/sync_products": "api_sync_products",
         "/api/colors/save":          "api_colors_save",
         "/api/icon_assignments/save":"api_icon_assignments_save",
+        "/api/shipping/save":        "api_shipping_save",
+        "/api/shipping/reset":       "api_shipping_reset",
+        "/api/update/install":       "api_update_install",
         "/api/find_template":        "api_find_template",
         "/api/create":               "api_create",
         "/api/open":                 "api_open",
@@ -1886,6 +2005,24 @@ class Handler(BaseHTTPRequestHandler):
     @_ok_json
     def api_icon_assignments_save(self, body):
         save_json(ICON_ASSIGN_FILE, body)
+
+    @_ok_json
+    def api_shipping_save(self, body):
+        if not isinstance(body.get("items"), list) or not isinstance(body.get("tables"), list):
+            raise ValueError("Shipping data must have items and tables")
+        save_json(SHIPPING_FILE, body)
+
+    @_ok_json
+    def api_shipping_reset(self, body):
+        default = load_json(DEFAULT_SHIPPING_FILE)
+        if default is None:
+            raise ValueError("The bundled shipping data could not be read")
+        save_json(SHIPPING_FILE, default)
+        return {"shipping": default}
+
+    @_ok_json
+    def api_update_install(self, body):
+        start_update()
 
     def api_find_template(self, body):
         cfg      = load_config()
@@ -2003,7 +2140,6 @@ def _take_over_port(port):
         return
     print(f"Another instance holds port {port} -- taking over.")
     try:
-        import urllib.request
         urllib.request.urlopen(f"http://127.0.0.1:{port}/api/_shutdown", timeout=2).read()
     except Exception:
         pass
@@ -2046,7 +2182,8 @@ def start():
     print(f"  Running at {url}")
     print(f"  Labels dir: {LABELS_DIR}")
     print("  Press Ctrl+C to stop\n")
-    t = threading.Timer(0.8, lambda: webbrowser.open(url)); t.daemon = True; t.start()
+    if not os.environ.get("ETIKETAS_NO_BROWSER"):   # set by the updater: the page is already open
+        t = threading.Timer(0.8, lambda: webbrowser.open(url)); t.daemon = True; t.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

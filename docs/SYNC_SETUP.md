@@ -58,6 +58,14 @@ the person's own home folder (for example `~\OneDrive - Nando, UAB\...`), not
 a path with your own username in it. Leaving a field blank goes back to the
 shared folder.
 
+### The shipping data
+
+The **Shipment** page reads `shipping_data.json` from this folder, next to the
+file map, so everyone sees the same product, pallet and packaging figures. It is
+created the first time the app runs, from the values in the weight calculator
+workbook, and edited in **Settings → Shipping**. Order lines on the Shipment page
+are not shared: they stay in each person's browser.
+
 ## One-time setup: if you already have Etiketas data (do this once)
 
 You have real files sitting in `Documents\Etiketas` already. **Move**
@@ -91,12 +99,21 @@ This exact command works unmodified on every machine, because
 
 ## Updating and uninstalling
 
-Run `install.bat` again whenever you want the latest version. If Etiketas is already
-installed it asks "Update it?" and then does a clean reinstall from GitHub: the new
-version is downloaded and checked first (a failed download changes nothing), the running
-app is stopped, and the old folder is replaced completely. Your labels and settings live
-in the shared folder, not in the app folder, so they aren't affected. Anything you put in
-the app's `translations` folder is carried over.
+When you open Etiketas and a newer version is on GitHub, a popup offers to install it or
+remind you in 1 hour, 6 hours, 1 day, 3 days or 1 week. Every new commit on `main` counts as
+a new version. To install sooner than you asked to be reminded, use **Settings → General →
+Check for updates**.
+
+Installing does the same as running `install.bat` again, which also still works: a clean
+reinstall from GitHub. The new version is downloaded and checked first (a failed download
+changes nothing), the running app is stopped, the old folder is replaced completely, and the
+app starts again by itself. If anything goes wrong the popup says what, the previous version
+is kept, and the details are in `%TEMP%\etiketas_update.log`. Your labels and settings live in
+the shared folder, not in the app folder, so they aren't affected. Anything you put in the
+app's `translations` folder is carried over.
+
+A copy installed before this feature existed needs one more manual `install.bat` to get it.
+Copies run from a git checkout never offer updates.
 
 To remove Etiketas, run `uninstall.bat` (or `install.bat uninstall`). It deletes the app
 folder and the Desktop shortcut after asking you to confirm. It does **not** touch:
@@ -133,11 +150,12 @@ Hover over the dot for the resolved folder path and link target.
   label, deleting a file, changing settings), whichever change OneDrive
   finishes uploading *last* wins for the shared metadata files
   (`labels_map.json`, `app_config.json`, `colors_config.json`,
-  `creation_history.json` — each is rewritten in full on every save,
-  not merged). The actual label files themselves aren't affected by
-  this — only the app's own bookkeeping about them. Clicking **Rescan**
-  in the app rebuilds that bookkeeping from what's actually on disk, so
-  it self-heals if this ever happens.
+  `creation_history.json`, `shipping_data.json` — each is rewritten in
+  full on every save, not merged). The actual label files themselves
+  aren't affected by this — only the app's own bookkeeping about them.
+  Clicking **Rescan** in the app rebuilds the file map from what's
+  actually on disk, so it self-heals if this ever happens. Shipping data
+  can't be rebuilt that way, so two people shouldn't edit it at once.
 - **Files On-Demand**: if a colleague's OneDrive frees up space by
   making files cloud-only, the app may hit a placeholder file that
   needs to download before it can be read. Right-click the synced

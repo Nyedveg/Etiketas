@@ -22,6 +22,9 @@
     6. Creates a Desktop shortcut (not a Start Menu one -- that needs admin
        rights for an all-users install; a Desktop shortcut doesn't).
 
+    The app runs this script itself when someone accepts its "update available" popup, with
+    -Relaunch to start the new version afterwards and -StatusFile to report how it is going.
+
     Uninstall: stops the running app, then deletes the install folder and the Desktop
     shortcut. Your labels, settings and the shared OneDrive folder are never touched
     (Documents\Etiketas is only a link to it and is left in place), and the Python
@@ -44,12 +47,34 @@ param(
     [string]$OneDriveFolder = (Join-Path $env:USERPROFILE 'OneDrive - Nando, UAB\Marketing - Etiketas'),
     # The shared folder the app reads its templates, QR codes, logos and translations from.
     [string]$ResourcesFolder = (Join-Path $env:USERPROFILE 'OneDrive - Nando, UAB\Marketing - Label Resources'),
-    [string]$LabelsDir      = (Join-Path $env:USERPROFILE 'Documents\Etiketas')
+    [string]$LabelsDir      = (Join-Path $env:USERPROFILE 'Documents\Etiketas'),
+    # For the app's own updates: start the app again afterwards, and report progress to this file.
+    [switch]$Relaunch,
+    [string]$StatusFile
 )
 
 $ErrorActionPreference = 'Stop'
 
-function Write-Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
+# When the app runs this script, the person waiting on its page sees these.
+function Write-Status([string]$state, [string]$step = '', [string]$err = '') {
+    if (-not $StatusFile) { return }
+    try {
+        @{ state = $state; step = $step; error = $err } | ConvertTo-Json -Compress | Set-Content -LiteralPath $StatusFile -Encoding UTF8
+    } catch { }     # reporting must never be what stops an update
+}
+
+$script:appStopped = $false
+# If the app was stopped for an update that then failed, it is started again (whichever copy is there).
+function Start-AppAgain {
+    if (-not ($Relaunch -and $script:appStopped)) { return }
+    $launcher = Join-Path $InstallDir 'Etiketas.vbs'
+    if (-not (Test-Path -LiteralPath $launcher)) { return }
+    $env:ETIKETAS_NO_BROWSER = '1'      # the page that asked for the update is still open
+    Start-Process -FilePath 'wscript.exe' -ArgumentList ('"' + $launcher + '"') -WorkingDirectory $InstallDir
+    $script:appStopped = $false
+}
+
+function Write-Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan; Write-Status 'running' $msg }
 function Write-Ok($msg)   { Write-Host "    $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "    $msg" -ForegroundColor Yellow }
 function Write-Fail($msg) { Write-Host "    $msg" -ForegroundColor Red }
@@ -57,6 +82,8 @@ function Write-Fail($msg) { Write-Host "    $msg" -ForegroundColor Red }
 function Stop-Setup($msg) {
     Write-Fail $msg
     Write-Host "`nSetup stopped -- nothing beyond what's noted above was changed." -ForegroundColor Red
+    Write-Status 'failed' '' $msg
+    Start-AppAgain
     exit 1
 }
 
@@ -87,6 +114,20 @@ function Remove-Tree([string]$path) {
     $link = Find-Link $path
     if ($link) { throw "refusing to delete $path -- it contains a link ($($link.FullName)) that could lead to other folders" }
     Remove-Item -LiteralPath $path -Recurse -Force
+}
+
+# A rename, which happens whole or not at all. Not Move-Item: when a folder can't be renamed because
+# a file in it is open, Move-Item falls back to copying it and deleting the original file by file,
+# which stops partway and leaves a broken install. What holds a file open is often only briefly in
+# the way (antivirus, the search indexer), so this keeps trying for a few seconds.
+function Move-Folder([string]$from, [string]$to) {
+    for ($i = 1; ; $i++) {
+        try { [IO.Directory]::Move($from, $to); return }
+        catch {
+            if ($i -ge 10) { throw $_.Exception.GetBaseException().Message }
+            Start-Sleep -Milliseconds 500
+        }
+    }
 }
 
 # Refuses anything that is not plainly "the Etiketas program folder".
@@ -123,6 +164,7 @@ function Stop-Etiketas {
         Where-Object { $_.CommandLine -and $_.Name -match '^(pythonw?|pyw?)\.exe$' -and $_.CommandLine.ToLower().Contains('etiketas.py') })
     if ($procs.Count -eq 0) { return }
     Write-Host "    Stopping the running Etiketas app..."
+    $script:appStopped = $true
     foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
     for ($i = 0; $i -lt 20; $i++) {
         $alive = @($procs | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
@@ -144,6 +186,29 @@ function Remove-Shortcut {
     } else {
         Write-Warn "Left the Desktop shortcut alone -- it points somewhere else ($($sc.TargetPath))."
     }
+}
+
+# GitHub stores the commit a zip was made from as the zip's comment, which is its last 40 bytes.
+# Reading it from the zip itself means it is always the commit that was really downloaded.
+function Get-ZipCommit([string]$zip) {
+    $stream = [IO.File]::OpenRead($zip)
+    try {
+        if ($stream.Length -lt 40) { return $null }
+        $null = $stream.Seek(-40, [IO.SeekOrigin]::End)
+        $bytes = New-Object byte[] 40
+        $null = $stream.Read($bytes, 0, 40)
+        $text = [Text.Encoding]::ASCII.GetString($bytes)
+        if ($text -cmatch '^[0-9a-f]{40}$') { return $text }
+        return $null
+    } finally { $stream.Dispose() }
+}
+
+# Anything not handled below still has to be reported, and must not leave the app stopped.
+trap {
+    Write-Fail $_.Exception.Message
+    Write-Status 'failed' '' $_.Exception.Message
+    Start-AppAgain
+    exit 1
 }
 
 Write-Host "Etiketas installer" -ForegroundColor White
@@ -240,6 +305,7 @@ if (-not $resolvedOneDrive) {
 
     Then run this installer again. See docs\SYNC_SETUP.md for more detail.
 "@ -ForegroundColor Yellow
+    Write-Status 'failed' '' "Could not find a synced 'Marketing - Etiketas' folder under any OneDrive folder in your profile."
     exit 1
 }
 Write-Ok "Found: $resolvedOneDrive"
@@ -299,7 +365,7 @@ $backup = "$InstallDir.old"
 # Leftovers of an interrupted run: a previous copy that was moved aside but never replaced
 # is put back first, so there is never "nothing installed" because of a crash.
 if ((Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $InstallDir)) {
-    Move-Item -LiteralPath $backup -Destination $InstallDir
+    Move-Folder $backup $InstallDir
     Write-Warn "Put back the previous copy that an interrupted update had moved aside."
     $installed = $true; $updating = $true
 }
@@ -325,6 +391,10 @@ try {
     }
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     Copy-Item -Path (Join-Path $innerFolder.FullName '*') -Destination $stage -Recurse -Force
+    # What the app compares with GitHub to see whether there is an update. Without it (a zip
+    # that didn't come from GitHub) the app simply never offers one.
+    $commit = Get-ZipCommit $zipPath
+    if ($commit) { Set-Content -LiteralPath (Join-Path $stage 'installed_version.txt') -Value $commit -Encoding ASCII }
 } catch {
     if (Test-Path -LiteralPath $stage) { Remove-Tree $stage }
     $why = $_.Exception.Message
@@ -370,13 +440,13 @@ if ($updating) { Stop-Etiketas }
 $movedAside = $false
 try {
     if ($updating) {
-        Move-Item -LiteralPath $InstallDir -Destination $backup
+        Move-Folder $InstallDir $backup
         $movedAside = $true
     }
-    Move-Item -LiteralPath $stage -Destination $InstallDir
+    Move-Folder $stage $InstallDir
 } catch {
     $why = $_.Exception.Message
-    if ($movedAside -and -not (Test-Path -LiteralPath $InstallDir)) { Move-Item -LiteralPath $backup -Destination $InstallDir -ErrorAction SilentlyContinue }
+    if ($movedAside -and -not (Test-Path -LiteralPath $InstallDir)) { try { Move-Folder $backup $InstallDir } catch { } }
     if (Test-Path -LiteralPath $stage) { Remove-Tree $stage }
     Stop-Setup "Could not put the new version in place: $why`n`n    Close anything that is using the Etiketas folder (File Explorer, an editor, a terminal) and run this again.`n    The previous version was left in place."
 }
@@ -440,7 +510,7 @@ Write-Host $(if ($updating) { " Etiketas is updated." } else { " Etiketas is ins
 Write-Host " Launch it from the new Desktop shortcut, or run:"
 Write-Host "   $InstallDir\Start_Etiketas.bat            (windowless)"
 Write-Host "   $InstallDir\Start_Etiketas.bat console    (with a debug console)"
-Write-Host " To update later, run install.bat again. To remove it: uninstall.bat"
+Write-Host " The app offers new versions itself when you open it. To remove it: uninstall.bat"
 if (-not $linked) {
     Write-Host "`n NOTE: the labels folder link was not set up -- see the warning above." -ForegroundColor Yellow
 }
@@ -448,3 +518,7 @@ if ($resourceIssues.Count -gt 0) {
     Write-Host "`n NOTE: missing $($resourceIssues -join ', ') -- see the warning above." -ForegroundColor Yellow
 }
 Write-Host "======================================="
+
+Write-Status 'done'
+$script:appStopped = $true      # whether or not it could be stopped: this starts the new version
+Start-AppAgain
