@@ -2196,8 +2196,7 @@ function NumInput({value,onChange,className='',...rest}){
 // a profile with none is a shipping-only product, which the rest of the app never sees. `tds` names the
 // data sheets it follows. All of this lives in the shared folder, never in this public repo.
 const byId=list=>Object.fromEntries((list??[]).map(x=>[x.id,x]));
-const profileName=p=>p.variant?`${p.name} · ${p.variant}`:p.name;
-const byProfileName=(a,b)=>profileName(a).localeCompare(profileName(b));
+const byProfileName=(a,b)=>a.name.localeCompare(b.name);
 const SHIP_GROUPS=['MO','PAM','CE','NON'];
 // One entry per pack, with what the calculator needs read through to the catalogues.
 const shipEntries=shipping=>{
@@ -2214,7 +2213,8 @@ const perUnit=(a,b)=>b>0?a/b:0;
 const shipCalc=(it,qty)=>{
   const q=qty||0;
   const pallets=perUnit(q,it.palletSize),units=perUnit(q,it.packSize),boxes=perUnit(units,it.unitsPerBox);
-  const palletKg=pallets*(it.palletWeight||0),productKg=q*(it.density||0),containerKg=units*(it.containerWeight||0),boxKg=boxes*(it.boxWeight||0),strapKg=pallets*(it.strapWeight||0);
+  // Weights count what actually ships: part of a pallet, box or container still takes a whole one.
+  const palletKg=wholeUp(pallets)*(it.palletWeight||0),productKg=q*(it.density||0),containerKg=wholeUp(units)*(it.containerWeight||0),boxKg=wholeUp(boxes)*(it.boxWeight||0),strapKg=wholeUp(pallets)*(it.strapWeight||0);
   return {pallets,palletKg,productKg,units,containerKg,boxes,boxKg,strapKg,totalKg:palletKg+productKg+containerKg+boxKg+strapKg};
 };
 const fmtNum=(n,digits=2)=>n==null||Number.isNaN(n)?'–':n.toLocaleString(undefined,{maximumFractionDigits:digits});
@@ -2301,7 +2301,7 @@ function ShippingProfile({product:p,shipping}){
   return(
     <div className="card ship-profile">
       <div className="flex items-center gap-2">
-        <div className="card-title">{profileName(p)}</div>
+        <div className="card-title">{p.name}</div>
         {groupBadge(p.group)}
       </div>
       <dl className="facts">
@@ -2457,7 +2457,7 @@ function ShipCalculator({shipping}){
             <option value="">Choose a product…</option>
             {groupsOfProducts.map(g=>(
               <optgroup key={g} label={g||'No group'}>
-                {products.filter(p=>p.group===g).map(p=><option key={p.id} value={p.id}>{profileName(p)}</option>)}
+                {products.filter(p=>p.group===g).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
               </optgroup>
             ))}
           </select>
@@ -2535,7 +2535,7 @@ function ShipCalculator({shipping}){
             {lineGroups.map(({product:p,rows:group})=>(
               <tbody key={p.id}>
                 <tr className="ship-group-row">
-                  <td colSpan={11}><span className="ship-group-name">{profileName(p)}</span> {groupBadge(p.group)}</td>
+                  <td colSpan={11}><span className="ship-group-name">{p.name}</span> {groupBadge(p.group)}</td>
                   <td className="num">{group.length>1?fmtNum(group.reduce((n,r)=>n+r.c.totalKg,0)):''}</td>
                   <td colSpan={3}/>
                 </tr>
@@ -2543,16 +2543,16 @@ function ShipCalculator({shipping}){
                   <Fragment key={l.itemId}>
                     <tr className="ship-line">
                       <td rowSpan={2} className="mono nowrap">{fmtPack(it)}</td>
-                      <td rowSpan={2} className="num"><div className="input-unit ship-qty"><NumInput aria-label={`Order for ${profileName(p)} ${fmtPack(it)}`} value={l.qty} onChange={v=>updateLine(l.itemId,{qty:v})}/><span>{it.unit}</span></div></td>
+                      <td rowSpan={2} className="num"><div className="input-unit ship-qty"><NumInput aria-label={`Order for ${p.name} ${fmtPack(it)}`} value={l.qty} onChange={v=>updateLine(l.itemId,{qty:v})}/><span>{it.unit}</span></div></td>
                       <td className="num group-start"><ShipCount n={c.pallets}/></td><td className="num">{fmtNum(c.palletKg)}</td>
                       <td rowSpan={2} className="num group-start">{fmtNum(it.density,3)}</td><td rowSpan={2} className="num">{fmtNum(c.productKg)}</td>
                       <td className={'num group-start'+(isWhole(c.units)?'':' ship-warn')} title={isWhole(c.units)?undefined:`This order isn't a whole number of ${fmtPack(it)} packs`}><ShipCount n={c.units}/></td><td className="num">{fmtNum(c.containerKg)}</td>
                       <td className="num group-start"><ShipCount n={c.boxes}/></td><td className="num">{fmtNum(c.boxKg)}</td>
                       <td rowSpan={2} className="num group-start">{fmtNum(c.strapKg)}</td>
                       <td rowSpan={2} className="num" style={{fontWeight:600,color:'var(--text)'}}>{fmtNum(c.totalKg)}</td>
-                      <td rowSpan={2} className="num"><NumInput className="ship-price" aria-label={`Price for ${profileName(p)} ${fmtPack(it)}`} value={l.price} placeholder="–" onChange={v=>updateLine(l.itemId,{price:v})}/></td>
+                      <td rowSpan={2} className="num"><NumInput className="ship-price" aria-label={`Price for ${p.name} ${fmtPack(it)}`} value={l.price} placeholder="–" onChange={v=>updateLine(l.itemId,{price:v})}/></td>
                       <td rowSpan={2} className="num">{cost==null?'–':fmtNum(cost)}</td>
-                      <td rowSpan={2}><button className="ship-remove" aria-label={`Remove ${profileName(p)} ${fmtPack(it)}`} onClick={()=>removeLine(l.itemId)}><Icon.Close size={12}/></button></td>
+                      <td rowSpan={2}><button className="ship-remove" aria-label={`Remove ${p.name} ${fmtPack(it)}`} onClick={()=>removeLine(l.itemId)}><Icon.Close size={12}/></button></td>
                     </tr>
                     <tr className="ship-line-used">
                       <td colSpan={2} className="group-start"><ShipUsed item={it.pallet} weight={it.palletWeight}/></td>
@@ -2598,7 +2598,7 @@ function ShipCalculator({shipping}){
           {(adrClasses.length>0||noAir.length>0)&&(
             <div className="ship-alerts">
               {adrClasses.length>0&&<div className="alert alert-warning">ADR goods in this shipment: class {adrClasses.join(', ')}.</div>}
-              {noAir.length>0&&<div className="alert alert-warning">Cannot go by air: {noAir.map(profileName).join(', ')}.</div>}
+              {noAir.length>0&&<div className="alert alert-warning">Cannot go by air: {noAir.map(p=>p.name).join(', ')}.</div>}
             </div>
           )}
           <div className="card table-scroll ship-section">
@@ -2607,7 +2607,7 @@ function ShipCalculator({shipping}){
               <tbody>
                 {shipped.map(p=>(
                   <tr key={p.id}>
-                    <td className="ship-name">{profileName(p)}</td>
+                    <td className="ship-name">{p.name}</td>
                     <td className="mono nowrap">{p.customsCode||'–'}</td>
                     <td className="mono">{p.origin||'–'}</td>
                     <td>{adrOf(p)?<span className="badge badge-wip">{adrOf(p)}</span>:<span className="muted">None</span>}</td>
@@ -2639,7 +2639,7 @@ function ShipProducts({shipping}){
   const shown=useMemo(()=>{
     const list=all
       .filter(p=>group==='all'||p.group===group)
-      .filter(p=>matchesSearch(`${p.name} ${p.variant} ${p.customsCode} ${p.subgroup} ${(p.links??[]).join(' ')}`,search));
+      .filter(p=>matchesSearch(`${p.name} ${p.customsCode} ${p.subgroup} ${(p.links??[]).join(' ')}`,search));
     return sort==='az'?list.sort(byProfileName):sort==='newest'?list.reverse():list;
   },[all,group,search,sort]);
   return(
@@ -2676,7 +2676,7 @@ function ShipProducts({shipping}){
             {shown.map(p=>(
               <Fragment key={p.id}>
                 <tr className={open===p.id?'row-selected':''} style={{cursor:'pointer'}} onClick={()=>setOpen(o=>o===p.id?null:p.id)}>
-                  <td className="ship-name">{p.name}{p.variant&&<div className="hint">{p.variant}</div>}</td>
+                  <td className="ship-name">{p.name}</td>
                   <td className="mono nowrap">{[...(p.packs??[])].sort((a,b)=>a.packSize-b.packSize).map(k=>fmtNum(k.packSize,3)).join(' · ')} {p.unit}</td>
                   <td>{groupBadge(p.group)}</td>
                   <td><div className="ship-clip" title={p.subgroup}>{p.subgroup||'–'}</div></td>
@@ -3241,7 +3241,7 @@ function PathsTab({cfg,setCfg,save,saved}){
 
 // ── Settings: shipping data ──────────────────────────────────────────────────────────
 const SHIP_IDENTITY=[
-  ['name','Name','text'],['variant','Variant','text','If two versions ship'],['unit','Unit','unit'],['group','Group','group'],
+  ['name','Name','text'],['unit','Unit','unit'],['group','Group','group'],
   ['shelfLifeMonths','Shelf life','months'],['density','Density (kg per L)','number'],['strapWeight','Strap per pallet (kg)','number'],
 ];
 const SHIP_DETAILS=[
@@ -3276,7 +3276,7 @@ const shipProblem=p=>{
 const duplicateProduct=draft=>{
   const seen=new Set();
   for(const p of draft.products??[]){
-    const key=profileName(p).trim().toLowerCase();
+    const key=p.name.trim().toLowerCase();
     if(seen.has(key))return p;
     seen.add(key);
   }
@@ -3336,7 +3336,7 @@ const newProfile=(name,link,draft)=>{
   const unit=link?.unit??'L';
   const sheets=link?sheetsForLabel(draft,link.name,unit):[];
   const sibling=link?(draft.products??[]).find(p=>p.links?.includes(link.name)&&p.shelfLifeMonths):null;
-  return {id:newId('product'),name,variant:'',links:link?[link.name]:[],tds:sheets.map(t=>t.id),unit,group:link?.category??'',subgroup:'',density:null,strapWeight:usualStrap(draft,unit),
+  return {id:newId('product'),name,links:link?[link.name]:[],tds:sheets.map(t=>t.id),unit,group:link?.category??'',subgroup:'',density:null,strapWeight:usualStrap(draft,unit),
     shelfLifeMonths:sibling?.shelfLifeMonths??null,origin:'LT',customsCode:'',storageMin:null,storageMax:null,adrClass:'',packingGroup:'',airTransport:true,note:'',packs:[blankPack()],...fromSheet(sheets[0])};
 };
 const blankSheet=()=>({id:newId('tds'),name:'',labels:[],code:'',version:'',revised:'',file:'',folder:'',older:false,type:'',application:'',form:'',colour:'',odour:'',ph:'',density:'',concentration:'',shelfLifeMonths:null,storageMin:null,storageMax:null,packaging:'',hazard:'',organic:false});
@@ -3348,8 +3348,8 @@ function ShippingTab({draft,setDraft,dirty,saveShipping,config}){
   if(!draft||draft.error)return <div className="alert alert-error">{draft?.error??'The shipping data could not be read'}. Close whatever has it open, then reload this page.</div>;
   const badProduct=(draft.products??[]).find(shipProblem);
   const twin=duplicateProduct(draft);
-  const problem=badProduct?`${profileName(badProduct)||'A product'} ${shipProblem(badProduct)}.`
-    :twin?`Two products are called ${profileName(twin)}. Give one a variant.`
+  const problem=badProduct?`${badProduct.name||'A product'} ${shipProblem(badProduct)}.`
+    :twin?`Two products are called ${twin.name}. Rename one.`
     :(draft.tds??[]).some(t=>!t.name?.trim())?'A data sheet needs a product name.'
     :catalogueProblem(draft);
   const save=async()=>{
@@ -3366,7 +3366,7 @@ function ShippingTab({draft,setDraft,dirty,saveShipping,config}){
             <button key={s} type="button" aria-pressed={section===s} className={'seg-btn'+(section===s?' on':'')} onClick={()=>setSection(s)}>{l}</button>
           ))}
         </div>
-        <span className="hint">Saved as shipping_profiles.json in the labels folder, next to the file map, and shared with everyone who uses it.</span>
+        <span className="hint">Saved as {section==='sheets'?'technical_data.json':'shipping_profiles.json'} in the labels folder, next to the file map, and shared with everyone who uses it.</span>
         <button className="btn btn-folder btn-sm ml-auto" style={{flexShrink:0}} onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}><Icon.Folder/>Open folder</button>
       </div>
       {section==='items'&&<ShipProductsEditor draft={draft} setDraft={setDraft} config={config}/>}
@@ -3417,7 +3417,7 @@ function AddShipProduct({config,draft,onCreate,onOpen,onClose}){
             :<div className="hint">Fills in its unit, group, and from its data sheet the shelf life and storage.</div>}
           {existing.length>0&&(
             <div className="alert alert-warning" style={{marginTop:'var(--space-2)'}}>
-              <span>{link.name} is already in {profileName(existing[0])}. Add packs to it there, or make a new one only if it ships as a separate version.</span>
+              <span>{link.name} is already in {existing[0].name}. Add packs to it there, or make a new one only if it ships as a separate version.</span>
               <button type="button" className="btn btn-ghost btn-sm" style={{flexShrink:0}} onClick={()=>onOpen(existing[0].id)}>Open it</button>
             </div>
           )}
@@ -3443,7 +3443,7 @@ function ShipProductsEditor({draft,setDraft,config}){
   const [search,setSearch]=useState('');
   const [selectedId,setSelectedId]=useState(null);
   const [adding,setAdding]=useState(false);
-  const shown=useMemo(()=>(draft.products??[]).filter(p=>matchesSearch(`${p.name} ${p.variant} ${p.customsCode} ${(p.links??[]).join(' ')}`,search)).sort(byProfileName),[draft.products,search]);
+  const shown=useMemo(()=>(draft.products??[]).filter(p=>matchesSearch(`${p.name} ${p.customsCode} ${(p.links??[]).join(' ')}`,search)).sort(byProfileName),[draft.products,search]);
   const groups=[...SHIP_GROUPS,...new Set(shown.map(p=>p.group).filter(g=>!SHIP_GROUPS.includes(g)))];
   const product=(draft.products??[]).find(p=>p.id===selectedId);
   const setProducts=products=>setDraft({...draft,products});
@@ -3465,7 +3465,7 @@ function ShipProductsEditor({draft,setDraft,config}){
                 <div className="pick-list">
                   {inGroup.map(p=>(
                     <button key={p.id} className={'pick-row'+(p.id===selectedId?' on':'')} onClick={()=>setSelectedId(p.id)}>
-                      <span className="pick-row-name" title={profileName(p)}>{p.name}{p.variant&&<span className="muted"> · {p.variant}</span>}</span>
+                      <span className="pick-row-name" title={p.name}>{p.name}</span>
                       {shipProblem(p)
                         ?<span className="dot" style={{background:'var(--danger)'}} title={shipProblem(p)}/>
                         :<span className="mono muted" style={{fontSize:'var(--fs-2xs)',flexShrink:0}}>{(p.packs??[]).length} {(p.packs??[]).length===1?'pack':'packs'}</span>}
@@ -3483,7 +3483,7 @@ function ShipProductsEditor({draft,setDraft,config}){
         <div className="muted" style={{flex:1,fontSize:'var(--fs-md)',fontStyle:'italic',paddingTop:'var(--space-2)'}}>Select a product to edit its shipping data.</div>
       ):(
         <ShipProductForm key={product.id} product={product} draft={draft} config={config} update={update}
-          onDuplicate={()=>add({...product,id:newId('product'),variant:product.variant?`${product.variant} (copy)`:'copy',packs:(product.packs??[]).map(k=>({...k,id:newId('pack')}))})}
+          onDuplicate={()=>add({...product,id:newId('product'),name:`${product.name} (copy)`,packs:(product.packs??[]).map(k=>({...k,id:newId('pack')}))})}
           onDelete={()=>{setProducts(draft.products.filter(p=>p.id!==selectedId));setSelectedId(null);}}/>
       )}
       {adding&&<AddShipProduct config={config} draft={draft} onCreate={add} onOpen={id=>{setSelectedId(id);setSearch('');setAdding(false);}} onClose={()=>setAdding(false)}/>}
@@ -3765,7 +3765,7 @@ function ShipSheetsEditor({draft,setDraft,config}){
               <div className="field wide">
                 <span className="field-label">Label products</span>
                 <LinkChips values={sheet.labels??[]} options={labelOptions} isGone={n=>!labelOptions.some(o=>o.value===n)} goneTitle="There is no label product with this name any more" onChange={labels=>update({labels})} label="Link a label product" addFirst="Link a label product…" addMore="Link another…"/>
-                <div className="hint">{usedBy.length?`Linked from ${usedBy.map(profileName).join(', ')}.`:'No shipping product links to this yet.'}</div>
+                <div className="hint">{usedBy.length?`Linked from ${usedBy.map(p=>p.name).join(', ')}.`:'No shipping product links to this yet.'}</div>
               </div>
               {TDS_FIELDS.map(spec=><ShipField key={spec[0]} spec={spec} value={sheet[spec[0]]} set={v=>update({[spec[0]]:v})}/>)}
             </div>

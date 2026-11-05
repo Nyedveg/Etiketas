@@ -67,18 +67,15 @@ the weights. It is edited in **Settings → Shipping**, and a product's profile 
 its **Information** page. Order lines and prices on the Shipment page are not shared: they
 stay in each person's browser.
 
-It also holds a data sheet per TDS document. A new label takes its shelf life and storage
-temperatures from the product's data sheet, in the label's language, whatever the translation
-file says; **New Label** shows them before anything is created. A product with no data sheet
-keeps its translation's text.
+`technical_data.json`, beside it, holds a data sheet per TDS document. A new label takes its
+shelf life and storage temperatures from the product's data sheet, in the label's language,
+whatever the translation file says; **New Label** shows them before anything is created. A
+product with no data sheet keeps its translation's text.
 
 This data is the company's and only ever lives in this folder. This repository is public, so
 never commit it: `app/default_shipping.json` is deliberately just the empty shape, and if the
-file isn't here, as on a machine still syncing, the page says so and nothing is written until
-someone saves. Back the file up like any other shared document, because the app can't recreate it.
-
-`shipping_data.json`, the flat version older copies of the app read, can be deleted once
-everyone has updated.
+files aren't here, as on a machine still syncing, the page says so and nothing is written until
+someone saves. Back them up like any other shared document, because the app can't recreate them.
 
 ### Language codes in file names
 
@@ -172,7 +169,7 @@ Hover over the dot for the resolved folder path and link target.
   label, deleting a file, changing settings), whichever change OneDrive
   finishes uploading *last* wins for the shared metadata files
   (`labels_map.json`, `app_config.json`, `colors_config.json`,
-  `creation_history.json`, `shipping_profiles.json` — each is rewritten in
+  `creation_history.json`, `shipping_profiles.json`, `technical_data.json` — each is rewritten in
   full on every save, not merged). The actual label files themselves
   aren't affected by this — only the app's own bookkeeping about them.
   Clicking **Rescan** in the app rebuilds the file map from what's

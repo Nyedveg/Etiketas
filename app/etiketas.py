@@ -37,6 +37,7 @@ COLORS_FILE  = LABELS_DIR / "colors_config.json"
 ICON_ASSIGN_FILE = LABELS_DIR / "icon_assignments.json"
 HISTORY_FILE = LABELS_DIR / "creation_history.json"
 SHIPPING_FILE = LABELS_DIR / "shipping_profiles.json"
+TECHNICAL_FILE = LABELS_DIR / "technical_data.json"
 DEFAULT_CFG_FILE = APP_DIR / "default_config.json"
 DEFAULT_SHIPPING_FILE = APP_DIR / "default_shipping.json"
 PORT       = 7842
@@ -148,9 +149,26 @@ def load_shipping():
     only ever in that folder: the bundled file is just its empty shape. If the folder has none, nothing
     is written until someone saves. On a machine still syncing, an empty file would compete with the real one."""
     data = load_json(SHIPPING_FILE)
-    if data is not None or SHIPPING_FILE.exists():
-        return data
-    return load_json(DEFAULT_SHIPPING_FILE)
+    if data is None:
+        if SHIPPING_FILE.exists():
+            return None
+        data = load_json(DEFAULT_SHIPPING_FILE)
+    # The data sheets are kept apart, in technical_data.json, and joined here. Without that file,
+    # as while it syncs, an older shipping_profiles.json still carries its own copy of them.
+    technical = load_json(TECHNICAL_FILE)
+    if technical is None:
+        return None if TECHNICAL_FILE.exists() else data
+    return {**data, "tds": technical.get("sheets", []), "tdsReadOn": technical.get("readOn")}
+
+def save_shipping(data):
+    """Splits what load_shipping joined. The data sheets go first, so shipping_profiles.json only gives
+    up its older copy of them once they are safe. Their file isn't rewritten unless they changed, and
+    isn't created empty: on a machine still syncing, that would compete with the real one."""
+    sheets = data.get("tds")
+    technical = {"readOn": data.get("tdsReadOn"), "sheets": sheets}
+    if sheets is not None and (sheets or TECHNICAL_FILE.exists()) and load_json(TECHNICAL_FILE) != technical:
+        save_json(TECHNICAL_FILE, technical)
+    save_json(SHIPPING_FILE, {k: v for k, v in data.items() if k not in ("tds", "tdsReadOn")})
 
 def _onedrive_running():
     if os.name != "nt":
@@ -1919,7 +1937,7 @@ class Handler(BaseHTTPRequestHandler):
     def api_shipping(self):
         with _WRITE_LOCK:     # the first read also writes the seed file
             data = load_shipping()
-        self.send_json(data if data is not None else {"error": f"Could not read {SHIPPING_FILE}"})
+        self.send_json(data if data is not None else {"error": f"Could not read {SHIPPING_FILE.name} or {TECHNICAL_FILE.name}"})
 
     def api_update_check(self):
         self.send_json(check_for_update(force=self._arg("force") == "1"))
@@ -2055,7 +2073,7 @@ class Handler(BaseHTTPRequestHandler):
         cfg = load_config()
         payload = json.dumps({"config": cfg, "colors": load_json(COLORS_FILE, {}),
                               "icon_assignments": get_icon_assignments(cfg.get("products", [])),
-                              "shipping": load_json(SHIPPING_FILE, {})},
+                              "shipping": load_shipping() or {}},
                              ensure_ascii=False, indent=2).encode("utf-8")
         self._send(200, payload, "application/json",
                    {"Content-Disposition": 'attachment; filename="etiketas_export.json"'})
@@ -2121,7 +2139,7 @@ class Handler(BaseHTTPRequestHandler):
     def api_shipping_save(self, body):
         if not all(isinstance(body.get(k), list) for k in ("products", "pallets", "containers", "boxes", "tables")):
             raise ValueError("Shipping data must have products, pallets, containers, boxes and tables")
-        save_json(SHIPPING_FILE, body)
+        save_shipping(body)
 
     @_ok_json
     def api_update_install(self, body):
