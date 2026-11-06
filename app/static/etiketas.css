@@ -109,6 +109,78 @@
 .ship-doc-checks ul{margin:var(--space-1) 0 0;padding-left:18px}
 .ship-doc-actions{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-4)}
 
+/* -- Product editor ------------------------------------------------------------------- */
+.product-facts{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3) var(--space-5)}
+.product-facts .field-label{display:block;margin-bottom:var(--space-1)}
+.product-check{display:flex;align-items:center;gap:var(--space-2);font-size:var(--fs-sm);color:var(--text2);cursor:pointer}
+.product-swatch{width:28px;height:28px;padding:0;border-radius:5px;border:2px solid;cursor:pointer;display:block}
+.product-swatch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.product-swatch-pop{position:absolute;top:36px;left:0;z-index:200;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px;display:flex;flex-direction:column;gap:var(--space-2);box-shadow:0 4px 20px var(--shadow-lg);min-width:130px}
+.product-traits{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:var(--space-2)}
+
+/* -- Safety data ---------------------------------------------------------------------- */
+.ghs-icon{display:block;flex-shrink:0}
+.ghs-picker{display:flex;gap:2px}
+.ghs-toggle{border:none;background:none;padding:1px;border-radius:var(--radius-sm,4px);cursor:pointer;line-height:0}
+.ghs-toggle .ghs-icon{opacity:.16;filter:grayscale(1);transition:opacity .12s}
+.ghs-toggle:hover .ghs-icon{opacity:.5}
+.ghs-toggle.on .ghs-icon{opacity:1;filter:none}
+.ghs-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ship-safety-table td{vertical-align:top}
+.ship-safety-ufi{width:190px}
+.ship-safety-un{width:92px}
+.ship-safety-signal{width:100px}
+.ship-safety-h{width:170px}
+.ship-safety-sheet{min-width:240px;max-width:340px;white-space:normal}
+.ship-safety-check{margin-top:var(--space-1);font-size:var(--fs-xs);color:var(--warning)}
+.ship-safety-source{margin-top:var(--space-2)}
+.ship-safety-line{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2)}
+.ship-safety-outcome{display:flex;flex-direction:column;gap:var(--space-1);padding-left:30px}
+.ship-safety-note{font-size:var(--fs-xs);padding:var(--space-1) var(--space-2)}
+.ship-sku-names{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-2) var(--space-3);margin-top:var(--space-1)}
+.ship-sku-names label{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-xs);color:var(--text2)}
+
+/* -- SKU rules ------------------------------------------------------------------------ */
+.sku-hints{margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text3);line-height:1.5}
+.sku-warnings{margin-top:var(--space-1);font-size:var(--fs-xs);color:var(--warning);line-height:1.5;white-space:normal}
+.sku-check{flex-shrink:0;margin-bottom:var(--space-3)}
+.sku-check-row{display:flex;flex-wrap:wrap;gap:var(--space-3) var(--space-4)}
+.sku-check-field{flex:0 0 210px;margin-bottom:0}
+.sku-parts{flex:1 1 560px;min-width:0;display:flex;align-items:stretch;gap:var(--space-1)}
+.sku-part{flex:1 1 0;min-width:0;padding:var(--space-1) var(--space-2);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);font:inherit;text-align:left;cursor:pointer;transition:border-color var(--dur-fast)}
+.sku-part:hover{border-color:var(--accent)}
+.sku-part:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.sku-part.missing{border-style:dashed;background:none}
+.sku-part.unknown{border-color:var(--danger);background:rgba(var(--danger-rgb),.08)}
+.sku-part>span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sku-part-label{font-size:var(--fs-2xs);color:var(--text3);text-transform:uppercase;letter-spacing:var(--tracking-label)}
+.sku-part-code{font-size:var(--fs-lg);font-weight:500;line-height:1.35}
+.sku-part-value{font-size:var(--fs-xs);color:var(--text2)}
+.sku-parts.example .sku-part-code,.sku-parts.example .sku-part-value{color:var(--text3)}
+.sku-dash{align-self:center;font-family:var(--font-mono);font-size:var(--fs-lg);color:var(--text3)}
+.sku-files{margin-top:var(--space-2)}
+/* Its own scroll, so a product with many files can't push the rules table and Save off the page. */
+.sku-file-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:var(--space-1) var(--space-4);max-height:92px;overflow-y:auto;margin-top:var(--space-1)}
+.sku-file{display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.sku-file-name{flex:1;min-width:0;font-size:var(--fs-xs);color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sku-tabs{margin-bottom:var(--space-3)}
+.sku-bar{flex-shrink:0;margin-bottom:0}
+.sku-tab-hint{margin-top:var(--space-1)}
+.sku-table{flex:1;min-height:150px;max-height:none;margin-top:var(--space-2)}
+.sku-rows td{vertical-align:top}
+.sku-rows td:last-child{width:32px}
+.sku-rows .input{width:100%;box-sizing:border-box}
+.sku-rows .ship-num{width:110px}
+.sku-rows td:first-child{width:84px}
+.sku-rows .ship-links{gap:var(--space-1)}
+.sku-rows .ship-link-add{width:150px}
+.sku-versions-toggle{display:inline-flex;align-items:center;gap:var(--space-1);height:28px;padding:0 var(--space-2);border:1px solid var(--border2);border-radius:var(--radius-sm);background:none;color:var(--text);font-size:var(--fs-sm);white-space:nowrap;cursor:pointer}
+.sku-versions-toggle:hover{border-color:var(--accent)}
+.sku-versions-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+.sku-versions{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-1);padding:var(--space-1) 0}
+.sku-version{display:flex;align-items:center;gap:var(--space-2);width:min(560px,100%)}
+.sku-rows .sku-version .sku-code{flex:0 0 56px;width:56px}
+
 /* -- Settings: shipping editor -------------------------------------------------------- */
 .ship-edit{display:flex;gap:var(--space-5);flex:1;min-height:0}
 .ship-edit-list{width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:var(--space-2);min-height:0}

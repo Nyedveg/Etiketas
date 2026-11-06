@@ -14,6 +14,7 @@ from urllib.parse import urlparse, parse_qs, quote, unquote
 
 import organizer
 import packing_list
+import safety
 from labelnames import Catalogue, LANG_ALIASES, label_entry, label_kind, norm_name, pack_amount, take_date
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 STATIC_DIR = APP_DIR / "static"
 LABELS_DIR = Path.home() / "Documents" / "Etiketas"
 ICONS_DIR       = ASSETS_DIR / "icons"
+GHS_DIR         = ASSETS_DIR / "GHS"
 LOGO_THUMB_DIR = LABELS_DIR / ".cache" / "logo_thumbs"
 FILE_THUMB_DIR = LABELS_DIR / ".cache" / "file_thumbs"
 MOCKUP_CACHE_DIR = LABELS_DIR / ".cache" / "mockups"
@@ -39,6 +41,8 @@ ICON_ASSIGN_FILE = LABELS_DIR / "icon_assignments.json"
 HISTORY_FILE = LABELS_DIR / "creation_history.json"
 SHIPPING_FILE = LABELS_DIR / "shipping_profiles.json"
 TECHNICAL_FILE = LABELS_DIR / "technical_data.json"
+SAFETY_FILE  = LABELS_DIR / "safety_data.json"
+SKU_FILE     = LABELS_DIR / "sku_rules.json"
 DEFAULT_CFG_FILE = APP_DIR / "default_config.json"
 DEFAULT_SHIPPING_FILE = APP_DIR / "default_shipping.json"
 # One PC's own settings: outside the labels folder, which OneDrive shares, and outside the install, which an update replaces.
@@ -108,20 +112,16 @@ def load_local():
 
 def _with_local(cfg):
     """The shared config as this PC sees it. Folders only ever come from this PC: one in the shared file
-    is someone's own path. The SharePoint link and the language switches stay as shared until this PC sets its own."""
+    is someone's own path. The SharePoint link stays as shared until this PC sets its own."""
     local = load_local()
     for key in FOLDER_SETTINGS:
         cfg[key] = local.get(key, "")
     if "sharepointBaseUrl" in local:
         cfg["sharepointBaseUrl"] = local["sharepointBaseUrl"]
-    if "languagesOff" in local:
-        for lang in cfg.get("languages", []):
-            lang["enabled"] = lang["code"] not in local["languagesOff"]
     return cfg
 
 def save_config(cfg):
-    """Splits what _with_local joined, so one PC's choices never reach anyone else's. A language added
-    or removed is still shared, since labels everywhere are named with it; only its switch is this PC's."""
+    """Splits what _with_local joined, so one PC's choices never reach anyone else's."""
     shared = load_json(CFG_FILE, {}) or {}
     local = {**load_local(), **{k: cfg[k] for k in FOLDER_SETTINGS if k in cfg}}
     if "sharepointBaseUrl" in cfg:
@@ -129,15 +129,10 @@ def save_config(cfg):
             local.pop("sharepointBaseUrl", None)      # the same as everyone's: follow theirs if it changes
         else:
             local["sharepointBaseUrl"] = cfg["sharepointBaseUrl"]
-    if "languages" in cfg:
-        local["languagesOff"] = [l["code"] for l in cfg["languages"] if not l.get("enabled")]
     save_json(LOCAL_FILE, local)
-    shared_on = {l["code"]: l.get("enabled", True) for l in shared.get("languages", [])}
     out = {k: v for k, v in cfg.items() if k not in FOLDER_SETTINGS}
     if "sharepointBaseUrl" in shared:
         out["sharepointBaseUrl"] = shared["sharepointBaseUrl"]
-    if "languages" in cfg:
-        out["languages"] = [{**l, "enabled": shared_on.get(l["code"], True)} for l in cfg["languages"]]
     save_json(CFG_FILE, out)
 
 def load_config():
@@ -195,12 +190,28 @@ def load_shipping():
         if SHIPPING_FILE.exists():
             return None
         data = load_json(DEFAULT_SHIPPING_FILE)
+    # SKU rules have their own file and their own page; shipping and new labels only read them.
+    data = {**data, "skuRules": load_sku_rules()}
     # The data sheets are kept apart, in technical_data.json, and joined here. Without that file,
     # as while it syncs, an older shipping_profiles.json still carries its own copy of them.
     technical = load_json(TECHNICAL_FILE)
     if technical is None:
         return None if TECHNICAL_FILE.exists() else data
-    return {**data, "tds": technical.get("sheets", []), "tdsReadOn": technical.get("readOn")}
+    # Safety data has its own file and its own Editor tab; the calculator only reads it, for UN codes.
+    return {**data, "tds": technical.get("sheets", []), "tdsReadOn": technical.get("readOn"), "safety": load_safety().get("products", {})}
+
+def load_safety():
+    return load_json(SAFETY_FILE, {}) or {}
+
+SKU_TABLES = ("groups", "products", "packs", "languages", "brands", "endings")
+
+def load_sku_rules():
+    """What each part of a SKU can be. Empty tables if there is no file yet, with nothing written until someone
+    saves. None if the file is there but can't be read, so an empty page can never be saved over it."""
+    rules = load_json(SKU_FILE)
+    if rules is None and not SKU_FILE.exists():
+        return {table: [] for table in SKU_TABLES}
+    return rules
 
 def save_shipping(data):
     """Splits what load_shipping joined. The data sheets go first, so shipping_profiles.json only gives
@@ -210,7 +221,7 @@ def save_shipping(data):
     technical = {"readOn": data.get("tdsReadOn"), "sheets": sheets}
     if sheets is not None and (sheets or TECHNICAL_FILE.exists()) and load_json(TECHNICAL_FILE) != technical:
         save_json(TECHNICAL_FILE, technical)
-    save_json(SHIPPING_FILE, {k: v for k, v in data.items() if k not in ("tds", "tdsReadOn")})
+    save_json(SHIPPING_FILE, {k: v for k, v in data.items() if k not in ("tds", "tdsReadOn", "safety", "skuRules")})
 
 def _onedrive_running():
     if os.name != "nt":
@@ -858,6 +869,9 @@ def _fill_trait_slots_xml(text: str, icon_uris: list):
         text = _cut_block(text, fo_start, fo_close + len('</FlexObject>'))
     return text, len(blocks)
 
+def apply_safety(pkg, record, languages, pack):
+    return safety.apply_to_label(pkg, record, languages, pack, GHS_DIR)
+
 def apply_trait_icons(pkg, icon_paths):
     """Fill a template's TRAIT_SLOT_1..N icon frames with a product's trait
     icons (SVG files, in display order) by relinking each slot's graphic, the
@@ -880,10 +894,10 @@ def apply_trait_icons(pkg, icon_paths):
 
 # -- Applying everything to one new file -------------------------------------------
 def fill_idml(path, *, is_label, is_template, colors, qr_path, logo_path, box_mult,
-              translations, footer_values, trait_icons):
+              translations, footer_values, trait_icons, safety_record=None, languages=(), pack=""):
     """Apply every edit a new label (is_label) or box file needs, with one read
     and one write of the IDML. Returns what the UI shows per step:
-    True = done, False = failed, None = not applicable."""
+    True = done, False = failed, None = not applicable. Safety returns what it did, or False if it failed."""
     ops = {"colors": None, "qr": None, "logo": None, "translations": []}
     try:
         pkg = IdmlPackage(path)
@@ -904,6 +918,7 @@ def fill_idml(path, *, is_label, is_template, colors, qr_path, logo_path, box_mu
     if is_label:
         ops["footer"] = run(apply_footer_content, translations, footer_values)
     ops["icons"] = run(apply_trait_icons, trait_icons)
+    ops["safety"] = run(apply_safety, safety_record, list(languages), pack)
     if pkg:
         pkg.save()
     return ops
@@ -1119,6 +1134,7 @@ def create_label(product, languages, packaging_size, config, label_template_path
     # Pre-load translation data for each slot (None = skip)
     translations = [load_json(lf) if lf else None for lf in (lang_files or [])]
     apply_data_sheet(product, prod_cfg, lang_files or [], translations)
+    safety_record = load_safety().get("products", {}).get(product)
 
     def make_file(tmpl, dest_dir, dest_name, is_label):
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -1134,7 +1150,9 @@ def create_label(product, languages, packaging_size, config, label_template_path
             return dest_path, {"colors": None, "qr": None, "logo": None, "translations": []}
         return dest_path, fill_idml(dest_path, is_label=is_label, is_template=bool(tmpl.get("is_template")),
                                     colors=prod_colors, qr_path=qr_path, logo_path=logo_path, box_mult=box_mult,
-                                    translations=translations, footer_values=footer_values, trait_icons=trait_icons)
+                                    translations=translations, footer_values=footer_values, trait_icons=trait_icons,
+                                    safety_record=safety_record, languages=languages,
+                                    pack=packaging_size if is_label else box_mult)
 
     # The packaging label (sized from the product) and its box label (always 180x180).
     specs = []
@@ -1792,34 +1810,15 @@ def update_progress():
     return {**status, "log": str(UPDATE_LOG)}
 
 # ── Config merging ─────────────────────────────────────────────────────────────
-def sync_products(cfg, default):
-    """Add the products the default config has and cfg lacks, and bring existing
-    ones' category/acidic in line with the default. Returns (added, updated) names."""
-    default_by_name = {p["name"]: p for p in default.get("products", [])}
-    have = {p["name"] for p in cfg.get("products", [])}
-    added = []
-    for p in default.get("products", []):
-        if p["name"] not in have:
-            cfg.setdefault("products", []).append(p)
-            added.append(p["name"])
-    updated = []
-    for p in cfg.get("products", []):
-        canonical = default_by_name.get(p["name"])
-        if canonical and (p.get("category") != canonical.get("category") or p.get("acidic") != canonical.get("acidic")):
-            p["category"], p["acidic"] = canonical["category"], canonical["acidic"]
-            updated.append(p["name"])
-    return added, updated
-
 def merged_config():
-    """The live config, completed with anything new in the bundled default (new
-    products, languages, sizes). Not written back -- saving does that."""
+    """The live config, completed with any languages and sizes new in the bundled default. Not written back:
+    saving does that. Products are left alone: the Editor decides those, and one removed there stays removed."""
     cfg = load_json(CFG_FILE)
     default = load_json(DEFAULT_CFG_FILE, {})
     if not cfg:
         if cfg is not None or not CFG_FILE.exists():   # first run -- but never because a read failed
             save_json(CFG_FILE, default)
         return _with_local(default)
-    sync_products(cfg, default)
     _upgrade_saved_config(cfg)
     have_langs = {l["code"]: l for l in cfg["languages"]}
     for lang in default.get("languages", []):
@@ -1948,6 +1947,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_under(STATIC_DIR, path[len("/static/"):])
         elif path.startswith("/icons/"):
             self.send_under(ICONS_DIR, path[len("/icons/"):])
+        elif path.startswith("/ghs/"):
+            self.send_under(GHS_DIR, path[len("/ghs/"):])
         elif path in self.GET_ROUTES:
             getattr(self, self.GET_ROUTES[path])()
         else:
@@ -1974,7 +1975,6 @@ class Handler(BaseHTTPRequestHandler):
         "/api/mockup":          "api_mockup",
         "/api/product_mockup":  "api_product_mockup",
         "/api/file_info":       "api_file_info",
-        "/api/export":          "api_export",
         "/api/shipping":        "api_shipping",
         "/api/update/check":    "api_update_check",
         "/api/update/progress": "api_update_progress",
@@ -2114,15 +2114,6 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.send_404()
 
-    def api_export(self):
-        cfg = load_config()
-        payload = json.dumps({"config": cfg, "colors": load_json(COLORS_FILE, {}),
-                              "icon_assignments": get_icon_assignments(cfg.get("products", [])),
-                              "shipping": load_shipping() or {}},
-                             ensure_ascii=False, indent=2).encode("utf-8")
-        self._send(200, payload, "application/json",
-                   {"Content-Disposition": 'attachment; filename="etiketas_export.json"'})
-
     # -- POST ---------------------------------------------------------------------------
     def do_POST(self):
         path = urlparse(self.path).path
@@ -2141,12 +2132,12 @@ class Handler(BaseHTTPRequestHandler):
 
     POST_ROUTES = {
         "/api/config/save":          "api_config_save",
-        "/api/config/reset":         "api_config_reset",
-        "/api/config/sync_products": "api_sync_products",
         "/api/colors/save":          "api_colors_save",
         "/api/icon_assignments/save":"api_icon_assignments_save",
         "/api/shipping/save":        "api_shipping_save",
         "/api/shipping/packing_list":"api_packing_list",
+        "/api/safety/save":          "api_safety_save",
+        "/api/sku_rules/save":       "api_sku_rules_save",
         "/api/update/install":       "api_update_install",
         "/api/find_template":        "api_find_template",
         "/api/create":               "api_create",
@@ -2161,19 +2152,6 @@ class Handler(BaseHTTPRequestHandler):
         save_config(body)
 
     @_ok_json
-    def api_config_reset(self, body):
-        default = load_json(DEFAULT_CFG_FILE, {})
-        save_json(CFG_FILE, default)
-        return {"config": _with_local(default)}
-
-    @_ok_json
-    def api_sync_products(self, body):
-        current = load_config()
-        added, updated = sync_products(current, load_json(DEFAULT_CFG_FILE, {}))
-        save_config(current)
-        return {"config": current, "added": added, "updated": updated}
-
-    @_ok_json
     def api_colors_save(self, body):
         save_json(COLORS_FILE, body)
 
@@ -2186,6 +2164,18 @@ class Handler(BaseHTTPRequestHandler):
         if not all(isinstance(body.get(k), list) for k in ("products", "pallets", "containers", "boxes", "tables")):
             raise ValueError("Shipping data must have products, pallets, containers, boxes and tables")
         save_shipping(body)
+
+    @_ok_json
+    def api_safety_save(self, body):
+        if not isinstance(body.get("products"), dict):
+            raise ValueError("Safety data must have products")
+        save_json(SAFETY_FILE, {"products": body["products"]})
+
+    @_ok_json
+    def api_sku_rules_save(self, body):
+        if not all(isinstance(body.get(table), list) for table in SKU_TABLES):
+            raise ValueError("SKU rules must have " + ", ".join(SKU_TABLES))
+        save_json(SKU_FILE, {"schemaVersion": 1, **{table: body[table] for table in SKU_TABLES}})
 
     def api_packing_list(self, body):
         try:
@@ -2264,7 +2254,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Invalid or missing path")
         LABELS_DIR.mkdir(parents=True, exist_ok=True)
         result = organizer.ingest(Path(src_path), LABELS_DIR, cat=make_catalogue(merged_config()))
-        if result["entries"] and not result["dry_run"]:
+        if result["entries"]:
             def add_ingested(map_data):
                 by_path = {f["path"]: f for f in map_data.get("files", [])}
                 by_path.update({e["path"]: e for e in result["entries"]})

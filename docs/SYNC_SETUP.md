@@ -72,6 +72,11 @@ shelf life and storage temperatures from the product's data sheet, in the label'
 whatever the translation file says; **New Label** shows them before anything is created. A
 product with no data sheet keeps its translation's text.
 
+`sku_rules.json` holds what each part of a SKU can be: groups, products and their versions,
+packs, language codes and brands. It is edited on the **SKU** page. New Label, the packing list
+and the shipping editor read it to say what a typed SKU means and to point out what doesn't fit.
+A SKU is still typed by the person making the label or document, never filled in for them.
+
 This data is the company's and only ever lives in this folder. This repository is public, so
 never commit it: `app/default_shipping.json` is deliberately just the empty shape, and if the
 files aren't here, as on a machine still syncing, the page says so and nothing is written until
@@ -169,12 +174,12 @@ Hover over the dot for the resolved folder path and link target.
   label, deleting a file, changing settings), whichever change OneDrive
   finishes uploading *last* wins for the shared metadata files
   (`labels_map.json`, `app_config.json`, `colors_config.json`,
-  `creation_history.json`, `shipping_profiles.json`, `technical_data.json` — each is rewritten in
-  full on every save, not merged). The actual label files themselves
+  `creation_history.json`, `shipping_profiles.json`, `technical_data.json`, `sku_rules.json` —
+  each is rewritten in full on every save, not merged). The actual label files themselves
   aren't affected by this — only the app's own bookkeeping about them.
   Clicking **Rescan** in the app rebuilds the file map from what's
-  actually on disk, so it self-heals if this ever happens. Shipping data
-  can't be rebuilt that way, so two people shouldn't edit it at once.
+  actually on disk, so it self-heals if this ever happens. Shipping data and SKU rules
+  can't be rebuilt that way, so two people shouldn't edit them at once.
 - **Files On-Demand**: if a colleague's OneDrive frees up space by
   making files cloud-only, the app may hit a placeholder file that
   needs to download before it can be read. Right-click the synced
