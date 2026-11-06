@@ -41,6 +41,8 @@ SHIPPING_FILE = LABELS_DIR / "shipping_profiles.json"
 TECHNICAL_FILE = LABELS_DIR / "technical_data.json"
 DEFAULT_CFG_FILE = APP_DIR / "default_config.json"
 DEFAULT_SHIPPING_FILE = APP_DIR / "default_shipping.json"
+# One PC's own settings: outside the labels folder, which OneDrive shares, and outside the install, which an update replaces.
+LOCAL_FILE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Etiketas" / "settings.json"
 PORT       = 7842
 
 
@@ -99,10 +101,49 @@ def _upgrade_saved_config(cfg):
         del boxes["20L"]
     return cfg
 
+FOLDER_SETTINGS = ("templatesDir", "qrCodesDir", "logosDir", "translationsDir")
+
+def load_local():
+    return load_json(LOCAL_FILE, {}) or {}
+
+def _with_local(cfg):
+    """The shared config as this PC sees it. Folders only ever come from this PC: one in the shared file
+    is someone's own path. The SharePoint link and the language switches stay as shared until this PC sets its own."""
+    local = load_local()
+    for key in FOLDER_SETTINGS:
+        cfg[key] = local.get(key, "")
+    if "sharepointBaseUrl" in local:
+        cfg["sharepointBaseUrl"] = local["sharepointBaseUrl"]
+    if "languagesOff" in local:
+        for lang in cfg.get("languages", []):
+            lang["enabled"] = lang["code"] not in local["languagesOff"]
+    return cfg
+
+def save_config(cfg):
+    """Splits what _with_local joined, so one PC's choices never reach anyone else's. A language added
+    or removed is still shared, since labels everywhere are named with it; only its switch is this PC's."""
+    shared = load_json(CFG_FILE, {}) or {}
+    local = {**load_local(), **{k: cfg[k] for k in FOLDER_SETTINGS if k in cfg}}
+    if "sharepointBaseUrl" in cfg:
+        if cfg["sharepointBaseUrl"] == shared.get("sharepointBaseUrl"):
+            local.pop("sharepointBaseUrl", None)      # the same as everyone's: follow theirs if it changes
+        else:
+            local["sharepointBaseUrl"] = cfg["sharepointBaseUrl"]
+    if "languages" in cfg:
+        local["languagesOff"] = [l["code"] for l in cfg["languages"] if not l.get("enabled")]
+    save_json(LOCAL_FILE, local)
+    shared_on = {l["code"]: l.get("enabled", True) for l in shared.get("languages", [])}
+    out = {k: v for k, v in cfg.items() if k not in FOLDER_SETTINGS}
+    if "sharepointBaseUrl" in shared:
+        out["sharepointBaseUrl"] = shared["sharepointBaseUrl"]
+    if "languages" in cfg:
+        out["languages"] = [{**l, "enabled": shared_on.get(l["code"], True)} for l in cfg["languages"]]
+    save_json(CFG_FILE, out)
+
 def load_config():
     """The live config, or the bundled default if none has been saved yet."""
     cfg = load_json(CFG_FILE)
-    return _upgrade_saved_config(cfg) if cfg is not None else load_json(DEFAULT_CFG_FILE, {})
+    return _with_local(_upgrade_saved_config(cfg) if cfg is not None else load_json(DEFAULT_CFG_FILE, {}))
 
 def append_history(entry):
     history = load_json(HISTORY_FILE, None)
@@ -869,8 +910,8 @@ def fill_idml(path, *, is_label, is_template, colors, qr_path, logo_path, box_mu
 
 # Templates, QR codes, logos and translations come from the shared "Marketing - Label Resources"
 # folder, synced to each PC by OneDrive. It is found per PC (the user name is in the path), the
-# same way install.ps1 looks for it -- the config holding any custom folder (Settings -> Paths)
-# is shared by everyone, so a blank setting means "this PC's copy of the shared folder".
+# same way install.ps1 looks for it. A blank setting (Application settings -> File paths, kept
+# per PC) means "this PC's copy of the shared folder".
 RESOURCES_FOLDER = "Marketing - Label Resources"
 RESOURCE_DIRS = {                   # config key -> folder inside RESOURCES_FOLDER
     "templatesDir":    "Templates",
@@ -894,25 +935,23 @@ def shared_resources_dir() -> Path:
 def default_resource_dir(key: str) -> Path:
     return shared_resources_dir() / RESOURCE_DIRS[key]
 
-def _resource_dir(key: str, cfg: dict = None) -> Path:
-    """The live folder for a RESOURCE_DIRS key: the custom folder if one is set (~ and %VARS%
-    are expanded, so one setting can suit every PC), else the shared folder's."""
-    if cfg is None:
-        cfg = load_json(CFG_FILE, load_json(DEFAULT_CFG_FILE, {}))
-    override = (cfg.get(key) or "").strip()
+def _resource_dir(key: str) -> Path:
+    """The live folder for a RESOURCE_DIRS key: this PC's custom folder if it has one (~ and %VARS%
+    are expanded), else the shared folder's."""
+    override = (load_local().get(key) or "").strip()
     return Path(os.path.expandvars(override)).expanduser() if override else default_resource_dir(key)
 
-def get_translations_dir(cfg: dict = None) -> Path:
-    return _resource_dir("translationsDir", cfg)
+def get_translations_dir() -> Path:
+    return _resource_dir("translationsDir")
 
-def get_template_dir(cfg: dict = None) -> Path:
-    return _resource_dir("templatesDir", cfg)
+def get_template_dir() -> Path:
+    return _resource_dir("templatesDir")
 
-def get_qr_dir(cfg: dict = None) -> Path:
-    return _resource_dir("qrCodesDir", cfg)
+def get_qr_dir() -> Path:
+    return _resource_dir("qrCodesDir")
 
-def get_logo_dir(cfg: dict = None) -> Path:
-    return _resource_dir("logosDir", cfg)
+def get_logo_dir() -> Path:
+    return _resource_dir("logosDir")
 
 def list_translations(translations_dir: Path = None):
     files = []
@@ -1779,7 +1818,7 @@ def merged_config():
     if not cfg:
         if cfg is not None or not CFG_FILE.exists():   # first run -- but never because a read failed
             save_json(CFG_FILE, default)
-        return default
+        return _with_local(default)
     sync_products(cfg, default)
     _upgrade_saved_config(cfg)
     have_langs = {l["code"]: l for l in cfg["languages"]}
@@ -1795,7 +1834,7 @@ def merged_config():
         for k, v in default.get(key, {}).items():
             if k not in cfg.get(key, {}):
                 cfg.setdefault(key, {})[k] = v
-    return cfg
+    return _with_local(cfg)
 
 # ── HTTP handler ───────────────────────────────────────────────────────────────
 # Reached via 127.0.0.1, not "localhost": browsers try the IPv6 address first,
@@ -1937,7 +1976,6 @@ class Handler(BaseHTTPRequestHandler):
         "/api/file_info":       "api_file_info",
         "/api/export":          "api_export",
         "/api/shipping":        "api_shipping",
-        "/api/shipping/label_skus": "api_label_skus",
         "/api/update/check":    "api_update_check",
         "/api/update/progress": "api_update_progress",
     }
@@ -1949,16 +1987,6 @@ class Handler(BaseHTTPRequestHandler):
         with _WRITE_LOCK:     # the first read also writes the seed file
             data = load_shipping()
         self.send_json(data if data is not None else {"error": f"Could not read {SHIPPING_FILE.name} or {TECHNICAL_FILE.name}"})
-
-    def api_label_skus(self):
-        """The SKUs on the labels of a shipment's packs. packs: JSON, [{id, labels, packaging}]."""
-        try:
-            packs = json.loads(self._arg("packs", "[]"))
-        except ValueError:
-            return self._send(400)
-        files = load_json(MAP_FILE, {"files": []}).get("files", [])
-        self.send_json({p["id"]: packing_list.label_skus(files, _resolve_label_path, p.get("labels") or [], p.get("packaging"))
-                        for p in packs})
 
     def api_update_check(self):
         self.send_json(check_for_update(force=self._arg("force") == "1"))
@@ -1992,9 +2020,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({"path": str(LABELS_DIR)})
 
     def api_resource_dirs(self):
-        cfg = load_config()
-        live = {"logos": get_logo_dir(cfg), "qrcodes": get_qr_dir(cfg), "templates": get_template_dir(cfg),
-                "translations": get_translations_dir(cfg)}
+        live = {"logos": get_logo_dir(), "qrcodes": get_qr_dir(), "templates": get_template_dir(),
+                "translations": get_translations_dir()}
         self.send_json({
             "labels": str(LABELS_DIR),
             **{k: str(v) for k, v in live.items()},
@@ -2131,19 +2158,19 @@ class Handler(BaseHTTPRequestHandler):
 
     @_ok_json
     def api_config_save(self, body):
-        save_json(CFG_FILE, body)
+        save_config(body)
 
     @_ok_json
     def api_config_reset(self, body):
         default = load_json(DEFAULT_CFG_FILE, {})
         save_json(CFG_FILE, default)
-        return {"config": default}
+        return {"config": _with_local(default)}
 
     @_ok_json
     def api_sync_products(self, body):
         current = load_config()
         added, updated = sync_products(current, load_json(DEFAULT_CFG_FILE, {}))
-        save_json(CFG_FILE, current)
+        save_config(current)
         return {"config": current, "added": added, "updated": updated}
 
     @_ok_json

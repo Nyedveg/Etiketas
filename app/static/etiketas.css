@@ -5,6 +5,10 @@
   --indd:#AC3A87;--indd-rgb:172,58,135;
   --idml:#397BC2;--idml-rgb:57,123,194;
 }
+:root[data-theme="dark"]{
+  --indd:#DE7FBE;--indd-rgb:222,127,190;
+  --idml:#7DB2EC;--idml-rgb:125,178,236;
+}
 
 /* -- Update popup ---------------------------------------------------------------- */
 .update-changes{list-style:none;margin-top:var(--space-2);display:flex;flex-direction:column;gap:6px;font-size:var(--fs-md);color:var(--text)}
@@ -81,7 +85,7 @@
 .ship-open-row>td{background:var(--surface2)}
 .ship-open{padding:var(--space-1) 0}
 .ship-section{margin-bottom:var(--space-5)}
-.ship-qty{width:92px;margin-left:auto}
+.ship-qty{width:108px;margin-left:auto}
 .ship-price{width:76px;margin-left:auto}
 .ship-clip{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ship-remove{border:none;background:none;color:var(--text3);cursor:pointer;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center}
@@ -101,7 +105,6 @@
 .ship-doc-lines .input{width:100%;box-sizing:border-box}
 .ship-doc-line{min-width:150px}
 .ship-doc-lines td:nth-child(2){min-width:190px}
-.ship-doc-source{max-width:240px;margin-top:2px;font-size:var(--fs-2xs);color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ship-doc-checks{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-4)}
 .ship-doc-checks ul{margin:var(--space-1) 0 0;padding-left:18px}
 .ship-doc-actions{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-4)}

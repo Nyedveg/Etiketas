@@ -39,7 +39,6 @@ const api = {
   updateProgress:      ()    => api.get('/api/update/progress'),
   getShipping:         ()    => api.get('/api/shipping'),
   saveShipping:        (s)   => api.post('/api/shipping/save', s),
-  getLabelSkus:        (ps)  => api.get('/api/shipping/label_skus?packs='+encodeURIComponent(JSON.stringify(ps))),
 };
 
 // Saves a response the server marked as a download, under the name it gave.
@@ -155,6 +154,7 @@ const Icon = {
   New:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm1 6h2a1 1 0 010 2H9v2a1 1 0 01-2 0V9H5a1 1 0 010-2h2V5a1 1 0 012 0v2z"/></svg>,
   Browse:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 011-1h3.586A1 1 0 017 2.293L7.707 3H13a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3z"/></svg>,
   Shipment:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 4a1 1 0 011-1h7.5a1 1 0 011 1v1.5h1.9a1 1 0 01.8.4l1.6 2.1a1 1 0 01.2.6V11a1 1 0 01-1 1h-.55a2 2 0 01-3.9 0h-2.1a2 2 0 01-3.9 0H2a1 1 0 01-1-1V4zm3.5 7a1 1 0 100 2 1 1 0 000-2zm6.5 0a1 1 0 100 2 1 1 0 000-2zm-.5-4v1.8h3.2L12.3 7h-1.8z"/></svg>,
+  Editor:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M11.3 1.5a1.5 1.5 0 012.1 0l1.1 1.1a1.5 1.5 0 010 2.1l-1.5 1.5-3.2-3.2 1.5-1.5zM8.9 3.9l3.2 3.2-7.6 7.6a1 1 0 01-.5.27l-2.9.6a.5.5 0 01-.59-.59l.6-2.9a1 1 0 01.27-.5l7.52-7.68z"/></svg>,
   Settings:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4.754a3.246 3.246 0 100 6.492 3.246 3.246 0 000-6.492zM5.754 8a2.246 2.246 0 114.492 0 2.246 2.246 0 01-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 01-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 01-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 01.52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 011.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 011.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 01.52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 01-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 01-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 002.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 001.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 00-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 00-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 00-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 003.06 8.858l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 004.175 4.4l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 002.692-1.115l.094-.319z"/></svg>,
   Refresh:()=>stroke(<><path d="M14 8a6 6 0 1 1-6-6c1.68 0 3.29.67 4.49 1.83L14 5.33"/><path d="M14 2v3.33h-3.33"/></>,13),
   Open:()=><svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13"><path d="M9 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V7l-5-5zM3 13V3h5v4h4v6H3z"/></svg>,
@@ -178,7 +178,7 @@ const Icon = {
 
 // Builds an "open the containing folder in SharePoint" link from a file's
 // path relative to LABELS_DIR, e.g. base + "/MO/BioNPK%20Powder%20S%20500/EN/5kg".
-// The base is the synced library's root (Settings -> General -> SharePoint links).
+// The base is the synced library's root (Application settings -> General -> SharePoint links).
 function sharepointFolderLink(base, relPath){
   if(!base||!relPath)return null;
   const parts=relPath.split(/[\\/]/).slice(0,-1);
@@ -308,7 +308,7 @@ function UpdateDialog({offer,onRemind,unsaved}){
     return()=>{alive=false;clearTimeout(timer);};
   },[phase]);
   const install=async()=>{
-    if(unsaved.current&&!window.confirm('You have unsaved changes in Settings. Etiketas restarts during the update, so they would be lost. Install anyway?'))return;
+    if(unsaved.current&&!window.confirm('You have unsaved changes. Etiketas restarts during the update, so they would be lost. Install anyway?'))return;
     setPhase('starting');setStep('Starting');setFailure(null);
     const r=await api.installUpdate().catch(()=>({ok:false,error:'Could not start the update.'}));
     if(r.ok)setPhase('installing');
@@ -371,12 +371,12 @@ function App(){
   },[]);
   const saveConfig=useCallback(async cfg=>{await api.saveConfig(cfg);setConfig(cfg);},[]);
   const saveShipping=useCallback(async s=>{const r=await api.saveShipping(s);if(r.ok)setShipping(s);return r;},[]);
-  // Settings sets this while it holds unsaved edits, so leaving the page can't lose them silently.
+  // The Editor and Application settings set this while they hold unsaved edits, so leaving the page can't lose them silently.
   const unsaved=useRef(false);
   const updates=useUpdates();
   const navigate=v=>{
     if(v===view)return;
-    if(unsaved.current&&!window.confirm('You have unsaved changes in Settings. Leave without saving them?'))return;
+    if(unsaved.current&&!window.confirm('You have unsaved changes. Leave without saving them?'))return;
     unsaved.current=false;
     setView(v);
   };
@@ -393,15 +393,16 @@ function App(){
     <div className="app" {...(updates.offer?{inert:''}:{})}>
       <Sidebar view={view} setView={navigate} map={map} refreshMap={refreshMap}/>
       <div className="main">
-        <Topbar view={view} map={map}/>
-        <div className={`content${['settings','information'].includes(view)?' no-scroll':''}`}>
+        <Topbar view={view} map={map} navigate={navigate}/>
+        <div className={`content${['editor','settings','information'].includes(view)?' no-scroll':''}`}>
           <div key={view} className="view-anim" style={{height:'100%'}}>
             {view==='dashboard'&&<Dashboard map={map} config={config} refreshMap={refreshMap}/>}
             {view==='new'&&<NewLabelWizard config={config} map={map} setMap={setMap}/>}
-            {view==='browse'&&<LabelsBrowser map={map} setMap={setMap} config={config}/>}
+            {view==='browse'&&<LabelsBrowser map={map} setMap={setMap} config={config} onNewLabel={()=>navigate('new')}/>}
             {view==='information'&&<Information config={config} map={map} setMap={setMap} shipping={shipping}/>}
             {view==='shipment'&&<Shipment shipping={shipping}/>}
-            {view==='settings'&&<Settings config={config} saveConfig={saveConfig} setConfig={setConfig} refreshMap={refreshMap} shipping={shipping} saveShipping={saveShipping} setShipping={setShipping} unsaved={unsaved} checkUpdates={updates.checkNow} files={map?.files}/>}
+            {view==='editor'&&<Editor config={config} saveConfig={saveConfig} setConfig={setConfig} shipping={shipping} saveShipping={saveShipping} unsaved={unsaved}/>}
+            {view==='settings'&&<AppSettings config={config} saveConfig={saveConfig} refreshMap={refreshMap} unsaved={unsaved} checkUpdates={updates.checkNow} files={map?.files}/>}
           </div>
         </div>
       </div>
@@ -427,13 +428,13 @@ function Sidebar({view,setView,map,refreshMap}){
       </div>
       <nav className="sidebar-nav">
         {[{id:'dashboard',label:'Dashboard',I:Icon.Dashboard},
-          {id:'new',label:'New Label',I:Icon.New},
           {id:'browse',label:'Browse Files',I:Icon.Browse},
           {id:'information',label:'Information',I:Icon.Info},
           {id:'shipment',label:'Shipment',I:Icon.Shipment},
-          {id:'settings',label:'Settings',I:Icon.Settings}
+          {id:'editor',label:'Editor',I:Icon.Editor},
+          {id:'settings',label:'Application settings',I:Icon.Settings}
         ].map(({id,label,I})=>(
-          <button key={id} className={`nav-item ${view===id?'active':''}`} onClick={()=>setView(id)}>
+          <button key={id} className={`nav-item ${view===id||(id==='browse'&&view==='new')?'active':''}`} onClick={()=>setView(id)}>
             <I/><span className="sidebar-label">{label}</span>
           </button>
         ))}
@@ -478,10 +479,11 @@ function SyncStatus(){
   );
 }
 
-function Topbar({view,map}){
-  const titles={dashboard:'Dashboard',new:'New Label',browse:'Browse',information:'Information',shipment:'Shipment',settings:'Settings'};
+function Topbar({view,map,navigate}){
+  const titles={dashboard:'Dashboard',new:'New Label',browse:'Browse',information:'Information',shipment:'Shipment',editor:'Editor',settings:'Application settings'};
   return(
     <div className="topbar">
+      {view==='new'&&<button className="btn btn-ghost btn-sm" onClick={()=>navigate('browse')}>← Browse Files</button>}
       <span className="topbar-title">{titles[view]}</span>
       {map?.generated&&view!=='shipment'&&(
         <span className="topbar-meta">Updated {new Date(map.generated).toLocaleString()}</span>
@@ -1499,7 +1501,7 @@ function Information({config,map,setMap,shipping}){
             {/* Traits — always visible, not tucked behind a tab */}
             <div style={{display:'flex',flexWrap:'wrap',gap:'var(--space-2)',marginBottom:'var(--space-4)',flexShrink:0}}>
               {prodIcons.length===0?(
-                <span style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>No traits assigned to {selected}. Assign some in Settings &rarr; Icons.</span>
+                <span style={{fontSize:12,color:'var(--text3)',fontStyle:'italic'}}>No traits assigned to {selected}. Assign some in Editor &rarr; Product &rarr; Icons.</span>
               ):prodIcons.map(ic=>(
                 <div key={ic.id} title={ic.name_en} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 14px 5px 5px',borderRadius:24,background:'var(--surface2)',border:'1px solid var(--border2)'}}>
                   <img src={`/icons/${ic.svg}`} alt="" style={{width:38,height:38,flexShrink:0}}/>
@@ -1517,7 +1519,7 @@ function Information({config,map,setMap,shipping}){
             {detail==='shipping'?(
               <div style={{flex:1,overflowY:'auto',minHeight:0}}>
                 {profiles.length===0
-                  ?<div className="muted" style={{fontSize:'var(--fs-md)',fontStyle:'italic',marginBottom:'var(--space-4)'}}>No shipping data for {selected} yet. Add it in Settings &rarr; Shipping.</div>
+                  ?<div className="muted" style={{fontSize:'var(--fs-md)',fontStyle:'italic',marginBottom:'var(--space-4)'}}>No shipping data for {selected} yet. Add it in Editor &rarr; Shipping.</div>
                   :profiles.map(p=><ShippingProfile key={p.id} product={p} shipping={shipping}/>)}
                 {sheets.map(t=><TdsCard key={t.id} sheet={t}/>)}
               </div>
@@ -1810,7 +1812,7 @@ const BrowseRow=memo(function BrowseRow({f,cat,selected,onSelect}){
 // (until the page is reloaded).
 const browseMemory={};
 
-function LabelsBrowser({map,setMap,config}){
+function LabelsBrowser({map,setMap,config,onNewLabel}){
   const [selected,setSelected]=useState(null);
   const removeFile=useCallback(p=>{
     removeFromMap(setMap,p);
@@ -1922,6 +1924,7 @@ function LabelsBrowser({map,setMap,config}){
           <button type="button" className="btn btn-folder btn-sm fb-folder" onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}>
             <Icon.Folder/>Open labels folder
           </button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={onNewLabel}>+ New label</button>
         </div>
       </div>
       <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
@@ -2316,6 +2319,7 @@ function ShippingProfile({product:p,shipping}){
         <div><dt>Country of origin</dt><dd className="mono">{p.origin||'–'}</dd></div>
         <div><dt>Storage</dt><dd>{fmtStorage(p)}</dd></div>
         <div><dt>ADR class</dt><dd>{adr?<span className="badge badge-wip">{adr}</span>:'None'}</dd></div>
+        {adr&&<div><dt>UN code</dt><dd className="mono">{p.unCode||'–'}</dd></div>}
         {adr&&<div><dt>Packing group</dt><dd className="mono">{p.packingGroup||'–'}</dd></div>}
         <div><dt>Air transport</dt><dd><AirBadge p={p}/></dd></div>
         {p.unit==='L'&&<div><dt>Density</dt><dd className="mono">{p.density!=null?fmtNum(p.density,3):'–'}</dd></div>}
@@ -2364,7 +2368,7 @@ function Shipment({shipping}){
   if(!shipping?.products?.length)return(
     <div className="empty-state" style={{padding:'var(--space-8) var(--space-5)'}}>
       <p>No shipping data yet</p>
-      <div className="hint">It is read from shipping_profiles.json in the labels folder. If OneDrive is still syncing, wait a moment and reload; otherwise add products in Settings &rarr; Shipping.</div>
+      <div className="hint">It is read from shipping_profiles.json in the labels folder. If OneDrive is still syncing, wait a moment and reload; otherwise add products in Editor &rarr; Shipping.</div>
     </div>
   );
   return(
@@ -2409,14 +2413,29 @@ const docCustoms=p=>(p.customsCode||'').trim();
 const docDefaultName=p=>p.links?.length===1?p.links[0]:p.name;
 const docLineName=({l,it})=>(l.docName??docDefaultName(it.product)).trim();
 const docPalletName=pallet=>pallet.name==='EUR'?'Euro pallet':`${pallet.name} pallet`;
+// A SKU starts with the product's code from its data sheet, and the rest is typed: which market it is for
+// is for the person shipping to say, so it is never picked for them. A product whose sheets give no one
+// code has nothing to start from. BioSplito / TerraBreak has two until the name on the document says which.
+const docSkuStart=(r,shipping)=>{
+  const sheets=tdsOf(r.it.product,shipping).filter(t=>t.code);
+  const own=sheets.filter(t=>t.labels?.includes(docLineName(r)));
+  const codes=[...new Set((own.length?own:sheets).map(t=>t.code))];
+  return codes.length===1?codes[0]:'';
+};
+const docSkuField=(r,shipping)=>r.l.sku??docSkuStart(r,shipping);
+// Only the start isn't a SKU yet, so it doesn't go on the document.
+const docSku=(r,shipping)=>{
+  const sku=docSkuField(r,shipping).trim();
+  return sku===docSkuStart(r,shipping)?'':sku;
+};
 
 // One section of the document: an order line, with the same figures the calculator shows for it.
-const docSection=(r,i)=>{
+const docSection=(r,i,shipping)=>{
   const {l,it,c}=r;
   const qty=docCount(l.qty),units=docCount(wholeUp(c.units)),boxes=docCount(wholeUp(c.boxes)),word=docContainers(it),packaging=c.containerKg+c.boxKg;
   return {
     title:`${i+1}.  ${docLineName(r)} ${docPack(it)}`,
-    meta:[`SKU: ${(l.sku||'').trim()||'–'}`,`HS: ${docCustoms(it.product)||'–'}`,`Origin: ${docOrigin(it.product.origin)||'–'}`].join('    |    '),
+    meta:[`SKU: ${docSku(r,shipping)||'–'}`,`HS: ${docCustoms(it.product)||'–'}`,`Origin: ${docOrigin(it.product.origin)||'–'}`].join('    |    '),
     rows:[
       [it.unit==='L'?'Liquid material':'Dry material',`${qty} ${it.unit}`,''],
       ['Packaging size',docPack(it),''],
@@ -2431,7 +2450,7 @@ const docSection=(r,i)=>{
   };
 };
 // What the server lays out. Totals come from the same rounding as the calculator's, so the two always agree.
-const packingListDoc=({customer,transport},rows)=>{
+const packingListDoc=({customer,transport},rows,shipping)=>{
   const sum=key=>rows.reduce((n,r)=>n+r.c[key],0);
   const whole=(key,list=rows)=>list.reduce((n,r)=>n+wholeUp(r.c[key]),0);
   const amount=unit=>rows.filter(r=>r.it.unit===unit).reduce((n,r)=>n+(r.l.qty||0),0);
@@ -2446,7 +2465,7 @@ const packingListDoc=({customer,transport},rows)=>{
   const pallets=whole('pallets');
   return {
     customer:customer.trim(),transport,
-    sections:rows.map(docSection),
+    sections:rows.map((r,i)=>docSection(r,i,shipping)),
     totals:[
       ['Net product weight',amounts,docKg(sum('productKg'))],
       ['Product packaging',`${docCount(whole('units'))} units`+(cartons>0?` / ${docCount(cartons)} cartons`:''),docKg(sum('containerKg')+sum('boxKg'))],
@@ -2458,7 +2477,8 @@ const packingListDoc=({customer,transport},rows)=>{
 };
 // What to say before the document is made. `must`: the figures or the heading would be wrong or missing, so it
 // waits for a fix. `check`: a gap someone may have a reason for, so they are told and can go ahead.
-const packingListChecks=({customer,transport},rows,gone,skus,truckMax)=>{
+const packingListChecks=({customer,transport},rows,gone,shipping)=>{
+  const truckMax=shipping?.truckMaxKg;
   const must=[],check=[];
   if(!customer.trim())must.push('Add the customer. Their name goes at the top of the document.');
   if(gone.length)must.push(`Remove ${gone.length===1?'the line':`the ${gone.length} lines`} whose product is no longer in the shipping data.`);
@@ -2476,9 +2496,10 @@ const packingListChecks=({customer,transport},rows,gone,skus,truckMax)=>{
     if(!(it.strapWeight>0))must.push(`${line}: no strap weight, so the stretch film can't be worked out.`);
     if(!docLineName(r))must.push(`${line}: add the name for the document.`);
     else if(/[/()]/.test(docLineName(r)))check.push(`${line}: "${docLineName(r)}" looks like an internal name. Write the one the customer should see.`);
-    const sku=(l.sku||'').trim();
-    if(!sku)check.push(`${line}: no SKU.${!skus?'':skus[l.itemId]?.length?' Choose one from its labels or type it.':' None of its labels has one, so type it.'}`);
-    else if(skus?.[l.itemId]?.find(s=>s.sku===sku)?.sizeOk===false)check.push(`${line}: ${sku} is printed on its label, but that SKU's size doesn't look like this pack's.`);
+    if(!docSku(r,shipping)){
+      const start=docSkuStart(r,shipping);
+      check.push(`${line}: no SKU. ${start?`Type the rest after ${start}.`:'Its data sheet gives no code to start from, so type all of it.'}`);
+    }
     if(l.qty>0&&!isWhole(c.boxes))check.push(`${line}: the last carton is only part full.`);
     if(l.qty>0&&!isWhole(c.pallets))check.push(`${line}: not a full pallet. Add ${fmtNum(wholeUp(c.pallets)*it.palletSize-l.qty,3)} ${it.unit} for ${fmtNum(wholeUp(c.pallets))} full ${wholeUp(c.pallets)===1?'pallet':'pallets'}.`);
   }
@@ -2502,24 +2523,16 @@ const readDocInfo=()=>{
   catch{return blank;}
 };
 
-function PackingListDialog({rows,gone,truckMax,updateLine,onClose}){
+function PackingListDialog({rows,gone,shipping,updateLine,onClose}){
   const [info,setInfo]=useState(readDocInfo);
   useEffect(()=>{try{localStorage.setItem(DOC_INFO_KEY,JSON.stringify(info));}catch{/* storage unavailable: they last until closed */}},[info]);
-  const [skus,setSkus]=useState(null);     // pack -> the SKUs on its labels; null until read
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
-  // The labels only suggest SKUs. Nothing is filled in for you: someone picks or types each one.
-  useEffect(()=>{
-    let stale=false;
-    const packs=rows.map(({l,it})=>({id:l.itemId,labels:it.product.links??[],packaging:packSizeKey(it.packSize,it.unit)}));
-    api.getLabelSkus(packs).catch(()=>({})).then(found=>{if(!stale)setSkus(found);});
-    return ()=>{stale=true;};
-  },[]);
-  const {must,check}=packingListChecks(info,rows,gone,skus,truckMax);
+  const {must,check}=packingListChecks(info,rows,gone,shipping);
   const make=async()=>{
     setBusy(true);setError('');
     try{
-      const r=await fetch('/api/shipping/packing_list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packingListDoc(info,rows))});
+      const r=await fetch('/api/shipping/packing_list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packingListDoc(info,rows,shipping))});
       if(!r.ok)throw new Error((await r.json().catch(()=>null))?.error||'');
       await saveDownload(r,'Packing_List.docx');
       onClose();
@@ -2543,25 +2556,18 @@ function PackingListDialog({rows,gone,truckMax,updateLine,onClose}){
         <table className="table dense">
           <thead><tr><th>Order line</th><th>Name on the document</th><th>SKU</th><th>HS code</th><th>Origin</th></tr></thead>
           <tbody>
-            {rows.map(({l,it},i)=>{
-              const onLabels=skus?.[l.itemId]??[];
-              const chosen=onLabels.find(s=>s.sku===l.sku);
-              const several=(it.product.links??[]).length>1;
+            {rows.map((r,i)=>{
+              const {l,it}=r;
               return(
                 <tr key={l.itemId}>
                   <td className="ship-doc-line">{i+1}. {it.product.name} <span className="mono nowrap muted">{fmtPack(it)}</span></td>
                   <td><input className="input" type="text" aria-label={`Name on the document for ${it.product.name} ${fmtPack(it)}`} value={l.docName??docDefaultName(it.product)} onChange={e=>updateLine(l.itemId,{docName:e.target.value})}/></td>
                   <td>
-                    <input className="input" type="text" list={`ship-doc-skus-${l.itemId}`} autoComplete="off" aria-label={`SKU for ${it.product.name} ${fmtPack(it)}`}
-                      placeholder={onLabels.length?'Choose or type the SKU':'Type the SKU'} value={l.sku??''}
-                      onChange={e=>{
-                        const s=onLabels.find(x=>x.sku===e.target.value);
-                        updateLine(l.itemId,s?{sku:s.sku,docName:s.product}:{sku:e.target.value});
-                      }}/>
-                    <datalist id={`ship-doc-skus-${l.itemId}`}>
-                      {onLabels.map(s=><option key={s.sku} value={s.sku} label={[several&&s.product,s.languages.join(', '),!s.sizeOk&&'other size?'].filter(Boolean).join(' · ')}/>)}
-                    </datalist>
-                    {chosen&&<div className="ship-doc-source" title={chosen.file}>{chosen.file}</div>}
+                    {/* The cursor goes after the code, so typing adds to it: tabbing in would otherwise select it all, and typing would replace it. */}
+                    <input className="input mono" type="text" autoComplete="off" aria-label={`SKU for ${it.product.name} ${fmtPack(it)}`} placeholder="Type the SKU"
+                      value={docSkuField(r,shipping)}
+                      onFocus={e=>{const end=e.target.value.length;e.target.setSelectionRange(end,end);}}
+                      onChange={e=>updateLine(l.itemId,{sku:e.target.value})}/>
                   </td>
                   <td className="mono nowrap">{docCustoms(it.product)||'–'}</td>
                   <td className="nowrap">{docOrigin(it.product.origin)||'–'}</td>
@@ -2721,7 +2727,7 @@ function ShipCalculator({shipping}){
           </div>
         )}
       </div>
-      {docOpen&&<PackingListDialog rows={lineGroups.flatMap(g=>g.rows)} gone={gone} truckMax={truckMax} updateLine={updateLine} onClose={()=>setDocOpen(false)}/>}
+      {docOpen&&<PackingListDialog rows={lineGroups.flatMap(g=>g.rows)} gone={gone} shipping={shipping} updateLine={updateLine} onClose={()=>setDocOpen(false)}/>}
       <div className="card table-scroll ship-section">
         {lines.length===0?(
           <div className="empty-state" style={{padding:'var(--space-8) var(--space-5)'}}>
@@ -2826,7 +2832,7 @@ function ShipCalculator({shipping}){
           )}
           <div className="card table-scroll ship-section">
             <table className="table dense">
-              <thead><tr><th>Product</th><th>Customs code</th><th>Origin</th><th>ADR class</th><th>Packing group</th><th>Air</th><th>Storage</th><th>Shelf life</th></tr></thead>
+              <thead><tr><th>Product</th><th>Customs code</th><th>Origin</th><th>ADR class</th><th>UN code</th><th>Packing group</th><th>Air</th><th>Storage</th><th>Shelf life</th></tr></thead>
               <tbody>
                 {shipped.map(p=>(
                   <tr key={p.id}>
@@ -2834,6 +2840,7 @@ function ShipCalculator({shipping}){
                     <td className="mono nowrap">{p.customsCode||'–'}</td>
                     <td className="mono">{p.origin||'–'}</td>
                     <td>{adrOf(p)?<span className="badge badge-wip">{adrOf(p)}</span>:<span className="muted">None</span>}</td>
+                    <td className="mono nowrap">{p.unCode||'–'}</td>
                     <td className="mono">{p.packingGroup||'–'}</td>
                     <td><AirBadge p={p}/></td>
                     <td className="nowrap">{fmtStorage(p)}</td>
@@ -2862,7 +2869,7 @@ function ShipProducts({shipping}){
   const shown=useMemo(()=>{
     const list=all
       .filter(p=>group==='all'||p.group===group)
-      .filter(p=>matchesSearch(`${p.name} ${p.customsCode} ${p.subgroup} ${(p.links??[]).join(' ')}`,search));
+      .filter(p=>matchesSearch(`${p.name} ${p.customsCode} ${p.unCode??''} ${p.subgroup} ${(p.links??[]).join(' ')}`,search));
     return sort==='az'?list.sort(byProfileName):sort==='newest'?list.reverse():list;
   },[all,group,search,sort]);
   return(
@@ -2883,7 +2890,7 @@ function ShipProducts({shipping}){
               <button key={k} type="button" aria-pressed={sort===k} className={'seg-btn'+(sort===k?' on':'')} onClick={()=>setSort(k)}>{l}</button>
             ))}
           </div>
-          <span className="fb-total">{shown.length} of {all.length} products · edit in Settings → Shipping</span>
+          <span className="fb-total">{shown.length} of {all.length} products · edit in Editor → Shipping</span>
         </div>
       </div>
       <div className="card table-scroll ship-table-fit">
@@ -2891,7 +2898,7 @@ function ShipProducts({shipping}){
           <thead>
             <tr>
               <th>Product</th><th>Packs</th><th>Group</th><th>Subgroup</th><th>Customs code</th><th>Origin</th>
-              <th>Shelf life</th><th>Storage</th><th>ADR</th><th>Packing group</th><th>Air</th>
+              <th>Shelf life</th><th>Storage</th><th>ADR</th><th>UN code</th><th>Packing group</th><th>Air</th>
               <th className="num">Density</th><th>Note</th>
             </tr>
           </thead>
@@ -2908,12 +2915,13 @@ function ShipProducts({shipping}){
                   <td className="nowrap">{fmtMonths(p.shelfLifeMonths)}{(p.tds??[]).length===0&&<span className="muted" title="No data sheet is linked, so this hasn't been checked against a document"> *</span>}</td>
                   <td className="nowrap">{fmtStorage(p)}</td>
                   <td className="mono">{p.adrClass||'None'}</td>
+                  <td className="mono nowrap">{p.unCode||'–'}</td>
                   <td className="mono">{p.packingGroup||'–'}</td>
                   <td><AirBadge p={p}/></td>
                   <td className="num">{p.unit==='L'?fmtNum(p.density,3):'–'}</td>
                   <td><div className="ship-clip" title={p.note}>{p.note||''}</div></td>
                 </tr>
-                {open===p.id&&<tr className="ship-open-row"><td colSpan={13}><div className="ship-open"><ShipPackTable product={p} shipping={shipping}/>{tdsOf(p,shipping).map(t=><div key={t.id} className="ship-open-sheet"><TdsCard sheet={t}/></div>)}</div></td></tr>}
+                {open===p.id&&<tr className="ship-open-row"><td colSpan={14}><div className="ship-open"><ShipPackTable product={p} shipping={shipping}/>{tdsOf(p,shipping).map(t=><div key={t.id} className="ship-open-sheet"><TdsCard sheet={t}/></div>)}</div></td></tr>}
               </Fragment>
             ))}
           </tbody>
@@ -2937,7 +2945,7 @@ function ShipDataSheets({shipping}){
             <span className="fb-search-ico"><Icon.Search size={15}/></span>
             <input className="input" type="text" value={search} placeholder="Search data sheets…" aria-label="Search data sheets" onChange={e=>setSearch(e.target.value)}/>
           </div>
-          <span className="fb-total">{shown.length} of {all.length}{shipping.tdsReadOn?` · read from the TDS documents on ${shipping.tdsReadOn}`:''} · edit in Settings → Shipping</span>
+          <span className="fb-total">{shown.length} of {all.length}{shipping.tdsReadOn?` · read from the TDS documents on ${shipping.tdsReadOn}`:''} · edit in Editor → Product → Data sheets</span>
         </div>
       </div>
       <div className="card table-scroll ship-table-fit">
@@ -3029,33 +3037,82 @@ const CategoryHeading=({cat})=>(
 const productsByCategory=cfg=>['MO','PAM','CE'].map(cat=>[cat,(cfg?.products??[]).filter(p=>p.category===cat).sort((a,b)=>a.name.localeCompare(b.name))]);
 const SavedNote=({show,children='✓ Saved'})=>show?<span className="saved-note">{children}</span>:null;
 
-const SETTINGS_TABS=[['products','Products'],['colors','Colors'],['icons','Icons'],['shipping','Shipping'],['languages','Languages'],['general','General'],['paths','Paths']];
-
-function Settings({config,saveConfig,setConfig,refreshMap,shipping,saveShipping,setShipping,unsaved,checkUpdates,files}){
-  const [tab,setTab]=useState('products');
+// A draft of the config, kept until someone saves it.
+function useConfigDraft(config,saveConfig){
   const [cfg,setCfg]=useState(config);
   const [saved,setSaved]=useState(false);
-  const [shipDraft,setShipDraft]=useState(shipping);
   const save=async()=>{await saveConfig(cfg);setSaved(true);setTimeout(()=>setSaved(false),2000);};
-  // Both editors hold their changes until Save, and tell App so leaving the page can warn about them.
-  const cfgDirty=useMemo(()=>cfg!==config&&JSON.stringify(cfg)!==JSON.stringify(config),[cfg,config]);
+  const dirty=useMemo(()=>cfg!==config&&JSON.stringify(cfg)!==JSON.stringify(config),[cfg,config]);
+  return {dirty,shared:{cfg,setCfg,save,saved}};
+}
+
+// The Editor changes what the company knows about its products and shipments, for everyone who uses
+// the labels folder. Application settings, below, only change this PC's copy of the app.
+const EDITOR_TABS=[
+  ['product','Product',[['list','Product list'],['colors','Colors'],['icons','Icons'],['sheets','Data sheets']]],
+  ['shipping','Shipping',[['items','Shipping products'],['tables','Pallets & packaging']]],
+  ['backup','Backup & reset',[]],
+];
+
+function Editor({config,saveConfig,setConfig,shipping,saveShipping,unsaved}){
+  const {dirty:cfgDirty,shared}=useConfigDraft(config,saveConfig);
+  const [shipDraft,setShipDraft]=useState(shipping);
   const shipDirty=useMemo(()=>shipDraft!==shipping&&JSON.stringify(shipDraft)!==JSON.stringify(shipping),[shipDraft,shipping]);
+  // Both drafts hold their changes until Save, and tell App so leaving the page can warn about them.
   useEffect(()=>{unsaved.current=cfgDirty||shipDirty;},[cfgDirty,shipDirty,unsaved]);
-  const shared={cfg,setCfg,save,saved};
+  const [tab,setTab]=useState('product');
+  const [subs,setSubs]=useState({product:'list',shipping:'items'});
+  const sub=subs[tab];
+  const sections=EDITOR_TABS.find(([t])=>t===tab)[2];
+  const shippingData=['items','tables','sheets'].includes(sub);
   return(
     <div className="page-fill">
       <div className="tabs">
-        {SETTINGS_TABS.map(([t,l])=>(
+        {EDITOR_TABS.map(([t,l])=>(
           <button key={t} className={`tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>{l}</button>
         ))}
       </div>
+      {sections.length>0&&(
+        <div className="flex items-center gap-3" style={{flexShrink:0,marginBottom:'var(--space-4)'}}>
+          <div className="seg" role="group" aria-label="Section">
+            {sections.map(([s,l])=>(
+              <button key={s} type="button" aria-pressed={sub===s} className={'seg-btn'+(sub===s?' on':'')} onClick={()=>setSubs({...subs,[tab]:s})}>{l}</button>
+            ))}
+          </div>
+          <span className="hint">Shared with everyone who uses the labels folder{shippingData?`: saved as ${sub==='sheets'?'technical_data.json':'shipping_profiles.json'}, next to the file map`:''}.</span>
+          {shippingData&&<button className="btn btn-folder btn-sm ml-auto" style={{flexShrink:0}} onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}><Icon.Folder/>Open folder</button>}
+        </div>
+      )}
+      <div className="view-anim page-fill" key={tab+sub}>
+        {sub==='list'&&<ProductsTab {...shared} setConfig={setConfig}/>}
+        {sub==='colors'&&<ColorsTab cfg={shared.cfg}/>}
+        {sub==='icons'&&<IconsTab cfg={shared.cfg}/>}
+        {shippingData&&<ShippingTab section={sub} draft={shipDraft} setDraft={setShipDraft} dirty={shipDirty} saveShipping={saveShipping} config={config}/>}
+        {tab==='backup'&&<BackupTab setCfg={shared.setCfg} setConfig={setConfig}/>}
+      </div>
+    </div>
+  );
+}
+
+const APP_SETTINGS_TABS=[['general','General'],['languages','Languages'],['paths','File paths']];
+
+function AppSettings({config,saveConfig,refreshMap,unsaved,checkUpdates,files}){
+  const {dirty,shared}=useConfigDraft(config,saveConfig);
+  useEffect(()=>{unsaved.current=dirty;},[dirty,unsaved]);
+  const [tab,setTab]=useState('general');
+  return(
+    <div className="page-fill">
+      <div className="flex items-center gap-3" style={{flexShrink:0}}>
+        <div className="tabs">
+          {APP_SETTINGS_TABS.map(([t,l])=>(
+            <button key={t} className={`tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>{l}</button>
+          ))}
+        </div>
+        <span className="hint" style={{marginBottom:'var(--space-5)'}}>These only change Etiketas on this PC.</span>
+      </div>
       <div className="view-anim page-fill" key={tab}>
-        {tab==='products'&&<ProductsTab {...shared} setConfig={setConfig}/>}
-        {tab==='colors'&&<ColorsTab cfg={cfg}/>}
-        {tab==='icons'&&<IconsTab cfg={cfg}/>}
-        {tab==='shipping'&&<ShippingTab draft={shipDraft} setDraft={setShipDraft} dirty={shipDirty} saveShipping={saveShipping} config={config}/>}
+        {tab==='general'&&<GeneralTab {...shared} refreshMap={refreshMap} checkUpdates={checkUpdates}/>}
         {tab==='languages'&&<LanguagesTab {...shared} files={files}/>}
-        {tab==='general'&&<GeneralTab {...shared} setConfig={setConfig} refreshMap={refreshMap} checkUpdates={checkUpdates}/>}
         {tab==='paths'&&<PathsTab {...shared}/>}
       </div>
     </div>
@@ -3083,7 +3140,6 @@ function ProductsTab({cfg,setCfg,save,saved,setConfig}){
   const indexed=cfg.products.map((p,i)=>({...p,_i:i}));
   return(
     <div className="page-fill">
-      <p className="section-title">Product list</p>
       <div className="scroll-y">
         {['MO','PAM','CE'].map(cat=>(
           <div key={cat} style={{marginBottom:'var(--space-5)'}}>
@@ -3320,7 +3376,7 @@ function LanguagesTab({cfg,setCfg,save,saved,files}){
           <input className="input" placeholder="Search languages..." aria-label="Search languages" value={search} onChange={e=>setSearch(e.target.value)}/>
         </div>
         <LangSortToggle sort={sort} onChange={setSort}/>
-        <span className="hint ml-auto">Languages switched on are offered in New Label.</span>
+        <span className="hint ml-auto">Languages switched on here are offered in New Label on this PC. A language you add is added for everyone.</span>
       </div>
       <div className="hint" style={{flexShrink:0,marginBottom:'var(--space-3)'}}>Language codes follow the ISO 639 standard: the two-letter ISO 639-1 codes, except Ewe (EWE), Kanuri (KAU) and Chechen (CHE), which use their three-letter ISO 639-2 codes because their two-letter ones mean something else on labels.</div>
       <div className="scroll-y">
@@ -3384,32 +3440,60 @@ function UpdatesCard({checkUpdates}){
   );
 }
 
-function GeneralTab({cfg,setCfg,save,saved,setConfig,refreshMap,checkUpdates}){
-  const [scanning,setScanning]=useState(false);
+const THEME_KEY='etiketas.theme';
+// Dark or not is kept in this browser, and index.html applies it before the page first paints.
+function useDarkMode(){
+  const [dark,setDarkState]=useState(document.documentElement.dataset.theme==='dark');
+  const setDark=on=>{
+    setDarkState(on);
+    if(on)document.documentElement.dataset.theme='dark';
+    else delete document.documentElement.dataset.theme;
+    try{localStorage.setItem(THEME_KEY,on?'dark':'light');}catch{/* storage unavailable: it lasts until reload */}
+  };
+  return [dark,setDark];
+}
+
+// What acts on the shared data as a whole, so it belongs with the Editor and not with this PC's settings.
+function BackupTab({setCfg,setConfig}){
   const [resetting,setResetting]=useState(false);
   const resetToDefaults=async()=>{
-    if(!window.confirm('Reset all settings to factory defaults? This cannot be undone.'))return;
+    if(!window.confirm('Reset the product list, languages and sizes to factory defaults for everyone who uses the labels folder? This cannot be undone.'))return;
     setResetting(true);
     const res=await api.resetConfig();
     if(res.ok){setCfg(res.config);setConfig(res.config);}
     setResetting(false);
   };
-  const handleScan=async()=>{setScanning(true);await refreshMap();setScanning(false);};
   return(
     <div className="scroll-y" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'var(--space-4)',alignContent:'start'}}>
-      <SettingCard title="File Map" desc="Rescan the labels folder to pick up newly added or renamed files.">
-        <button className="btn btn-ghost w-full" onClick={handleScan} disabled={scanning}>
-          {scanning?<><div className="spinner"/>Scanning...</>:<><Icon.Refresh/>Rescan labels folder</>}
-        </button>
-      </SettingCard>
       <SettingCard title="Export config" desc="Download a snapshot of your product list, brand colors and shipping data as a JSON file.">
         <button className="btn btn-ghost w-full" onClick={()=>fetch('/api/export').then(r=>r.blob()).then(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='etiketas_export.json';a.click();})}>
           ↓ Download export
         </button>
       </SettingCard>
-      <SettingCard title="Factory reset" desc="Restore all settings to defaults. Your file map, brand colors and shipping data are not affected." danger>
+      <SettingCard title="Factory reset" desc="Restore the product list, languages and sizes to defaults, for everyone who uses the labels folder. Your file map, brand colors, shipping data and each PC's own settings are not affected." danger>
         <button className="btn btn-danger w-full" onClick={resetToDefaults} disabled={resetting}>
           {resetting?<><div className="spinner"/>Resetting...</>:'Reset to factory defaults'}
+        </button>
+      </SettingCard>
+    </div>
+  );
+}
+
+function GeneralTab({cfg,setCfg,save,saved,refreshMap,checkUpdates}){
+  const [scanning,setScanning]=useState(false);
+  const [dark,setDark]=useDarkMode();
+  const handleScan=async()=>{setScanning(true);await refreshMap();setScanning(false);};
+  return(
+    <div className="scroll-y" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'var(--space-4)',alignContent:'start'}}>
+      <SettingCard title="Appearance" desc="Dark colors for the whole app. Documents and label previews stay as they are.">
+        <div className="flex items-center justify-between gap-3">
+          <span style={{fontSize:'var(--fs-md)',fontWeight:500}}>Dark mode</span>
+          <label className="toggle"><input type="checkbox" aria-label="Dark mode" checked={dark} onChange={e=>setDark(e.target.checked)}/><span className="toggle-slider"/></label>
+        </div>
+      </SettingCard>
+      <SettingCard title="File Map" desc="Rescan the labels folder to pick up newly added or renamed files.">
+        <button className="btn btn-ghost w-full" onClick={handleScan} disabled={scanning}>
+          {scanning?<><div className="spinner"/>Scanning...</>:<><Icon.Refresh/>Rescan labels folder</>}
         </button>
       </SettingCard>
       <SettingCard title="SharePoint links" desc="Base URL of the synced SharePoint folder (the part before the product/size path). Used to add an 'Open in SharePoint' button next to files.">
@@ -3429,7 +3513,7 @@ function PathsTab({cfg,setCfg,save,saved}){
   useEffect(()=>{api.getResourceDirs().then(r=>setResDirs(r));},[]);
   return(
     <div className="scroll-y">
-      <SettingCard title="Folders" desc="Where the app reads templates, QR codes, logos and translations from. Leave a field blank to use the shared 'Marketing - Label Resources' OneDrive folder on this PC -- the default. These settings are shared by everyone who uses the labels folder, so a custom folder should exist on every PC; ~ stands for each user's own profile folder.">
+      <SettingCard title="Folders" desc="Where this PC reads templates, QR codes, logos and translations from. Leave a field blank to use the shared 'Marketing - Label Resources' OneDrive folder on this PC -- the default.">
         <div style={{display:'flex',flexDirection:'column',gap:'var(--space-4)'}}>
           {[
             ['templatesDir','templates','Templates','IDML template files used when creating labels'],
@@ -3462,14 +3546,14 @@ function PathsTab({cfg,setCfg,save,saved}){
   );
 }
 
-// ── Settings: shipping data ──────────────────────────────────────────────────────────
+// ── Editor: shipping data ────────────────────────────────────────────────────────────
 const SHIP_IDENTITY=[
   ['name','Name','text'],['unit','Unit','unit'],['group','Group','group'],
   ['shelfLifeMonths','Shelf life','months'],['density','Density (kg per L)','number'],['strapWeight','Strap per pallet (kg)','number'],
 ];
 const SHIP_DETAILS=[
   ['customsCode','Customs code','text'],['origin','Country of origin','text'],['storageMin','Storage from','celsius'],['storageMax','Storage to','celsius'],
-  ['adrClass','ADR class','adr'],['packingGroup','Packing group','pg'],['airTransport','Air transport allowed','bool'],
+  ['adrClass','ADR class','adr'],['unCode','UN code','text','e.g. UN 1760'],['packingGroup','Packing group','pg'],['airTransport','Air transport allowed','bool'],
   ['subgroup','Subgroup','long'],['note','Note','long'],
 ];
 const TDS_FIELDS=[
@@ -3561,12 +3645,11 @@ const newProfile=(name,link,draft)=>{
   const sheets=link?sheetsForLabel(draft,link.name,unit):[];
   const sibling=link?(draft.products??[]).find(p=>p.links?.includes(link.name)&&p.shelfLifeMonths):null;
   return {id:newId('product'),name,links:link?[link.name]:[],tds:sheets.map(t=>t.id),unit,group:link?.category??'',subgroup:'',density:null,strapWeight:usualStrap(draft,unit),
-    shelfLifeMonths:sibling?.shelfLifeMonths??null,origin:'LT',customsCode:'',storageMin:null,storageMax:null,adrClass:'',packingGroup:'',airTransport:true,note:'',packs:[blankPack()],...fromSheet(sheets[0])};
+    shelfLifeMonths:sibling?.shelfLifeMonths??null,origin:'LT',customsCode:'',storageMin:null,storageMax:null,adrClass:'',unCode:'',packingGroup:'',airTransport:true,note:'',packs:[blankPack()],...fromSheet(sheets[0])};
 };
 const blankSheet=()=>({id:newId('tds'),name:'',labels:[],code:'',version:'',revised:'',file:'',folder:'',older:false,type:'',application:'',form:'',colour:'',odour:'',ph:'',density:'',concentration:'',shelfLifeMonths:null,storageMin:null,storageMax:null,packaging:'',hazard:'',organic:false});
 
-function ShippingTab({draft,setDraft,dirty,saveShipping,config}){
-  const [section,setSection]=useState('items');
+function ShippingTab({section,draft,setDraft,dirty,saveShipping,config}){
   const [saved,setSaved]=useState(false);
   const [error,setError]=useState('');
   if(!draft||draft.error)return <div className="alert alert-error">{draft?.error??'The shipping data could not be read'}. Close whatever has it open, then reload this page.</div>;
@@ -3584,15 +3667,6 @@ function ShippingTab({draft,setDraft,dirty,saveShipping,config}){
   };
   return(
     <div className="page-fill">
-      <div className="flex items-center gap-3" style={{flexShrink:0,marginBottom:'var(--space-4)'}}>
-        <div className="seg" role="group" aria-label="Section">
-          {[['items','Products'],['tables','Pallets & packaging'],['sheets','Data sheets']].map(([s,l])=>(
-            <button key={s} type="button" aria-pressed={section===s} className={'seg-btn'+(section===s?' on':'')} onClick={()=>setSection(s)}>{l}</button>
-          ))}
-        </div>
-        <span className="hint">Saved as {section==='sheets'?'technical_data.json':'shipping_profiles.json'} in the labels folder, next to the file map, and shared with everyone who uses it.</span>
-        <button className="btn btn-folder btn-sm ml-auto" style={{flexShrink:0}} onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}><Icon.Folder/>Open folder</button>
-      </div>
       {section==='items'&&<ShipProductsEditor draft={draft} setDraft={setDraft} config={config}/>}
       {section==='tables'&&<ShipTablesEditor draft={draft} setDraft={setDraft}/>}
       {section==='sheets'&&<ShipSheetsEditor draft={draft} setDraft={setDraft} config={config}/>}
@@ -3746,7 +3820,7 @@ function ShipField({spec:[k,label,type,placeholder],value,set,disabled,hint}){
       ):type==='long'?(
         <textarea id={id} className="input" rows={3} value={value??''} onChange={e=>set(e.target.value)}/>
       ):(
-        <input id={id} className="input" placeholder={placeholder} value={value??''} onChange={e=>set(e.target.value)}/>
+        <input id={id} className="input" disabled={disabled} placeholder={disabled?'Not applicable':placeholder} value={value??''} onChange={e=>set(e.target.value)}/>
       )}
       {hint}
     </div>
@@ -3799,7 +3873,7 @@ function ShipProductForm({product:p,draft,config,update,onDuplicate,onDelete}){
     density:unit==='kg'?null:p.density,
     strapWeight:p.strapWeight==null||p.strapWeight===usualStrap(draft,p.unit)?usualStrap(draft,unit):p.strapWeight,
     packs:(p.packs??[]).map(k=>({...k,...refillPack(draft,config,k,p.unit,unit,k.packSize)}))});
-  const setAdr=adrClass=>update({adrClass,...(adrClass?{}:{packingGroup:''})});
+  const setAdr=adrClass=>update({adrClass,...(adrClass?{}:{packingGroup:'',unCode:''})});
   const setters={unit:setUnit,adrClass:setAdr};
   // Where this differs from what it is linked to. These only inform: a figure may differ on purpose.
   const other=links.map(n=>(config?.products??[]).find(x=>x.name===n)).find(x=>x?.unit&&x.unit!==p.unit);
@@ -3813,7 +3887,7 @@ function ShipProductForm({product:p,draft,config,update,onDuplicate,onDelete}){
     density:dense&&<FieldNote>Data sheet: {dense.density}</FieldNote>,
   };
   const fields=list=>list.filter(([k])=>!(k==='density'&&p.unit==='kg')).map(spec=>(
-    <ShipField key={spec[0]} spec={spec} value={p[spec[0]]} set={setters[spec[0]]??(v=>update({[spec[0]]:v}))} disabled={spec[0]==='packingGroup'&&!p.adrClass} hint={hints[spec[0]]}/>
+    <ShipField key={spec[0]} spec={spec} value={p[spec[0]]} set={setters[spec[0]]??(v=>update({[spec[0]]:v}))} disabled={['packingGroup','unCode'].includes(spec[0])&&!p.adrClass} hint={hints[spec[0]]}/>
   ));
   return(
     <div className="ship-edit-form scroll-y">

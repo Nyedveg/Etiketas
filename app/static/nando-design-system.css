@@ -100,6 +100,25 @@
   /* Motion */
   --ease:cubic-bezier(.4,0,.2,1);--dur-fast:.15s;--dur:.18s;
 }
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#131A17;--surface:#1B2420;--surface2:#212C27;--surface3:#2B3A33;
+  --border:#2C3932;--border2:#3A4A42;
+  --text:#E7EEE9;--text2:#A9B5AE;--text3:#84908A;
+  --on-accent:#0F1613;
+  --accent:#57BE7E;--accent2:#7FD19D;--accent-dim:rgba(87,190,126,.16);
+  --accent-rgb:87,190,126;
+  --success:#57BE7E;
+  --sage:#8CC293;--sage-rgb:140,194,147;
+  --danger:#EE7A92;--danger-rgb:238,122,146;
+  --warning:#E0A94F;--warning-rgb:224,169,79;
+  --mo:#9AA4F0;--mo-rgb:154,164,240;
+  --pam:#CFA58C;--pam-rgb:207,165,140;
+  --ce:#57BE7E;
+  --shadow-sm:rgba(0,0,0,.3);--shadow-md:rgba(0,0,0,.4);--shadow-lg:rgba(0,0,0,.55);
+}
+:root[data-theme="dark"] .sidebar-logo-img,:root[data-theme="dark"] .sidebar-logo-mark{filter:none}
+:root[data-theme="dark"] .modal-backdrop{background:rgba(0,0,0,.55)}
 
 /* -- Base ------------------------------------------------------------------ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -225,6 +244,7 @@ textarea.input{height:auto;resize:vertical;line-height:1.45}
 /* Tighter rows, for wide data tables */
 .table.dense td{padding:7px 10px}.table.dense th{padding:var(--space-2) 10px}
 .table.dense .input{height:28px;padding:4px 8px;font-size:var(--fs-sm)}
+.table.dense .input-unit .input{padding-right:30px}.table.dense .input-unit span{right:8px}
 .table-scroll{overflow-x:auto;padding:0}
 /* Keeps the first column in view when a wide table scrolls sideways */
 .table.sticky-first th:first-child,.table.sticky-first td:first-child{position:sticky;left:0;z-index:1;background:var(--surface);box-shadow:1px 0 0 var(--border)}
