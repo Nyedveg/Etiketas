@@ -43,6 +43,7 @@ SHIPPING_FILE = LABELS_DIR / "shipping_profiles.json"
 TECHNICAL_FILE = LABELS_DIR / "technical_data.json"
 SAFETY_FILE  = LABELS_DIR / "safety_data.json"
 SKU_FILE     = LABELS_DIR / "sku_rules.json"
+SKU_LIST_FILE = LABELS_DIR / "sku_list.json"
 DEFAULT_CFG_FILE = APP_DIR / "default_config.json"
 DEFAULT_SHIPPING_FILE = APP_DIR / "default_shipping.json"
 # One PC's own settings: outside the labels folder, which OneDrive shares, and outside the install, which an update replaces.
@@ -190,8 +191,8 @@ def load_shipping():
         if SHIPPING_FILE.exists():
             return None
         data = load_json(DEFAULT_SHIPPING_FILE)
-    # SKU rules have their own file and their own page; shipping and new labels only read them.
-    data = {**data, "skuRules": load_sku_rules()}
+    # SKU rules and the list of SKUs have their own files; shipping and new labels only read them.
+    data = {**data, "skuRules": load_sku_rules(), "skuList": load_sku_list()}
     # The data sheets are kept apart, in technical_data.json, and joined here. Without that file,
     # as while it syncs, an older shipping_profiles.json still carries its own copy of them.
     technical = load_json(TECHNICAL_FILE)
@@ -213,6 +214,28 @@ def load_sku_rules():
         return {table: [] for table in SKU_TABLES}
     return rules
 
+def load_sku_list():
+    """The SKUs issued so far. Empty if there is no file yet, None if it is there but can't be read."""
+    data = load_json(SKU_LIST_FILE)
+    if data is None:
+        return None if SKU_LIST_FILE.exists() else []
+    return data.get("skus", [])
+
+def save_sku_list(skus):
+    save_json(SKU_LIST_FILE, {"schemaVersion": 1, "skus": skus})
+
+def add_to_sku_list(code, name):
+    """One more SKU, added to the file as it is now rather than to what a page loaded earlier,
+    so it can't undo one someone else has just added."""
+    skus = load_sku_list()
+    if skus is None:
+        raise ValueError("The SKU list could not be read")
+    if any(s.get("code") == code for s in skus):
+        raise ValueError(f"{code} is already on the SKU list")
+    sku = {"id": f"sku-{code}", "code": code, "name": name, "oldCode": "", "note": ""}
+    save_sku_list(sorted([*skus, sku], key=lambda s: s.get("code", "")))
+    return sku
+
 def save_shipping(data):
     """Splits what load_shipping joined. The data sheets go first, so shipping_profiles.json only gives
     up its older copy of them once they are safe. Their file isn't rewritten unless they changed, and
@@ -221,7 +244,7 @@ def save_shipping(data):
     technical = {"readOn": data.get("tdsReadOn"), "sheets": sheets}
     if sheets is not None and (sheets or TECHNICAL_FILE.exists()) and load_json(TECHNICAL_FILE) != technical:
         save_json(TECHNICAL_FILE, technical)
-    save_json(SHIPPING_FILE, {k: v for k, v in data.items() if k not in ("tds", "tdsReadOn", "safety", "skuRules")})
+    save_json(SHIPPING_FILE, {k: v for k, v in data.items() if k not in ("tds", "tdsReadOn", "safety", "skuRules", "skuList")})
 
 def _onedrive_running():
     if os.name != "nt":
@@ -2138,6 +2161,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/shipping/packing_list":"api_packing_list",
         "/api/safety/save":          "api_safety_save",
         "/api/sku_rules/save":       "api_sku_rules_save",
+        "/api/sku_list/save":        "api_sku_list_save",
+        "/api/sku_list/add":         "api_sku_list_add",
         "/api/update/install":       "api_update_install",
         "/api/find_template":        "api_find_template",
         "/api/create":               "api_create",
@@ -2176,6 +2201,19 @@ class Handler(BaseHTTPRequestHandler):
         if not all(isinstance(body.get(table), list) for table in SKU_TABLES):
             raise ValueError("SKU rules must have " + ", ".join(SKU_TABLES))
         save_json(SKU_FILE, {"schemaVersion": 1, **{table: body[table] for table in SKU_TABLES}})
+
+    @_ok_json
+    def api_sku_list_save(self, body):
+        if not isinstance(body.get("skus"), list):
+            raise ValueError("The SKU list must have skus")
+        save_sku_list(body["skus"])
+
+    @_ok_json
+    def api_sku_list_add(self, body):
+        code = (body.get("code") or "").strip().upper()
+        if not code:
+            raise ValueError("A SKU needs a code")
+        return {"sku": add_to_sku_list(code, (body.get("name") or "").strip())}
 
     def api_packing_list(self, body):
         try:

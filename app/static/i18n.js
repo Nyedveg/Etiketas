@@ -58,6 +58,7 @@
     [/^Product not found: (.+)$/, 'Product not found: {0}'],
     [/^No dimensions for (.+)$/, 'No dimensions for {0}'],
     [/^Could not read (.+) or (.+)$/, 'Could not read {0} or {1}'],
+    [/^(.+) is already on the SKU list$/, '{0} is already on the SKU list'],
     [/^There is no mockup picture for (.+) yet\.$/, 'There is no mockup picture for {0} yet.'],
   ];
   window.txs = message => {

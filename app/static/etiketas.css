@@ -140,26 +140,20 @@
 .ship-sku-names{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-2) var(--space-3);margin-top:var(--space-1)}
 .ship-sku-names label{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-xs);color:var(--text2)}
 
-/* -- SKU rules ------------------------------------------------------------------------ */
+/* -- SKUs ----------------------------------------------------------------------------- */
 .sku-hints{margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text3);line-height:1.5}
 .sku-warnings{margin-top:var(--space-1);font-size:var(--fs-xs);color:var(--warning);line-height:1.5;white-space:normal}
-.sku-check{flex-shrink:0;margin-bottom:var(--space-3)}
-.sku-check-row{display:flex;flex-wrap:wrap;gap:var(--space-3) var(--space-4)}
-.sku-check-field{flex:0 0 210px;margin-bottom:0}
-.sku-parts{flex:1 1 560px;min-width:0;display:flex;align-items:stretch;gap:var(--space-1)}
-.sku-part{flex:1 1 0;min-width:0;padding:var(--space-1) var(--space-2);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);font:inherit;text-align:left;cursor:pointer;transition:border-color var(--dur-fast)}
-.sku-part:hover{border-color:var(--accent)}
-.sku-part:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.sku-parts{display:flex;align-items:stretch;gap:var(--space-1);max-width:1040px}
+.sku-part{flex:1 1 0;min-width:0;padding:var(--space-1) var(--space-2);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface)}
 .sku-part.missing{border-style:dashed;background:none}
 .sku-part.unknown{border-color:var(--danger);background:rgba(var(--danger-rgb),.08)}
 .sku-part>span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sku-part-label{font-size:var(--fs-2xs);color:var(--text3);text-transform:uppercase;letter-spacing:var(--tracking-label)}
 .sku-part-code{font-size:var(--fs-lg);font-weight:500;line-height:1.35}
 .sku-part-value{font-size:var(--fs-xs);color:var(--text2)}
-.sku-parts.example .sku-part-code,.sku-parts.example .sku-part-value{color:var(--text3)}
 .sku-dash{align-self:center;font-family:var(--font-mono);font-size:var(--fs-lg);color:var(--text3)}
 .sku-files{margin-top:var(--space-2)}
-/* Its own scroll, so a product with many files can't push the rules table and Save off the page. */
+/* Its own scroll, so a product with many files can't push the table off the page. */
 .sku-file-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:var(--space-1) var(--space-4);max-height:92px;overflow-y:auto;margin-top:var(--space-1)}
 .sku-file{display:flex;align-items:center;gap:var(--space-2);min-width:0}
 .sku-file-name{flex:1;min-width:0;font-size:var(--fs-xs);color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -167,11 +161,27 @@
 .sku-bar{flex-shrink:0;margin-bottom:0}
 .sku-tab-hint{margin-top:var(--space-1)}
 .sku-table{flex:1;min-height:150px;max-height:none;margin-top:var(--space-2)}
+.sku-pasted{flex-shrink:0;margin-top:var(--space-2)}
+.sku-pasted-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}
+.sku-result .sku-pasted-head{margin:var(--space-3) 0 0}
+.sku-result .sku-pasted-head .sku-warnings{margin-top:0}
+.sku-new-code{font-size:var(--fs-lg);font-weight:500;color:var(--text)}
+.sku-create{display:flex;flex-direction:column;gap:var(--space-3)}
+.sku-create .ship-form-grid>div>.hint{margin-top:var(--space-1)}
+.sku-result{flex-shrink:0}
+.sku-found td{vertical-align:top}
+.sku-row{cursor:pointer}
+.sku-found-code{padding:0;border:none;background:none;color:var(--text);font-size:var(--fs-sm);font-weight:500;cursor:pointer}
+.sku-found-code:hover{color:var(--accent)}
+.sku-found-code.wrong{color:var(--warning)}
+.sku-found-note{margin-top:var(--space-2)}
+.sku-copy-cell{width:36px}
+.sku-copy{padding:2px 6px}
 .sku-rows td{vertical-align:top}
 .sku-rows td:last-child{width:32px}
 .sku-rows .input{width:100%;box-sizing:border-box}
 .sku-rows .ship-num{width:110px}
-.sku-rows td:first-child{width:84px}
+.sku-rows td:first-child{width:150px}
 .sku-rows .ship-links{gap:var(--space-1)}
 .sku-rows .ship-link-add{width:150px}
 .sku-versions-toggle{display:inline-flex;align-items:center;gap:var(--space-1);height:28px;padding:0 var(--space-2);border:1px solid var(--border2);border-radius:var(--radius-sm);background:none;color:var(--text);font-size:var(--fs-sm);white-space:nowrap;cursor:pointer}

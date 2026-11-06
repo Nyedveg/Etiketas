@@ -39,6 +39,8 @@ const api = {
   saveShipping:        (s)   => api.post('/api/shipping/save', s),
   saveSafety:          (p)   => api.post('/api/safety/save', {products:p}),
   saveSkuRules:        (r)   => api.post('/api/sku_rules/save', r),
+  saveSkuList:         (l)   => api.post('/api/sku_list/save', {skus:l}),
+  addSku:              (s)   => api.post('/api/sku_list/add', s),
 };
 
 // Saves a response the server marked as a download, under the name it gave.
@@ -175,6 +177,7 @@ const Icon = {
   Search:({size})=>stroke(<><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></>,size),
   Close:({size})=>stroke(<path d="M4 4l8 8M12 4l-8 8"/>,size),
   Chevron:({size})=>stroke(<path d="M4 6.5l4 4 4-4"/>,size),
+  Copy:({size})=>stroke(<><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 00-1-1h-6a1 1 0 00-1 1v6a1 1 0 001 1h2"/></>,size),
   SortUp:()=>stroke(<path d="M4 10l4-4 4 4"/>,12),
   SortDown:()=>stroke(<path d="M4 6l4 4 4-4"/>,12),
   Tag:()=>stroke(<><path d="M2 2h5.6l6.4 6.4-5.6 5.6L2 7.6z"/><circle cx="5.2" cy="5.2" r=".9" fill="currentColor"/></>),
@@ -382,8 +385,9 @@ function App(){
   const saveShipping=useCallback(async s=>{const r=await api.saveShipping(s);if(r.ok)setShipping(s);return r;},[]);
   // Safety data has its own file; what the calculator shows of it, it reads from the shipping data.
   const setSafety=useCallback(products=>setShipping(s=>s&&!s.error?{...s,safety:products}:s),[]);
-  // SKU rules too: they have their own file and page, and new labels and shipping read them from here.
+  // SKU rules and the list of SKUs too: they have their own files, and the rest of the app reads them from here.
   const setSkuRules=useCallback(rules=>setShipping(s=>s&&!s.error?{...s,skuRules:rules}:s),[]);
+  const setSkuList=useCallback(list=>setShipping(s=>s&&!s.error?{...s,skuList:list}:s),[]);
   // The Editor and Application settings set this while they hold unsaved edits, so leaving the page can't lose them silently.
   const unsaved=useRef(false);
   const updates=useUpdates();
@@ -414,8 +418,8 @@ function App(){
             {view==='browse'&&<LabelsBrowser map={map} setMap={setMap} config={config} onNewLabel={()=>navigate('new')}/>}
             {view==='information'&&<Information config={config} map={map} setMap={setMap} shipping={shipping}/>}
             {view==='shipment'&&<Shipment shipping={shipping}/>}
-            {view==='sku'&&<SkuPage shipping={shipping} config={config} files={map?.files} setSkuRules={setSkuRules} unsaved={unsaved}/>}
-            {view==='editor'&&<Editor config={config} saveConfig={saveConfig} shipping={shipping} saveShipping={saveShipping} setSafety={setSafety} unsaved={unsaved} files={map?.files}/>}
+            {view==='sku'&&<SkuPage shipping={shipping} config={config} files={map?.files} setSkuList={setSkuList}/>}
+            {view==='editor'&&<Editor config={config} saveConfig={saveConfig} shipping={shipping} saveShipping={saveShipping} setSafety={setSafety} setSkuRules={setSkuRules} setSkuList={setSkuList} unsaved={unsaved} files={map?.files}/>}
             {view==='settings'&&<AppSettings config={config} saveConfig={saveConfig} refreshMap={refreshMap} unsaved={unsaved} checkUpdates={updates.checkNow}/>}
           </div>
         </div>
@@ -2260,7 +2264,7 @@ const fmtStorage=p=>p.storageMin==null&&p.storageMax==null?'–':tx('{0} to {1} 
 const adrOf=p=>p.adrClass||null;
 // ── SKU codes ────────────────────────────────────────────────────────────────
 // How a SKU is built: a group letter, a two-digit product, a two-digit version and a pack, then a dash, a
-// two-character language code and a brand: P0401M5-3B0. What each code means is in sku_rules.json, edited on the SKU page.
+// two-character language code and a brand: P0401M5-3B0. What each code means is in sku_rules.json, edited in Editor → SKU.
 const skuRow=(rules,table,code)=>(rules?.[table]??[]).find(r=>r.code===code);
 const skuCodeFor=(p,name)=>(p.skuCodeFor?.[name]||p.skuCode||'').trim();
 // What a SKU starts with. A code without its version digits has nothing certain to add after it.
@@ -2272,36 +2276,42 @@ const skuStart=(p,name,packSize,rules)=>{
 };
 const skuCodesOf=p=>[...new Set([p.skuCode,...Object.values(p.skuCodeFor??{})].filter(Boolean))].join(' / ');
 const SKU_PART_LABEL={group:tx('Group'),product:tx('Product'),version:tx('Version'),pack:tx('Pack'),language:tx('Languages'),brand:tx('Brand'),ending:tx('Ending')};
-// A SKU taken apart, each part with what the rules say about it: 'ok', 'unknown' to the rules, or 'missing' from what's typed so far.
-const skuRead=(rules,raw)=>{
-  const text=(raw||'').trim().toUpperCase();
-  const dash=text.indexOf('-');
-  const head=dash<0?text:text.slice(0,dash),tail=dash<0?'':text.slice(dash+1);
-  const [,group,product,version,pack='',rest]=/^([A-Z]?)(\d{0,2})(\d{0,2})([A-Z]\d{0,2})?(.*)$/.exec(head);
+// What the Editor's SKU tab has a section for. The ids are the tables in sku_rules.json, and `skus` is sku_list.json.
+const SKU_SECTIONS=[['products',tx('Products')],['packs',tx('Packs')],['languages',tx('Languages')],['brands',tx('Brands')],['endings',tx('Other endings')],['skus',tx('SKU list')]];
+// A product's first letter is its group. The rules only name the letters, so a letter with no name still works.
+const skuGroups=rules=>[...new Set((rules?.products??[]).map(p=>p.code?.[0]).filter(Boolean))].sort().map(code=>({code,name:skuRow(rules,'groups',code)?.name??code}));
+// Each part with what the rules say about it: 'ok', 'unknown' to the rules, or 'missing' so far.
+const skuParts=(rules,{group,product,version,pack,tail,language,brand})=>{
   const lookup=(table,code,size=1)=>{
     const row=skuRow(rules,table,code);
     // With an empty table there is nothing to say a code is wrong.
     return {row,state:code.length<size?'missing':row||!(rules?.[table]??[]).length?'ok':'unknown'};
   };
-  const g=lookup('groups',group),p=lookup('products',group+product,3),k=lookup('packs',pack);
+  const p=lookup('products',group+product,3),k=lookup('packs',pack);
   const versions=p.row?.versions??[],v=versions.find(x=>x.code===version);
   const parts=[
-    {key:'group',table:'groups',code:group,search:group,value:g.row?.name,state:g.state},
-    {key:'product',table:'products',code:product,search:group+product,value:p.row?.name,state:product.length<2?'missing':p.state},
-    {key:'version',table:'products',code:version,search:group+product,state:version.length<2?'missing':versions.length&&!v?'unknown':'ok',
+    // Only named: a letter no product has shows up as an unknown product, so it isn't reported twice.
+    {key:'group',code:group,value:skuRow(rules,'groups',group)?.name,state:group?'ok':'missing'},
+    {key:'product',code:product,value:p.row?.name,state:product.length<2?'missing':p.state},
+    {key:'version',code:version,state:version.length<2?'missing':versions.length&&!v?'unknown':'ok',
       value:version.length<2?'':v?.note||(version==='00'?tx('Original'):tx('Change no. {0}',+version))},
-    {key:'pack',table:'packs',code:pack,search:pack,value:k.row&&tx('{0} kg or L',fmtNum(k.row.amount,3)),state:pack.length<2?'missing':k.state},
+    {key:'pack',code:pack,value:k.row&&tx('{0} kg or L',fmtNum(k.row.amount,3)),state:pack.length<2?'missing':k.state},
   ];
   const ending=skuRow(rules,'endings',tail);
-  if(ending)parts.push({key:'ending',table:'endings',code:tail,search:tail,value:ending.name,state:'ok'});
-  else{
-    const language=tail.slice(0,2),brand=tail.slice(2);
-    const l=lookup('languages',language,2),b=lookup('brands',brand);
-    parts.push({key:'language',table:'languages',code:language,search:language,value:l.row?.name,state:l.state},
-      {key:'brand',table:'brands',code:brand,search:brand,value:b.row?.name,state:b.state});
-  }
-  return {text,head,tail,parts,part:key=>parts.find(x=>x.key===key),complete:!rest&&parts.every(x=>x.state!=='missing')};
+  if(ending)return [...parts,{key:'ending',code:tail,value:ending.name,state:'ok'}];
+  const l=lookup('languages',language,2),b=lookup('brands',brand);
+  return [...parts,{key:'language',code:language,value:l.row?.name,state:l.state},{key:'brand',code:brand,value:b.row?.name,state:b.state}];
 };
+// A SKU as text, taken apart.
+const skuRead=(rules,raw)=>{
+  const text=(raw||'').trim().toUpperCase();
+  const dash=text.indexOf('-');
+  const head=dash<0?text:text.slice(0,dash),tail=dash<0?'':text.slice(dash+1);
+  const [,group,product,version,pack='',rest]=/^([A-Z]?)(\d{0,2})(\d{0,2})([A-Z]\d{0,2})?(.*)$/.exec(head);
+  const parts=skuParts(rules,{group,product,version,pack,tail,language:tail.slice(0,2),brand:tail.slice(2)});
+  return {text,head,tail,group,product,version,pack,parts,part:key=>parts.find(x=>x.key===key),complete:!rest&&parts.every(x=>x.state!=='missing')};
+};
+const skuUnknown=(rules,raw)=>skuRead(rules,raw).parts.filter(p=>p.state==='unknown').map(p=>tx('Not in the SKU rules: {0} {1}.',SKU_PART_LABEL[p.key],p.code));
 const sameSet=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
 // Whether a name is the one a brand stands for, however it is spelled or added to: "Spuma 5 L" is Spuma.
 const skuNameFits=(name,product)=>{
@@ -2314,9 +2324,9 @@ const skuChecks=(rules,raw,{languages,packSize,name,codes}={})=>{
   if(!read.text)return [];
   const out=[];
   if(!read.complete)out.push(tx('{0} doesn\'t look complete. They look like X0000M5-EN0.',read.text));
-  for(const p of read.parts)if(p.state==='unknown')out.push(tx('Not in the SKU rules: {0} {1}.',SKU_PART_LABEL[p.key],p.code));
+  out.push(...skuUnknown(rules,raw));
   if(codes?.length&&read.head&&!codes.some(c=>read.head.startsWith(c)))out.push(tx('This starts with {0}, but the SKU code for {1} is {2}.',read.head.slice(0,5),name,codes.join(' / ')));
-  const pack=skuRow(rules,'packs',read.part('pack').code);
+  const pack=skuRow(rules,'packs',read.pack);
   if(pack&&packSize!=null&&pack.amount!==packSize)out.push(tx('{0} means a pack of {1}, but this one is {2}.',pack.code,fmtNum(pack.amount,3),fmtNum(packSize,3)));
   const language=skuRow(rules,'languages',read.part('language')?.code);
   if(language?.labels?.length&&languages?.length&&!sameSet(language.labels,languages))out.push(tx('{0} means {1}, but this label is in {2}.',language.code,language.name,languages.join(', ')));
@@ -2335,7 +2345,7 @@ const skuHints=(rules,languages,name)=>{
   const own=(rules.brands??[]).filter(b=>skuNameFits(name,b.product)).map(b=>b.code);
   const standard=(rules.brands??[]).find(b=>b.kind==='standard')?.code;
   return [
-    codes.length?tx('Language code for {0}: {1}.',languages.join(', '),codes.join(' / ')):tx('{0} has no language code yet. Add one on the SKU page.',languages.join(', ')),
+    codes.length?tx('Language code for {0}: {1}.',languages.join(', '),codes.join(' / ')):tx('{0} has no language code yet. Add one in Editor → SKU.',languages.join(', ')),
     own.length?tx('Brand code for {0}: {1}.',name,own.join(' / ')):standard?tx('Brand code: {0} for the standard label, or the distributor\'s.',standard):'',
   ].filter(Boolean);
 };
@@ -3200,27 +3210,33 @@ const EDITOR_TABS=[
   ['safety',tx('Safety'),[]],
   ['shipping',tx('Shipping'),[['items',tx('Shipping products')],['tables',tx('Pallets & packaging')]]],
   ['languages',tx('Label languages'),[]],
+  ['sku','SKU',SKU_SECTIONS],
 ];
 const EDITOR_FILES={sheets:'technical_data.json',safety:'safety_data.json',items:'shipping_profiles.json',tables:'shipping_profiles.json'};
 
-function Editor({config,saveConfig,shipping,saveShipping,setSafety,unsaved,files}){
+function Editor({config,saveConfig,shipping,saveShipping,setSafety,setSkuRules,setSkuList,unsaved,files}){
   const {dirty:cfgDirty,shared}=useConfigDraft(config,saveConfig);
   const colors=useDraft(()=>api.getColors().then(r=>r.colors||{}),api.saveColors);
   const traits=useDraft(()=>api.getIconAssignments().then(r=>r.assignments||{}),api.saveIconAssignments);
   const [shipDraft,setShipDraft]=useState(shipping);
-  // Safety data is edited on its own tab, so a change there doesn't count as an edit of the shipping draft.
-  useEffect(()=>{setShipDraft(d=>d&&!d.error?{...d,safety:shipping?.safety}:d);},[shipping?.safety]);
+  // Safety data and SKUs are edited on their own tabs, so a change there doesn't count as an edit of the shipping draft.
+  useEffect(()=>{setShipDraft(d=>d&&!d.error?{...d,safety:shipping?.safety,skuRules:shipping?.skuRules,skuList:shipping?.skuList}:d);},[shipping?.safety,shipping?.skuRules,shipping?.skuList]);
   const shipDirty=useMemo(()=>shipDraft!==shipping&&JSON.stringify(shipDraft)!==JSON.stringify(shipping),[shipDraft,shipping]);
   const [safetyDraft,setSafetyDraft]=useState(shipping?.safety??{});
   const safetyDirty=!sameValue(safetyDraft,shipping?.safety??{});
+  const [skuRulesDraft,setSkuRulesDraft]=useState(shipping?.skuRules);
+  const [skuListDraft,setSkuListDraft]=useState(shipping?.skuList);
+  const skuRulesDirty=!sameValue(skuRulesDraft,shipping?.skuRules);
+  const skuListDirty=!sameValue(skuListDraft,shipping?.skuList);
   // The drafts hold their changes until Save, and tell App so leaving the page can warn about them.
-  const dirty=cfgDirty||colors.dirty||traits.dirty||shipDirty||safetyDirty;
+  const dirty=cfgDirty||colors.dirty||traits.dirty||shipDirty||safetyDirty||skuRulesDirty||skuListDirty;
   useEffect(()=>{unsaved.current=dirty;},[dirty,unsaved]);
   const [tab,setTab]=useState('product');
-  const [shipSection,setShipSection]=useState('items');
-  const section=tab==='shipping'?shipSection:tab;
+  // The section open on each tab that has them, kept while moving between tabs.
+  const [openSection,setOpenSection]=useState({shipping:'items',sku:'products'});
+  const section=openSection[tab]??tab;
   const sections=EDITOR_TABS.find(([t])=>t===tab)[2];
-  const file=EDITOR_FILES[section];
+  const file=tab==='sku'?(section==='skus'?'sku_list.json':'sku_rules.json'):EDITOR_FILES[section];
   return(
     <div className="page-fill">
       <div className="tabs">
@@ -3232,18 +3248,19 @@ function Editor({config,saveConfig,shipping,saveShipping,setSafety,unsaved,files
         {sections.length>0&&(
           <div className="seg" role="group" aria-label={tx('Section')}>
             {sections.map(([s,l])=>(
-              <button key={s} type="button" aria-pressed={section===s} className={'seg-btn'+(section===s?' on':'')} onClick={()=>setShipSection(s)}>{l}</button>
+              <button key={s} type="button" aria-pressed={section===s} className={'seg-btn'+(section===s?' on':'')} onClick={()=>setOpenSection(o=>({...o,[tab]:s}))}>{l}</button>
             ))}
           </div>
         )}
         <span className="hint">{tx('Shared with everyone who uses the labels folder{0}.',file?tx(': saved as {0}, next to the file map',file):'')}</span>
         {file&&<button className="btn btn-folder btn-sm ml-auto" style={{flexShrink:0}} onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}><Icon.Folder/>{tx('Open folder')}</button>}
       </div>
-      <div className="view-anim page-fill" key={section}>
+      <div className="view-anim page-fill" key={`${tab}/${section}`}>
         {section==='product'&&<ProductEditor {...shared} configDirty={cfgDirty} colors={colors} traits={traits}/>}
         {['sheets','items','tables'].includes(section)&&<ShippingTab section={section} draft={shipDraft} setDraft={setShipDraft} dirty={shipDirty} saveShipping={saveShipping} config={config}/>}
         {section==='safety'&&<SafetyTab draft={safetyDraft} setDraft={setSafetyDraft} dirty={safetyDirty} config={config} shipping={shipping} setSafety={setSafety}/>}
-        {section==='languages'&&<LanguagesTab {...shared} files={files}/>}
+        {tab==='languages'&&<LanguagesTab {...shared} files={files}/>}
+        {tab==='sku'&&<SkuEditor section={section} rules={skuRulesDraft} setRules={setSkuRulesDraft} list={skuListDraft} setList={setSkuListDraft} rulesDirty={skuRulesDirty} listDirty={skuListDirty} shipping={shipping} config={config} setSkuRules={setSkuRules} setSkuList={setSkuList}/>}
       </div>
     </div>
   );
@@ -4413,21 +4430,18 @@ function ShipTablesEditor({draft,setDraft}){
   );
 }
 
-// ── SKU rules ────────────────────────────────────────────────────────────────────────
-// What each part of a SKU can be, shared through sku_rules.json. SKUs themselves are still typed by whoever makes
-// the label or document: one pack has a different one per market, and a wrong one filled in for them is easy to miss.
-const SKU_TABS=[['products',tx('Products')],['packs',tx('Packs')],['languages',tx('Languages')],['brands',tx('Brands')],['groups',tx('Groups')],['endings',tx('Other endings')]];
-const SKU_TAB_HINTS={
+// ── SKU: the building blocks ─────────────────────────────────────────────────────────
+// What each part of a SKU can be, and the SKUs issued so far. Shared through sku_rules.json and sku_list.json, and edited in Editor → SKU.
+const SKU_SECTION_HINTS={
   products:tx('A group letter and two digits. Open the versions to see what changed: 00 is the original, 01 the first change, and so on.'),
   packs:tx('One code per amount, the same for kg and L.'),
   languages:tx('Two characters. A code starting with a number says how many languages the label has; the letter after it is only a free one. Link the label languages it means, and labels are checked against it.'),
   brands:tx('What comes after the language code: the standard label, a distributor, or the same product under another name.'),
-  groups:tx('The first letter of every SKU.'),
   endings:tx('Written after the dash in place of a language code and brand.'),
+  skus:tx('Every SKU issued so far, which the SKU page searches. Correct or remove one here. New ones are made on the SKU page.'),
 };
-const SKU_KINDS=[['distributor',tx('Distributor')],['name',tx('Another name')],['standard',tx('Standard label')]];
+const SKU_KINDS=[['standard',tx('Standard label')],['name',tx('Another name')],['distributor',tx('Distributor')]];
 const SKU_CODE_SHAPE={
-  groups:[/^[A-Z]$/,tx('one letter')],
   products:[/^[A-Z]\d{2}$/,tx('a letter and two digits, like P04')],
   packs:[/^[A-Z]\d{1,2}$/,tx('a letter and one or two digits, like M5')],
   languages:[/^[A-Z0-9]{2}$/,tx('two letters or digits, like 3B')],
@@ -4439,12 +4453,13 @@ const SKU_BLANK={
   packs:()=>({code:'',amount:null}),
   languages:()=>({code:'',name:'',labels:[],note:''}),
   brands:()=>({code:'',name:'',kind:'distributor',product:'',note:''}),
-  groups:()=>({code:'',name:''}),
   endings:()=>({code:'',name:'',note:''}),
+  skus:()=>({code:'',name:'',oldCode:'',note:''}),
 };
 const skuCodeTwice=(rows,code)=>rows.filter(r=>r.code===code).length>1;
 const skuRuleProblem=draft=>{
-  for(const [table,title] of SKU_TABS){
+  for(const [table,title] of SKU_SECTIONS){
+    if(table==='skus')continue;
     const rows=draft[table]??[];
     for(const r of rows){
       const [shape,says]=SKU_CODE_SHAPE[table];
@@ -4455,11 +4470,20 @@ const skuRuleProblem=draft=>{
   }
   for(const k of draft.packs??[])if(draft.packs.some(o=>o.id!==k.id&&o.amount===k.amount))return tx('{0}: {1} and another code have the same amount.',tx('Packs'),k.code);
   for(const p of draft.products??[]){
-    if(!(draft.groups??[]).some(g=>g.code===p.code[0]))return tx('{0}: {1} starts with a letter that isn\'t in Groups.',tx('Products'),p.code);
     for(const v of p.versions??[]){
       if(!/^\d{2}$/.test(v.code??''))return tx('{0}: a version is two digits, like 01.',p.code);
       if(skuCodeTwice(p.versions,v.code))return tx('{0}: version {1} is there twice.',p.code,v.code);
     }
+  }
+  return null;
+};
+// The list keeps old SKUs as they were issued, so it only asks that each is there once: the rules point out the odd ones.
+const skuListProblem=list=>{
+  const seen=new Set();
+  for(const s of list??[]){
+    if(!/^[A-Z0-9-]{3,}$/.test(s.code??''))return tx('{0}: the code "{1}" should be {2}.',tx('SKU list'),s.code??'',tx('letters, digits and a dash'));
+    if(seen.has(s.code))return tx('{0}: {1} is there twice.',tx('SKU list'),s.code);
+    seen.add(s.code);
   }
   return null;
 };
@@ -4474,68 +4498,7 @@ const skuLanguageChecks=(row,rows)=>{
   ].filter(Boolean);
 };
 const skuUsedBy=(shipping,code)=>(shipping?.products??[]).flatMap(p=>[...new Set([p.skuCode,...Object.values(p.skuCodeFor??{})])].filter(c=>c?.startsWith(code)).map(c=>`${p.name} ${c.slice(3)}`.trim()));
-// The label files a SKU can be: its product's label names, narrowed by a brand that names one, with its pack and languages.
-const skuLabelFiles=(rules,shipping,files,read)=>{
-  const pack=skuRow(rules,'packs',read.part('pack').code),language=skuRow(rules,'languages',read.part('language')?.code);
-  if(!pack||!language?.labels?.length)return null;
-  const brand=skuRow(rules,'brands',read.part('brand')?.code);
-  const code=read.head.slice(0,5);
-  const namesWhere=fits=>[...new Set((shipping?.products??[]).flatMap(p=>(p.links??[]).filter(n=>{const c=skuCodeFor(p,n);return c&&fits(c);})))];
-  // The exact version if a product has it, otherwise any: an older recipe's SKU can still have the same label.
-  let names=namesWhere(c=>code.startsWith(c));
-  if(!names.length)names=namesWhere(c=>c.slice(0,3)===code.slice(0,3));
-  if(brand?.product)names=names.filter(n=>skuNameFits(n,brand.product));
-  else if(brand?.kind==='standard')names=names.filter(n=>!(rules.brands??[]).some(b=>skuNameFits(n,b.product)));
-  return (files??[]).filter(f=>names.includes(f.product)&&f.languages&&sameSet(f.languages,language.labels)&&labelPackAmount(f.packaging)===pack.amount)
-    .sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.filename.localeCompare(b.filename));
-};
-
-// Takes a SKU apart with the rules as they stand, saved or not, so a change here can be tried straight away. Empty, it shows how one is built.
-function SkuChecker({rules,shipping,files,jump}){
-  const [text,setText]=useState('');
-  const read=skuRead(rules,text||'P0401M5-3B0');
-  const checks=text?skuChecks(rules,text):[];
-  const found=text&&read.complete?skuLabelFiles(rules,shipping,files,read):null;
-  return(
-    <div className="card-flat sku-check">
-      <div className="sku-check-row">
-        <div className="field sku-check-field">
-          <label htmlFor="sku-check">{tx('Check a SKU')}</label>
-          <input id="sku-check" className="input mono" type="text" autoComplete="off" placeholder={tx('Type or paste one')} value={text} onChange={e=>setText(e.target.value.toUpperCase())}/>
-        </div>
-        <div className={'sku-parts'+(text?'':' example')}>
-          {read.parts.map(p=>(
-            <Fragment key={p.key}>
-              {['language','ending'].includes(p.key)&&<span className="sku-dash">-</span>}
-              <button type="button" className={`sku-part ${p.state}`} title={p.value||undefined} onClick={()=>jump(p.table,p.search)}>
-                <span className="sku-part-label">{SKU_PART_LABEL[p.key]}</span>
-                <span className="sku-part-code mono">{p.code||'–'}</span>
-                <span className="sku-part-value">{p.value||' '}</span>
-              </button>
-            </Fragment>
-          ))}
-        </div>
-      </div>
-      <SkuWarnings lines={checks}/>
-      {found&&(
-        <div className="sku-files">
-          <div className="hint">{found.length?txn(found.length,'{0} label file fits this SKU:','{0} label files fit this SKU:'):tx('No label file fits this product, pack and languages.')}</div>
-          <div className="sku-file-list">
-            {found.map(f=>(
-              <div key={f.path} className="sku-file">
-                <BadgeKind f={f}/>
-                {f.print_file?<BadgePrint/>:<BadgeFormat f={f}/>}
-                <span className="sku-file-name mono" title={f.filename}>{f.filename}</span>
-                <button className="btn btn-ghost btn-sm" title={tx('Open file')} onClick={()=>api.openFile(f.path)}><Icon.Open/></button>
-                <button className="btn btn-folder btn-sm" title={tx('Show in Explorer')} onClick={()=>api.revealFile(f.path)}><Icon.Folder/></button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+const skuReadError=(rules,error)=>error?txs(error):rules?tx('The SKU list could not be read'):tx('The SKU rules could not be read');
 
 function SkuVersions({product,onChange}){
   const versions=product.versions??[];
@@ -4555,47 +4518,51 @@ function SkuVersions({product,onChange}){
   );
 }
 
-function SkuPage({shipping,config,files,setSkuRules,unsaved}){
-  const rules=shipping?.skuRules;
-  const [draft,setDraft]=useState(rules);
-  const [tab,setTabState]=useState('products');
+// Editor → SKU. One section at a time; the Editor holds the drafts, so moving between its tabs doesn't lose edits.
+function SkuEditor({section,rules,setRules,list,setList,rulesDirty,listDirty,shipping,config,setSkuRules,setSkuList}){
   const [group,setGroup]=useState('');
   const [search,setSearch]=useState('');
+  const deferredSearch=useDeferredValue(search);
   const [openId,setOpenId]=useState(null);
   const [newRowId,setNewRowId]=useState(null);
   const [saved,setSaved]=useState(false);
   const [error,setError]=useState('');
-  const dirty=!sameValue(draft,rules);
-  useEffect(()=>{unsaved.current=dirty;},[dirty,unsaved]);
   const languageOptions=useMemo(()=>(config?.languages??[]).map(l=>({value:l.code,label:`${l.code} ${langLabel(l)}`})).sort((a,b)=>a.label.localeCompare(b.label)),[config]);
   const productNames=useMemo(()=>(config?.products??[]).map(p=>p.name).sort((a,b)=>a.localeCompare(b)),[config]);
-  if(!draft)return <div className="alert alert-error">{tx('{0}. Close whatever has it open, then reload this page.',txs(shipping?.error)??tx('The SKU rules could not be read'))}</div>;
-  const setTab=t=>{setTabState(t);setGroup('');setSearch('');setOpenId(null);};
-  const jump=(table,code)=>{setTab(table);setSearch(code);};
-  const rows=draft[tab]??[];
-  const setRows=next=>setDraft({...draft,[tab]:next});
+  if(!rules||!list)return <div className="alert alert-error">{tx('{0}. Close whatever has it open, then reload this page.',skuReadError(rules))}</div>;
+  const isList=section==='skus';
+  const rows=isList?list:(rules[section]??[]);
+  const setRows=next=>isList?setList(next):setRules({...rules,[section]:next});
   const update=(id,change)=>setRows(rows.map(r=>r.id===id?{...r,...change}:r));
   const add=()=>{
     const id=newId('sku');
-    setRows([{id,...SKU_BLANK[tab](group)},...rows]);
-    setNewRowId(id);setSearch('');
-    if(tab==='products')setOpenId(null);
+    setRows([{id,...SKU_BLANK[section](group)},...rows]);
+    setNewRowId(id);setSearch('');setOpenId(null);
   };
-  const shown=rows.filter(r=>(tab!=='products'||!group||r.code.startsWith(group))&&matchesSearch(`${r.code} ${r.name??''} ${r.note??''} ${r.product??''} ${(r.labels??[]).join(' ')}`,search));
-  const problem=skuRuleProblem(draft);
+  const shown=rows.filter(r=>(section!=='products'||!group||r.code.startsWith(group))&&matchesSearch(`${r.code} ${r.name??''} ${r.note??''} ${r.product??''} ${r.oldCode??''} ${(r.labels??[]).join(' ')}`,deferredSearch));
+  const codeCount={};
+  for(const r of rows)codeCount[r.code]=(codeCount[r.code]||0)+1;
+  const problem=skuRuleProblem(rules)||skuListProblem(list);
   // Rows keep their place while being edited, so one doesn't jump away as its code is typed. Saving puts them in order.
   const save=async()=>{
     setError('');
-    const inOrder={...draft,...Object.fromEntries(SKU_TABS.map(([t])=>[t,[...(draft[t]??[])].sort(t==='packs'?(a,b)=>a.amount-b.amount:(a,b)=>a.code.localeCompare(b.code))]))};
-    inOrder.products=inOrder.products.map(p=>({...p,versions:[...(p.versions??[])].sort((a,b)=>a.code.localeCompare(b.code))}));
-    const r=await api.saveSkuRules(inOrder);
-    if(!r.ok)return setError(txs(r.error)||tx('Could not save'));
-    setDraft(inOrder);setSkuRules(inOrder);
+    if(rulesDirty){
+      const inOrder={...rules,...Object.fromEntries(SKU_SECTIONS.filter(([t])=>t!=='skus').map(([t])=>[t,[...(rules[t]??[])].sort(t==='packs'?(a,b)=>a.amount-b.amount:(a,b)=>a.code.localeCompare(b.code))]))};
+      inOrder.products=inOrder.products.map(p=>({...p,versions:[...(p.versions??[])].sort((a,b)=>a.code.localeCompare(b.code))}));
+      const r=await api.saveSkuRules(inOrder);
+      if(!r.ok)return setError(txs(r.error)||tx('Could not save'));
+      setRules(inOrder);setSkuRules(inOrder);
+    }
+    if(listDirty){
+      const inOrder=[...list].sort((a,b)=>a.code.localeCompare(b.code));
+      const r=await api.saveSkuList(inOrder);
+      if(!r.ok)return setError(txs(r.error)||tx('Could not save'));
+      setList(inOrder);setSkuList(inOrder);
+    }
     setSaved(true);setTimeout(()=>setSaved(false),2000);
   };
   const textCell=(r,key,label)=><input className="input" aria-label={label} value={r[key]??''} onChange={e=>update(r.id,{[key]:e.target.value})}/>;
   const columns={
-    groups:[[tx('Name'),r=>textCell(r,'name',tx('Name'))]],
     products:[
       [tx('Name'),r=>textCell(r,'name',tx('Name'))],
       [tx('Versions'),r=><button type="button" className="sku-versions-toggle mono" aria-expanded={openId===r.id} onClick={()=>setOpenId(openId===r.id?null:r.id)}>{(r.versions??[]).map(v=>v.code).join(' ')||'–'}<Icon.Chevron size={12}/></button>],
@@ -4629,24 +4596,25 @@ function SkuPage({shipping,config,files,setSkuRules,unsaved}){
       [tx('Note'),r=>textCell(r,'note',tx('Note'))],
     ],
     endings:[[tx('Name'),r=>textCell(r,'name',tx('Name'))],[tx('Note'),r=>textCell(r,'note',tx('Note'))]],
-  }[tab];
-  // What leans on a row can't be pulled from under it: a group its products, a product the shipping data.
-  const usedCount=r=>tab==='products'?skuUsedBy(shipping,r.code).length:tab==='groups'?(draft.products??[]).filter(p=>p.code[0]===r.code).length:0;
+    skus:[
+      [tx('Name'),r=><>{textCell(r,'name',tx('Name'))}<SkuWarnings lines={skuUnknown(rules,r.code)}/></>],
+      [tx('Old code'),r=>textCell(r,'oldCode',tx('Old code'))],
+      [tx('Note'),r=>textCell(r,'note',tx('Note'))],
+    ],
+  }[section];
+  // A product the shipping data leans on can't be pulled from under it.
+  const usedCount=r=>section==='products'?skuUsedBy(shipping,r.code).length:0;
   return(
     <div className="page-fill">
-      <SkuChecker rules={draft} shipping={shipping} files={files} jump={jump}/>
-      <div className="tabs sku-tabs">
-        {SKU_TABS.map(([t,l])=><button key={t} className={`tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>{l}</button>)}
-      </div>
       <div className="fb sku-bar">
         <div className="fb-row">
           <div className="fb-search">
             <span className="fb-search-ico"><Icon.Search size={15}/></span>
-            <input className="input" type="text" value={search} placeholder={tx('Search...')} aria-label={tx('Search {0}',SKU_TABS.find(([t])=>t===tab)[1])} onChange={e=>setSearch(e.target.value)}/>
+            <input className="input" type="text" value={search} placeholder={tx('Search...')} aria-label={tx('Search {0}',SKU_SECTIONS.find(([t])=>t===section)[1])} onChange={e=>setSearch(e.target.value)}/>
           </div>
-          {tab==='products'&&(
+          {section==='products'&&(
             <div className="seg" role="group" aria-label={tx('Group')}>
-              {[['',tx('All')],...(draft.groups??[]).map(g=>[g.code,g.name])].map(([code,name])=>(
+              {[['',tx('All')],...skuGroups(rules).map(g=>[g.code,g.name])].map(([code,name])=>(
                 <button key={code} type="button" aria-pressed={group===code} className={'seg-btn'+(group===code?' on':'')} onClick={()=>setGroup(code)}>{name}</button>
               ))}
             </div>
@@ -4654,7 +4622,7 @@ function SkuPage({shipping,config,files,setSkuRules,unsaved}){
           <span className="fb-total">{tx('{0} of {1}',shown.length,rows.length)}</span>
           <button className="btn btn-ghost btn-sm ml-auto" onClick={add}>{tx('+ Add row')}</button>
         </div>
-        <div className="hint sku-tab-hint">{SKU_TAB_HINTS[tab]}</div>
+        <div className="hint sku-tab-hint">{SKU_SECTION_HINTS[section]}</div>
       </div>
       <div className="card table-scroll ship-table-fit sku-table">
         <table className="table dense sku-rows">
@@ -4665,15 +4633,15 @@ function SkuPage({shipping,config,files,setSkuRules,unsaved}){
               return(
                 <Fragment key={r.id}>
                   <tr>
-                    <td><input className={'input mono sku-code'+(skuCodeTwice(rows,r.code)?' invalid':'')} aria-label={tx('Code')} autoFocus={newRowId===r.id} value={r.code??''} onChange={e=>update(r.id,{code:e.target.value.toUpperCase().replace(/\s/g,'')})}/></td>
+                    <td><input className={'input mono sku-code'+(codeCount[r.code]>1?' invalid':'')} aria-label={tx('Code')} autoFocus={newRowId===r.id} value={r.code??''} onChange={e=>update(r.id,{code:e.target.value.toUpperCase().replace(/\s/g,'')})}/></td>
                     {columns.map(([label,cell])=><td key={label}>{cell(r)}</td>)}
                     <td>
                       {used
-                        ?<span className="mono muted ship-used" title={txn(used,"Used by {0}, so it can't be removed","Used by {0}, so it can't be removed")}>{used}</span>
+                        ?<span className="mono muted ship-used" title={tx('Used by {0}, so it can\'t be removed',used)}>{used}</span>
                         :<button className="ship-remove" aria-label={tx('Remove {0}',r.code||tx('row'))} onClick={()=>setRows(rows.filter(x=>x.id!==r.id))}><Icon.Close size={12}/></button>}
                     </td>
                   </tr>
-                  {tab==='products'&&openId===r.id&&<tr className="ship-open-row"><td colSpan={columns.length+2}><SkuVersions product={r} onChange={versions=>update(r.id,{versions})}/></td></tr>}
+                  {section==='products'&&openId===r.id&&<tr className="ship-open-row"><td colSpan={columns.length+2}><SkuVersions product={r} onChange={versions=>update(r.id,{versions})}/></td></tr>}
                 </Fragment>
               );
             })}
@@ -4683,11 +4651,309 @@ function SkuPage({shipping,config,files,setSkuRules,unsaved}){
       </div>
       {(problem||error)&&<div className="alert alert-error" style={{flexShrink:0,marginTop:'var(--space-3)'}}>{error||tx('{0} Fix this before saving.',problem)}</div>}
       <div className="action-bar">
-        <span className="hint">{tx('Shared with everyone who uses the labels folder{0}.',tx(': saved as {0}, next to the file map','sku_rules.json'))}</span>
-        <button className="btn btn-folder btn-sm" style={{flexShrink:0}} onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}><Icon.Folder/>{tx('Open folder')}</button>
-        <span className="ml-auto"><SavedNote show={saved}/>{dirty&&!saved&&<span className="badge badge-wip">{tx('Unsaved changes')}</span>}</span>
-        <button className="btn btn-primary" disabled={!dirty||!!problem} onClick={save}>{tx('Save changes')}</button>
+        <span className="ml-auto"><SavedNote show={saved}/>{(rulesDirty||listDirty)&&!saved&&<span className="badge badge-wip">{tx('Unsaved changes')}</span>}</span>
+        <button className="btn btn-primary" disabled={!(rulesDirty||listDirty)||!!problem} onClick={save}>{tx('Save changes')}</button>
       </div>
+    </div>
+  );
+}
+
+// ── SKU: the page ────────────────────────────────────────────────────────────────────
+// Finding a SKU, and making a new one from the rules. Nothing about the rules changes here: that's for Editor → SKU.
+// A SKU made here is copied or kept on the list by the person making it. It never goes into a label or document by itself.
+const SkuParts=({parts})=>(
+  <div className="sku-parts">
+    {parts.map(p=>(
+      <Fragment key={p.key}>
+        {['language','ending'].includes(p.key)&&<span className="sku-dash">-</span>}
+        <div className={`sku-part ${p.state}`} title={p.value||undefined}>
+          <span className="sku-part-label">{SKU_PART_LABEL[p.key]}</span>
+          <span className="sku-part-code mono">{p.code||'–'}</span>
+          <span className="sku-part-value">{p.value||' '}</span>
+        </div>
+      </Fragment>
+    ))}
+  </div>
+);
+// The label files a SKU can be: its product's label names, narrowed by a brand that names one, with its pack and languages.
+const skuLabelFiles=(rules,shipping,files,read)=>{
+  const pack=skuRow(rules,'packs',read.pack),language=skuRow(rules,'languages',read.part('language')?.code);
+  if(!pack||!language?.labels?.length)return null;
+  const brand=skuRow(rules,'brands',read.part('brand')?.code);
+  const code=read.head.slice(0,5);
+  const namesWhere=fits=>[...new Set((shipping?.products??[]).flatMap(p=>(p.links??[]).filter(n=>{const c=skuCodeFor(p,n);return c&&fits(c);})))];
+  // The exact version if a product has it, otherwise any: an older recipe's SKU can still have the same label.
+  let names=namesWhere(c=>code.startsWith(c));
+  if(!names.length)names=namesWhere(c=>c.slice(0,3)===code.slice(0,3));
+  if(brand?.product)names=names.filter(n=>skuNameFits(n,brand.product));
+  else if(brand?.kind==='standard')names=names.filter(n=>!(rules.brands??[]).some(b=>skuNameFits(n,b.product)));
+  return (files??[]).filter(f=>names.includes(f.product)&&f.languages&&sameSet(f.languages,language.labels)&&labelPackAmount(f.packaging)===pack.amount)
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.filename.localeCompare(b.filename));
+};
+const SkuLabelFiles=({found})=>found&&(
+  <div className="sku-files">
+    <div className="hint">{found.length?txn(found.length,'{0} label file fits this SKU:','{0} label files fit this SKU:'):tx('No label file fits this product, pack and languages.')}</div>
+    <div className="sku-file-list">
+      {found.map(f=>(
+        <div key={f.path} className="sku-file">
+          <BadgeKind f={f}/>
+          {f.print_file?<BadgePrint/>:<BadgeFormat f={f}/>}
+          <span className="sku-file-name mono" title={f.filename}>{f.filename}</span>
+          <button className="btn btn-ghost btn-sm" title={tx('Open file')} onClick={()=>api.openFile(f.path)}><Icon.Open/></button>
+          <button className="btn btn-folder btn-sm" title={tx('Show in Explorer')} onClick={()=>api.revealFile(f.path)}><Icon.Folder/></button>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+function CopySku({code}){
+  const [done,setDone]=useState(false);
+  const copy=async e=>{
+    e.stopPropagation();
+    await navigator.clipboard.writeText(code);
+    setDone(true);setTimeout(()=>setDone(false),1500);
+  };
+  return <button type="button" className="btn btn-ghost btn-sm sku-copy" title={tx('Copy {0}',code)} aria-label={tx('Copy {0}',code)} onClick={copy}>{done?<Icon.Check/>:<Icon.Copy size={13}/>}</button>;
+}
+
+function SkuFind({rules,list,shipping,files,config,onAdd}){
+  const [search,setSearch]=useState('');
+  const deferred=useDeferredValue(search);
+  const [filters,setFilters]=useState({product:[],language:[],pack:[],brand:[]});
+  const [toCheck,setToCheck]=useState(false);
+  const [openFacet,setOpenFacet]=useState(null);
+  const [openCode,setOpenCode]=useState(null);
+  const [addError,setAddError]=useState('');
+  const searchRef=useRef(null);
+  const langs=useMemo(()=>Object.fromEntries((config?.languages??[]).map(l=>[l.code,l])),[config]);
+  const rows=useMemo(()=>list.map(s=>{
+    const read=skuRead(rules,s.code);
+    const labels=skuRow(rules,'languages',read.part('language')?.code)?.labels??[];
+    return {s,read,labels,product:read.group+read.product,brand:read.part('brand')?.code,wrong:skuUnknown(rules,s.code),
+      own:`${s.code} ${s.name??''} ${s.oldCode??''}`,
+      all:[s.code,s.name,s.oldCode,s.note,...read.parts.flatMap(p=>[p.code,p.value]),...labels.flatMap(c=>[c,langs[c]?.name,langs[c]&&langLabel(langs[c])])].filter(Boolean).join(' ')};
+  }),[list,rules,langs]);
+  // A label holds several languages, so choosing two finds the labels with both. The other filters each find any of what's chosen.
+  const fits=(r,skip)=>(skip==='product'||!filters.product.length||filters.product.includes(r.product))
+    &&(skip==='language'||filters.language.every(c=>r.labels.includes(c)))
+    &&(skip==='pack'||!filters.pack.length||filters.pack.includes(r.read.pack))
+    &&(skip==='brand'||!filters.brand.length||filters.brand.includes(r.brand));
+  const matched=useMemo(()=>rows.filter(r=>matchesSearch(r.all,deferred)&&(!toCheck||r.wrong.length)),[rows,deferred,toCheck]);
+  // What the search found in a SKU's own code or name comes before what it found in the product or brand: Spuma's own SKUs before all of Foamex's.
+  const shown=useMemo(()=>{
+    const found=matched.filter(r=>fits(r));
+    return deferred.trim()?[...found.filter(r=>matchesSearch(r.own,deferred)),...found.filter(r=>!matchesSearch(r.own,deferred))]:found;
+  },[matched,filters,deferred]);
+  const countBy=(skip,key)=>{
+    const n={};
+    for(const r of matched)if(fits(r,skip))for(const v of [].concat(key(r)))n[v]=(n[v]||0)+1;
+    return n;
+  };
+  const facet=(id,name,Ico,options,extra)=>(
+    <FacetMenu id={id} name={name} Ico={Ico} options={options} selected={filters[id]} open={openFacet===id} onOpen={setOpenFacet} {...extra}
+      onToggle={v=>setFilters(f=>({...f,[id]:f[id].includes(v)?f[id].filter(x=>x!==v):[...f[id],v]}))} onClear={()=>setFilters(f=>({...f,[id]:[]}))}/>
+  );
+  const coded=(code,name)=><><span className="fb-code">{code}</span><span>{name}</span></>;
+  const langCodes=[...new Set((rules.languages??[]).flatMap(l=>l.labels??[]))].sort((a,b)=>(langs[a]?langLabel(langs[a]):a).localeCompare(langs[b]?langLabel(langs[b]):b));
+  const counts={product:countBy('product',r=>r.product),language:countBy('language',r=>r.labels),pack:countBy('pack',r=>r.read.pack),brand:countBy('brand',r=>r.brand??[])};
+  const labelOf={
+    product:c=>skuRow(rules,'products',c)?.name??c,
+    language:c=>langs[c]?langLabel(langs[c]):c,
+    pack:c=>tx('{0} kg or L',fmtNum(skuRow(rules,'packs',c)?.amount,3)),
+    brand:c=>skuRow(rules,'brands',c)?.name??c,
+  };
+  const FILTER_NAMES={product:tx('Product'),language:tx('Languages'),pack:tx('Pack'),brand:tx('Brand')};
+  const applied=Object.entries(filters).flatMap(([key,values])=>values.map(v=>({key,value:v,k:FILTER_NAMES[key],label:labelOf[key](v),tone:TONE.neutral})));
+  const clearAll=()=>{setFilters({product:[],language:[],pack:[],brand:[]});setToCheck(false);setSearch('');};
+  const wrongCount=useMemo(()=>rows.filter(r=>r.wrong.length).length,[rows]);
+  // A whole SKU searched for that isn't on the list: what it would mean, and adding it if the rules know all of it.
+  const typed=deferred.trim().toUpperCase();
+  const pasted=/^[A-Z]\d{4}/.test(typed)&&!list.some(s=>s.code===typed)?skuRead(rules,typed):null;
+  const showPasted=pasted&&(pasted.complete||!shown.length);
+  const canAdd=showPasted&&pasted.complete&&!skuUnknown(rules,typed).length;
+  const add=async()=>{setAddError(await onAdd(typed,''));};
+  return(
+    <div className="page-fill">
+      <div className="fb sku-bar">
+        <div className="fb-row">
+          <div className="fb-search">
+            <span className="fb-search-ico"><Icon.Search size={15}/></span>
+            <input ref={searchRef} className="input" type="text" autoComplete="off" value={search} placeholder={tx('Search a SKU, product, language, brand…')} aria-label={tx('Search SKUs')} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');}}/>
+            {search&&<button type="button" className="fb-search-clear" aria-label={tx('Clear search')} onClick={()=>{setSearch('');searchRef.current?.focus();}}><Icon.Close size={12}/></button>}
+          </div>
+          {facet('product',tx('Product'),Icon.File,(rules.products??[]).map(p=>({value:p.code,label:p.name,search:`${p.code} ${p.name}`,count:counts.product[p.code]??0,node:coded(p.code,p.name)})),{searchable:true})}
+          {facet('language',tx('Languages'),Icon.Globe,langCodes.map(c=>({value:c,label:labelOf.language(c),search:langs[c]?langText(langs[c]):c,count:counts.language[c]??0,node:coded(c,labelOf.language(c))})),{searchable:true})}
+          {facet('pack',tx('Pack'),Icon.Ruler,(rules.packs??[]).map(k=>({value:k.code,label:k.code,count:counts.pack[k.code]??0,node:coded(k.code,labelOf.pack(k.code))})))}
+          {facet('brand',tx('Brand'),Icon.Tag,(rules.brands??[]).map(b=>({value:b.code,label:b.name,search:`${b.code} ${b.name}`,count:counts.brand[b.code]??0,node:coded(b.code,b.name)})),{searchable:true})}
+          {wrongCount>0&&<button type="button" className={'fb-btn'+(toCheck?' on':'')} aria-pressed={toCheck} title={tx('SKUs with a code the rules don\'t have')} onClick={()=>setToCheck(v=>!v)}><Icon.Flag/><span>{tx('To check')}</span><span className="fb-badge">{wrongCount}</span></button>}
+        </div>
+        <div className="fb-row fb-summary">
+          <span className="fb-total">{tx('{0} of {1}',shown.length,list.length)}</span>
+          {applied.map(it=><FilterPill key={it.key+it.value} item={it} onRemove={()=>setFilters(f=>({...f,[it.key]:f[it.key].filter(v=>v!==it.value)}))}/>)}
+          {(applied.length>0||toCheck||search)&&<button type="button" className="fb-link" onClick={clearAll}>{tx('Clear all')}</button>}
+        </div>
+      </div>
+      {showPasted&&(
+        <div className="card-flat sku-pasted">
+          <div className="sku-pasted-head">
+            <span className="mono sku-new-code">{typed}</span>
+            <span className="hint">{tx('This SKU isn\'t on the list.')}</span>
+            {canAdd&&<button className="btn btn-primary btn-sm ml-auto" onClick={add}>{tx('Add to the list')}</button>}
+          </div>
+          <SkuParts parts={pasted.parts}/>
+          <SkuWarnings lines={skuChecks(rules,typed)}/>
+          {addError&&<div className="alert alert-error" style={{marginTop:'var(--space-2)'}}>{addError}</div>}
+          {pasted.complete&&<SkuLabelFiles found={skuLabelFiles(rules,shipping,files,pasted)}/>}
+        </div>
+      )}
+      <div className="card table-scroll ship-table-fit sku-table">
+        <table className="table dense sku-found">
+          <thead><tr><th>SKU</th><th>{tx('Name')}</th><th>{tx('Product')}</th><th>{tx('Version')}</th><th>{tx('Pack')}</th><th>{tx('Languages')}</th><th>{tx('Brand')}</th><th/></tr></thead>
+          <tbody>
+            {shown.map(({s,read,wrong})=>{
+              const open=openCode===s.code||shown.length===1;
+              const toggle=()=>setOpenCode(openCode===s.code?null:s.code);
+              const value=key=>read.part(key)?.value||'–';
+              return(
+                <Fragment key={s.id??s.code}>
+                  <tr className="sku-row" onClick={toggle}>
+                    <td className="nowrap"><button type="button" className={'sku-found-code mono'+(wrong.length?' wrong':'')} aria-expanded={open} title={wrong.join(' ')||undefined} onClick={e=>{e.stopPropagation();toggle();}}>{s.code}</button></td>
+                    <td>{s.name||'–'}</td>
+                    <td>{value('product')}</td>
+                    <td className="mono nowrap" title={value('version')}>{read.version||'–'}</td>
+                    <td className="nowrap">{value('pack')}</td>
+                    <td>{read.part('ending')?.value??value('language')}</td>
+                    <td>{read.part('ending')?'–':value('brand')}</td>
+                    <td className="sku-copy-cell"><CopySku code={s.code}/></td>
+                  </tr>
+                  {open&&(
+                    <tr className="ship-open-row">
+                      <td colSpan={8}>
+                        <SkuParts parts={read.parts}/>
+                        <SkuWarnings lines={wrong}/>
+                        {(s.oldCode||s.note)&&<div className="hint sku-found-note">{[s.oldCode&&tx('Old code: {0}',s.oldCode),s.note].filter(Boolean).join(' · ')}</div>}
+                        <SkuLabelFiles found={skuLabelFiles(rules,shipping,files,read)}/>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+            {shown.length===0&&<tr><td colSpan={8} className="muted" style={{fontStyle:'italic'}}>{tx('No SKU matches.')}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Every part is chosen by the person making it, from what the rules have. A product with one version has nothing to choose.
+function SkuCreate({rules,list,shipping,files,onAdd}){
+  const [product,setProduct]=useState('');
+  const [version,setVersion]=useState('');
+  const [pack,setPack]=useState('');
+  const [language,setLanguage]=useState('');
+  const [brand,setBrand]=useState('');
+  const [name,setName]=useState('');
+  const [added,setAdded]=useState('');
+  const [error,setError]=useState('');
+  const productRow=skuRow(rules,'products',product);
+  const versions=productRow?.versions??[];
+  const ending=skuRow(rules,'endings',language);
+  const pickProduct=code=>{
+    const found=skuRow(rules,'products',code)?.versions??[];
+    setProduct(code);setVersion(found.length===1?found[0].code:'');
+  };
+  const parts=skuParts(rules,{group:product[0]??'',product:product.slice(1),version,pack,tail:ending?.code??'',language:ending?'':language,brand:ending?'':brand});
+  const ready=product&&version&&pack&&(ending||(language&&brand));
+  const code=ready?`${product}${version}${pack}-${ending?ending.code:language+brand}`:'';
+  const same=code&&list.find(s=>s.code===code);
+  const used=product?skuUsedBy(shipping,product):[];
+  const select=(id,label,value,onChange,children,disabled)=>(
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      <select id={id} className="input" value={value} disabled={disabled} onChange={e=>{onChange(e.target.value);setAdded('');setError('');}}>
+        <option value="">{tx('Choose…')}</option>
+        {children}
+      </select>
+    </div>
+  );
+  const add=async()=>{
+    const problem=await onAdd(code,name);
+    setError(problem);
+    if(!problem){setAdded(code);setName('');}
+  };
+  if(!(rules.products??[]).length)return <div className="empty-state" style={{padding:'var(--space-8) var(--space-5)'}}><p>{tx('There are no SKU rules yet')}</p><div className="hint">{tx('Add the building blocks in Editor → SKU.')}</div></div>;
+  return(
+    <div className="scroll-y sku-create">
+      <div className="card-flat">
+        <div className="hint">{tx('Choose each part from the rules. Anything new, like another language code or brand, is added in Editor → SKU first.')}</div>
+        <div className="ship-form-grid">
+          {select('sku-new-product',tx('Product'),product,pickProduct,skuGroups(rules).map(g=>(
+            <optgroup key={g.code} label={g.name}>
+              {(rules.products??[]).filter(p=>p.code[0]===g.code).map(p=><option key={p.code} value={p.code}>{p.code} · {p.name}</option>)}
+            </optgroup>
+          )))}
+          <div>
+            {select('sku-new-version',tx('Version'),version,setVersion,versions.map(v=><option key={v.code} value={v.code}>{v.code}{v.note?` · ${v.note}`:v.code==='00'?` · ${tx('Original')}`:''}</option>),!product)}
+            {used.length>0&&<div className="hint">{tx('In shipping: {0}',used.join(', '))}</div>}
+          </div>
+          {select('sku-new-pack',tx('Pack'),pack,setPack,(rules.packs??[]).map(k=><option key={k.code} value={k.code}>{k.code} · {tx('{0} kg or L',fmtNum(k.amount,3))}</option>))}
+          {select('sku-new-language',tx('Languages'),language,setLanguage,<>
+            <optgroup label={tx('Languages')}>{(rules.languages??[]).map(l=><option key={l.code} value={l.code}>{l.code} · {l.name}</option>)}</optgroup>
+            {(rules.endings??[]).length>0&&<optgroup label={tx('Other endings')}>{rules.endings.map(e=><option key={e.code} value={e.code}>{e.code} · {e.name}</option>)}</optgroup>}
+          </>)}
+          {select('sku-new-brand',tx('Brand'),ending?'':brand,setBrand,SKU_KINDS.map(([kind,label])=>(
+            <optgroup key={kind} label={label}>
+              {(rules.brands??[]).filter(b=>(b.kind??'distributor')===kind).map(b=><option key={b.code} value={b.code}>{b.code} · {b.name}</option>)}
+            </optgroup>
+          )),!!ending)}
+          <div className="field">
+            <label htmlFor="sku-new-name">{tx('Name on the list')}</label>
+            <input id="sku-new-name" className="input" type="text" autoComplete="off" placeholder={tx('e.g. Spuma 5 l (LV, LT, EE)')} value={name} onChange={e=>setName(e.target.value)}/>
+          </div>
+        </div>
+      </div>
+      <div className="card-flat sku-result">
+        <SkuParts parts={parts}/>
+        {code&&(
+          <>
+            <div className="sku-pasted-head">
+              <span className="mono sku-new-code">{code}</span>
+              <CopySku code={code}/>
+              {same&&added!==code&&<span className="sku-warnings">{tx('Already on the list{0}.',same.name?`: ${same.name}`:'')}</span>}
+              <SavedNote show={added===code}>{tx('✓ Added to the list')}</SavedNote>
+              <button className="btn btn-primary btn-sm ml-auto" disabled={!!same} onClick={add}>{tx('Add to the list')}</button>
+            </div>
+            <SkuWarnings lines={skuChecks(rules,code,{name:name.trim()})}/>
+            {error&&<div className="alert alert-error" style={{marginTop:'var(--space-2)'}}>{error}</div>}
+            <SkuLabelFiles found={skuLabelFiles(rules,shipping,files,skuRead(rules,code))}/>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SkuPage({shipping,config,files,setSkuList}){
+  const [mode,setMode]=useState('find');
+  const rules=shipping?.skuRules,list=shipping?.skuList;
+  if(!rules||!list)return <div className="alert alert-error">{tx('{0}. Close whatever has it open, then reload this page.',skuReadError(rules,shipping?.error))}</div>;
+  // Says what went wrong, or nothing if it went in.
+  const onAdd=async(code,name)=>{
+    const r=await api.addSku({code,name});
+    if(!r.ok)return txs(r.error)||tx('Could not save');
+    setSkuList([...list,r.sku].sort((a,b)=>a.code.localeCompare(b.code)));
+    return '';
+  };
+  return(
+    <div className="page-fill">
+      <div className="tabs sku-tabs">
+        {[['find',tx('Find a SKU')],['create',tx('Create a SKU')]].map(([m,l])=><button key={m} className={`tab ${mode===m?'active':''}`} onClick={()=>setMode(m)}>{l}</button>)}
+      </div>
+      {/* Kept mounted, so going to Create and back doesn't lose a search. */}
+      <div className="page-fill" style={mode==='find'?undefined:{display:'none'}}><SkuFind rules={rules} list={list} shipping={shipping} files={files} config={config} onAdd={onAdd}/></div>
+      <div className="page-fill" style={mode==='create'?undefined:{display:'none'}}><SkuCreate rules={rules} list={list} shipping={shipping} files={files} onAdd={onAdd}/></div>
     </div>
   );
 }
