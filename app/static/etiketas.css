@@ -93,6 +93,18 @@
 .ship-name{font-weight:500;white-space:nowrap}
 .ship-ref-card{padding:0;overflow:hidden}
 .ship-ref-head{padding:var(--space-3) var(--space-3) var(--space-2)}
+.modal.ship-doc{width:min(960px,100%);overflow-wrap:normal}
+.ship-doc-fields{display:grid;grid-template-columns:1fr 160px;gap:var(--space-3);margin-top:var(--space-3)}
+.ship-doc-fields .field{margin-bottom:0}
+.ship-doc-lines{margin-top:var(--space-4);overflow-x:auto}
+.ship-doc-lines td{vertical-align:top}
+.ship-doc-lines .input{width:100%;box-sizing:border-box}
+.ship-doc-line{min-width:150px}
+.ship-doc-lines td:nth-child(2){min-width:190px}
+.ship-doc-source{max-width:240px;margin-top:2px;font-size:var(--fs-2xs);color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ship-doc-checks{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-4)}
+.ship-doc-checks ul{margin:var(--space-1) 0 0;padding-left:18px}
+.ship-doc-actions{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-4)}
 
 /* -- Settings: shipping editor -------------------------------------------------------- */
 .ship-edit{display:flex;gap:var(--space-5);flex:1;min-height:0}

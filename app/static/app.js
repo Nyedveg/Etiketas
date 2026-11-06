@@ -39,6 +39,18 @@ const api = {
   updateProgress:      ()    => api.get('/api/update/progress'),
   getShipping:         ()    => api.get('/api/shipping'),
   saveShipping:        (s)   => api.post('/api/shipping/save', s),
+  getLabelSkus:        (ps)  => api.get('/api/shipping/label_skus?packs='+encodeURIComponent(JSON.stringify(ps))),
+};
+
+// Saves a response the server marked as a download, under the name it gave.
+const saveDownload=async(response,fallbackName)=>{
+  const cd=response.headers.get('Content-Disposition')||'';
+  const m=/filename\*=UTF-8''([^;]+)/.exec(cd)||/filename="([^"]+)"/.exec(cd);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(await response.blob());
+  a.download=m?decodeURIComponent(m[1]):fallbackName;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),10000);
 };
 
 const scoreLabel = s => s>=75?{label:'Perfect',cls:'score-high'}:s>=50?{label:'Good',cls:'score-med'}:{label:'Fallback',cls:'score-low'};
@@ -241,14 +253,14 @@ function useUpdates(){
   return {offer,remindIn,checkNow,dismiss:()=>setOffer(null)};
 }
 
-const Modal=({title,onEscape,children})=>{
+const Modal=({title,onEscape,className,children})=>{
   const box=useRef(null);
   // Focus goes to the dialog, not to Install: it can appear while someone is typing, and Enter must not accept it.
   useEffect(()=>{box.current?.focus();},[]);
   // On the body: a page's entrance animation leaves a transform that would otherwise confine it to the page.
   return ReactDOM.createPortal(
     <div className="modal-backdrop">
-      <div ref={box} className="modal" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
+      <div ref={box} className={'modal'+(className?` ${className}`:'')} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
         onKeyDown={e=>{if(e.key==='Escape'&&onEscape)onEscape();}}>
         <div className="modal-title">{title}</div>
         {children}
@@ -1244,7 +1256,7 @@ function NewLabelWizard({config,map,setMap}){
                   const opRows=[
                     {key:'colors', label:'Color swatches', val:ops.colors},
                     ...(!isBox?[{key:'qr', label:'QR code', val:ops.qr}]:[]),
-                    ...(!isBox?[{key:'icons', label:'Trait icons', val:ops.icons, hint:'Fails if the product has more traits assigned than the template has TRAIT_SLOT frames'}]:[]),
+                    {key:'icons', label:'Trait icons', val:ops.icons, hint:'Fails if the product has more traits assigned than the template has TRAIT_SLOT frames'},
                     {key:'logo',   label:'Logo',           val:ops.logo},
                     ...transOps,
                   ];
@@ -1964,13 +1976,7 @@ function MockupView({file,info,view}){
     try{
       const r=await fetch(mockupUrl(file.path,view,info.rev,true));
       if(!r.ok)throw new Error();
-      const cd=r.headers.get('Content-Disposition')||'';
-      const m=/filename\*=UTF-8''([^;]+)/.exec(cd)||/filename="([^"]+)"/.exec(cd);
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(await r.blob());
-      a.download=m?decodeURIComponent(m[1]):'mockup.png';
-      a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+      await saveDownload(r,'mockup.png');
     }catch{setExportError('Could not make the mockup file.');}
     setExporting(false);
   };
@@ -2386,6 +2392,202 @@ const StatCard=({label,value,unit,lead,sub})=>(
   </div>
 );
 
+// ── Shipment: the packing list ───────────────────────────────────────────────────────
+// Written the way the document has always been: a decimal comma and fixed decimals, whatever this PC's locale.
+const docNum=(n,min=2,max=min)=>(n||0).toLocaleString('lt-LT',{minimumFractionDigits:min,maximumFractionDigits:max});
+const docKg=n=>`${docNum(n)} kg`;
+const docUnitKg=n=>`${docNum(n,3,4)} kg`;
+const docCount=n=>docNum(n,0,3);
+const docPack=it=>`${docCount(it.packSize)} ${it.unit}`;
+const docContainers=it=>it.container?.kind==='bag'?'bags':it.packSize<5?'bottles':'canisters';
+// The data holds "LT"; the document spells it out.
+const docOrigin=origin=>{
+  const v=(origin||'').trim();
+  return (/^[A-Za-z]{2}$/.test(v)?new Intl.DisplayNames(['en'],{type:'region'}).of(v.toUpperCase()):v).toUpperCase();
+};
+const docCustoms=p=>(p.customsCode||'').trim();
+const docDefaultName=p=>p.links?.length===1?p.links[0]:p.name;
+const docLineName=({l,it})=>(l.docName??docDefaultName(it.product)).trim();
+const docPalletName=pallet=>pallet.name==='EUR'?'Euro pallet':`${pallet.name} pallet`;
+
+// One section of the document: an order line, with the same figures the calculator shows for it.
+const docSection=(r,i)=>{
+  const {l,it,c}=r;
+  const qty=docCount(l.qty),units=docCount(wholeUp(c.units)),boxes=docCount(wholeUp(c.boxes)),word=docContainers(it),packaging=c.containerKg+c.boxKg;
+  return {
+    title:`${i+1}.  ${docLineName(r)} ${docPack(it)}`,
+    meta:[`SKU: ${(l.sku||'').trim()||'–'}`,`HS: ${docCustoms(it.product)||'–'}`,`Origin: ${docOrigin(it.product.origin)||'–'}`].join('    |    '),
+    rows:[
+      [it.unit==='L'?'Liquid material':'Dry material',`${qty} ${it.unit}`,''],
+      ['Packaging size',docPack(it),''],
+      [`Quantity ${word}`,units,''],
+      ...(it.box?[['Carton boxes',`${boxes} (${docCount(it.unitsPerBox)} units / carton)`,'']]:[]),
+      ['Net product weight',it.unit==='L'?`${docNum(it.density,2,3)} kg/L x ${qty} L`:`${qty} kg`,docKg(c.productKg)],
+      [`Empty ${word}`,`${units} x ${docUnitKg(it.containerWeight)}`,docKg(c.containerKg)],
+      ...(it.box?[['Empty carton boxes',`${boxes} x ${docUnitKg(it.boxWeight)}`,docKg(c.boxKg)]]:[]),
+      ['Total product packaging','',docKg(packaging)],
+      ['Gross weight (without pallet)','',docKg(c.productKg+packaging)],
+    ],
+  };
+};
+// What the server lays out. Totals come from the same rounding as the calculator's, so the two always agree.
+const packingListDoc=({customer,transport},rows)=>{
+  const sum=key=>rows.reduce((n,r)=>n+r.c[key],0);
+  const whole=(key,list=rows)=>list.reduce((n,r)=>n+wholeUp(r.c[key]),0);
+  const amount=unit=>rows.filter(r=>r.it.unit===unit).reduce((n,r)=>n+(r.l.qty||0),0);
+  const amounts=['L','kg'].filter(u=>amount(u)>0).map(u=>`${docCount(amount(u))} ${u}`).join(' + ');
+  const cartons=whole('boxes');
+  const palletRows=[...new Set(rows.map(r=>r.it.pallet))].map(pallet=>{
+    const n=whole('pallets',rows.filter(r=>r.it.pallet===pallet));
+    return [docPalletName(pallet),`${docCount(n)} x ${docKg(pallet.weight)}`,docKg(n*pallet.weight)];
+  });
+  const straps=[...new Set(rows.map(r=>r.it.strapWeight))].sort((a,b)=>b-a)
+    .map(w=>`${docCount(whole('pallets',rows.filter(r=>r.it.strapWeight===w)))} x ${docKg(w)}`).join(' + ');
+  const pallets=whole('pallets');
+  return {
+    customer:customer.trim(),transport,
+    sections:rows.map(docSection),
+    totals:[
+      ['Net product weight',amounts,docKg(sum('productKg'))],
+      ['Product packaging',`${docCount(whole('units'))} units`+(cartons>0?` / ${docCount(cartons)} cartons`:''),docKg(sum('containerKg')+sum('boxKg'))],
+      ...palletRows,
+      ['Packing stretch film',straps,docKg(sum('strapKg'))],
+      ['TOTAL GROSS WEIGHT',`${docCount(pallets)} ${pallets===1?'pallet':'pallets'}`,docKg(sum('totalKg'))],
+    ],
+  };
+};
+// What to say before the document is made. `must`: the figures or the heading would be wrong or missing, so it
+// waits for a fix. `check`: a gap someone may have a reason for, so they are told and can go ahead.
+const packingListChecks=({customer,transport},rows,gone,skus,truckMax)=>{
+  const must=[],check=[];
+  if(!customer.trim())must.push('Add the customer. Their name goes at the top of the document.');
+  if(gone.length)must.push(`Remove ${gone.length===1?'the line':`the ${gone.length} lines`} whose product is no longer in the shipping data.`);
+  if(!rows.length)must.push('Add at least one order line.');
+  for(const r of rows){
+    const {l,it,c}=r,p=it.product,line=`${p.name} ${fmtPack(it)}`;
+    const noWeight=(item,what)=>`${line}: ${item?`${item.name} has no weight`:`no ${what} is set`}, so the gross weight can't be worked out.`;
+    if(!(l.qty>0))must.push(`${line}: the order has no amount.`);
+    else if(!isWhole(c.units))must.push(`${line}: ${fmtNum(l.qty)} ${it.unit} is not a whole number of ${fmtPack(it)} packs.`);
+    if(it.unit==='L'&&!(it.density>0))must.push(`${line}: no density, so the net weight can't be worked out.`);
+    if(!(it.palletWeight>0))must.push(noWeight(it.pallet,'pallet'));
+    if(!(it.containerWeight>0))must.push(noWeight(it.container,'container'));
+    if(it.pack.boxId&&!(it.boxWeight>0))must.push(noWeight(it.box,'box'));
+    if(it.box&&!(it.unitsPerBox>0))must.push(`${line}: no units per box, so the cartons can't be counted.`);
+    if(!(it.strapWeight>0))must.push(`${line}: no strap weight, so the stretch film can't be worked out.`);
+    if(!docLineName(r))must.push(`${line}: add the name for the document.`);
+    else if(/[/()]/.test(docLineName(r)))check.push(`${line}: "${docLineName(r)}" looks like an internal name. Write the one the customer should see.`);
+    const sku=(l.sku||'').trim();
+    if(!sku)check.push(`${line}: no SKU.${!skus?'':skus[l.itemId]?.length?' Choose one from its labels or type it.':' None of its labels has one, so type it.'}`);
+    else if(skus?.[l.itemId]?.find(s=>s.sku===sku)?.sizeOk===false)check.push(`${line}: ${sku} is printed on its label, but that SKU's size doesn't look like this pack's.`);
+    if(l.qty>0&&!isWhole(c.boxes))check.push(`${line}: the last carton is only part full.`);
+    if(l.qty>0&&!isWhole(c.pallets))check.push(`${line}: not a full pallet. Add ${fmtNum(wholeUp(c.pallets)*it.palletSize-l.qty,3)} ${it.unit} for ${fmtNum(wholeUp(c.pallets))} full ${wholeUp(c.pallets)===1?'pallet':'pallets'}.`);
+  }
+  for(const p of new Set(rows.map(r=>r.it.product))){
+    const code=docCustoms(p);
+    if(!code)check.push(`${p.name}: no customs code.`);
+    else if(!/^\d{10}$/.test(code))check.push(`${p.name}: the customs code ${code} is not 10 digits.`);
+    if(!docOrigin(p.origin))check.push(`${p.name}: no country of origin.`);
+    if(transport==='Air'&&!p.airTransport)must.push(`${p.name} cannot go by air.`);
+  }
+  const totalKg=rows.reduce((n,r)=>n+r.c.totalKg,0);
+  if(transport==='Truck'&&truckMax>0&&totalKg>truckMax)check.push(`Too heavy for one truck: ${fmtNum(totalKg)} kg, ${fmtNum(totalKg-truckMax)} kg over the ${fmtNum(truckMax)} kg limit.`);
+  return {must,check};
+};
+
+// The customer and transport stay with the open order, like its lines do.
+const DOC_INFO_KEY='etiketas.shipment.document';
+const readDocInfo=()=>{
+  const blank={customer:'',transport:'Truck'};
+  try{return {...blank,...JSON.parse(localStorage.getItem(DOC_INFO_KEY)||'{}')};}
+  catch{return blank;}
+};
+
+function PackingListDialog({rows,gone,truckMax,updateLine,onClose}){
+  const [info,setInfo]=useState(readDocInfo);
+  useEffect(()=>{try{localStorage.setItem(DOC_INFO_KEY,JSON.stringify(info));}catch{/* storage unavailable: they last until closed */}},[info]);
+  const [skus,setSkus]=useState(null);     // pack -> the SKUs on its labels; null until read
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+  // The labels only suggest SKUs. Nothing is filled in for you: someone picks or types each one.
+  useEffect(()=>{
+    let stale=false;
+    const packs=rows.map(({l,it})=>({id:l.itemId,labels:it.product.links??[],packaging:packSizeKey(it.packSize,it.unit)}));
+    api.getLabelSkus(packs).catch(()=>({})).then(found=>{if(!stale)setSkus(found);});
+    return ()=>{stale=true;};
+  },[]);
+  const {must,check}=packingListChecks(info,rows,gone,skus,truckMax);
+  const make=async()=>{
+    setBusy(true);setError('');
+    try{
+      const r=await fetch('/api/shipping/packing_list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packingListDoc(info,rows))});
+      if(!r.ok)throw new Error((await r.json().catch(()=>null))?.error||'');
+      await saveDownload(r,'Packing_List.docx');
+      onClose();
+    }catch(e){setError(`Could not make the document.${e.message?` ${e.message}`:''}`);setBusy(false);}
+  };
+  return(
+    <Modal title="Export packing list" onEscape={onClose} className="ship-doc">
+      <div className="ship-doc-fields">
+        <div className="field">
+          <label htmlFor="ship-doc-customer">Customer</label>
+          <input id="ship-doc-customer" className="input" type="text" value={info.customer} placeholder="Company name" onChange={e=>setInfo({...info,customer:e.target.value})}/>
+        </div>
+        <div className="field">
+          <label htmlFor="ship-doc-transport">Transport</label>
+          <select id="ship-doc-transport" className="input" value={info.transport} onChange={e=>setInfo({...info,transport:e.target.value})}>
+            {['Truck','Sea','Air'].map(t=><option key={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="ship-doc-lines">
+        <table className="table dense">
+          <thead><tr><th>Order line</th><th>Name on the document</th><th>SKU</th><th>HS code</th><th>Origin</th></tr></thead>
+          <tbody>
+            {rows.map(({l,it},i)=>{
+              const onLabels=skus?.[l.itemId]??[];
+              const chosen=onLabels.find(s=>s.sku===l.sku);
+              const several=(it.product.links??[]).length>1;
+              return(
+                <tr key={l.itemId}>
+                  <td className="ship-doc-line">{i+1}. {it.product.name} <span className="mono nowrap muted">{fmtPack(it)}</span></td>
+                  <td><input className="input" type="text" aria-label={`Name on the document for ${it.product.name} ${fmtPack(it)}`} value={l.docName??docDefaultName(it.product)} onChange={e=>updateLine(l.itemId,{docName:e.target.value})}/></td>
+                  <td>
+                    <input className="input" type="text" list={`ship-doc-skus-${l.itemId}`} autoComplete="off" aria-label={`SKU for ${it.product.name} ${fmtPack(it)}`}
+                      placeholder={onLabels.length?'Choose or type the SKU':'Type the SKU'} value={l.sku??''}
+                      onChange={e=>{
+                        const s=onLabels.find(x=>x.sku===e.target.value);
+                        updateLine(l.itemId,s?{sku:s.sku,docName:s.product}:{sku:e.target.value});
+                      }}/>
+                    <datalist id={`ship-doc-skus-${l.itemId}`}>
+                      {onLabels.map(s=><option key={s.sku} value={s.sku} label={[several&&s.product,s.languages.join(', '),!s.sizeOk&&'other size?'].filter(Boolean).join(' · ')}/>)}
+                    </datalist>
+                    {chosen&&<div className="ship-doc-source" title={chosen.file}>{chosen.file}</div>}
+                  </td>
+                  <td className="mono nowrap">{docCustoms(it.product)||'–'}</td>
+                  <td className="nowrap">{docOrigin(it.product.origin)||'–'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="ship-doc-checks">
+        {must.length>0&&<div className="alert alert-error"><div><b>Fix these first</b><ul>{must.map(m=><li key={m}>{m}</li>)}</ul></div></div>}
+        {check.length>0&&<div className="alert alert-warning"><div><b>Check these</b><ul>{check.map(m=><li key={m}>{m}</li>)}</ul></div></div>}
+        {!must.length&&!check.length&&<div className="saved-note">All the details are filled in.</div>}
+        {error&&<div className="alert alert-error">{error}</div>}
+      </div>
+      <div className="ship-doc-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn btn-primary" disabled={busy||must.length>0} onClick={make}>
+          {busy?<div className="spinner" style={{width:12,height:12}}/>:<Icon.Download/>}
+          {busy?'Exporting…':check.length&&!must.length?'Export anyway':'Export'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 // Pick a product, then one of its packs: everything for a product is in one place.
 function ShipCalculator({shipping}){
   const [lines,setLines]=useState(readShipment);
@@ -2421,7 +2623,12 @@ function ShipCalculator({shipping}){
   };
   const updateLine=(id,change)=>setLines(ls=>ls.map(l=>l.itemId===id?{...l,...change}:l));
   const removeLine=id=>setLines(ls=>ls.filter(l=>l.itemId!==id));
-  const clearLines=()=>{if(window.confirm('Remove every line from this shipment?'))setLines([]);};
+  const clearLines=()=>{
+    if(!window.confirm('Remove every line from this shipment?'))return;
+    setLines([]);
+    try{localStorage.removeItem(DOC_INFO_KEY);}catch{/* storage unavailable: nothing to clear */}
+  };
+  const [docOpen,setDocOpen]=useState(false);
 
   const rows=lines.map(l=>{
     const it=entryOf[l.itemId];
@@ -2437,12 +2644,13 @@ function ShipCalculator({shipping}){
     else lineGroups.push({product:r.it.product,rows:[r]});
   }
   const sum=key=>known.reduce((n,r)=>n+r.c[key],0);
-  // Each line rounded up, then added: boxes hold one product, so parts of them can't be put together.
+  // Each line rounded up, then added: a box or a pallet holds one product, so parts of them can't be put together.
   const wholeSum=key=>known.reduce((n,r)=>n+wholeUp(r.c[key]),0);
   const exactNote=key=>isWhole(sum(key))&&Math.round(sum(key))===wholeSum(key)?null:`${fmtNum(sum(key))} exact`;
-  // Pallets can be shared, though, which is the one count that can come out lower.
-  const sharedPallets=wholeUp(sum('pallets'));
-  const palletNote=[exactNote('pallets'),sharedPallets<wholeSum('pallets')?`${fmtNum(sharedPallets)} if part pallets share`:null].filter(Boolean).join(' · ');
+  // The limit is in the shared data with the other figures. A file without one just gives no warning.
+  const truckMax=shipping.truckMaxKg;
+  const totalKg=sum('totalKg');
+  const overTruck=truckMax>0&&totalKg>truckMax;
   const totalCost=known.reduce((n,r)=>n+(r.cost??0),0);
   const anyPrice=known.some(r=>r.cost!=null);
   const shipped=lineGroups.map(g=>g.product);
@@ -2491,18 +2699,29 @@ function ShipCalculator({shipping}){
       </div>
 
       <div className="ship-stats">
-        <StatCard label="Total weight" value={fmtNum(sum('totalKg'))} unit="kg" lead/>
-        <StatCard label="Pallets" value={fmtNum(wholeSum('pallets'))} sub={palletNote}/>
+        <StatCard label="Total weight" value={fmtNum(totalKg)} unit="kg" lead/>
+        <StatCard label="Pallets" value={fmtNum(wholeSum('pallets'))} sub={exactNote('pallets')}/>
         <StatCard label="Product weight" value={fmtNum(sum('productKg'))} unit="kg"/>
         <StatCard label="Containers" value={fmtNum(wholeSum('units'))} sub={exactNote('units')}/>
         <StatCard label="Boxes" value={fmtNum(wholeSum('boxes'))} sub={exactNote('boxes')}/>
         <StatCard label="Total price" value={anyPrice?fmtNum(totalCost):'–'}/>
       </div>
+      {overTruck&&(
+        <div className="ship-alerts">
+          <div className="alert alert-error">Too heavy for one truck: this shipment weighs {fmtNum(totalKg)} kg, {fmtNum(totalKg-truckMax)} kg over the {fmtNum(truckMax)} kg limit.</div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between" style={{marginBottom:'var(--space-3)'}}>
         <p className="section-title" style={{margin:0}}>Order lines</p>
-        {lines.length>0&&<button className="btn btn-ghost btn-sm" onClick={clearLines}>Clear all</button>}
+        {lines.length>0&&(
+          <div className="flex items-center gap-2">
+            <button className="btn btn-ghost btn-sm" onClick={clearLines}>Clear all</button>
+            <button className="btn btn-primary btn-sm" onClick={()=>setDocOpen(true)}><Icon.Download/>Packing list</button>
+          </div>
+        )}
       </div>
+      {docOpen&&<PackingListDialog rows={lineGroups.flatMap(g=>g.rows)} gone={gone} truckMax={truckMax} updateLine={updateLine} onClose={()=>setDocOpen(false)}/>}
       <div className="card table-scroll ship-section">
         {lines.length===0?(
           <div className="empty-state" style={{padding:'var(--space-8) var(--space-5)'}}>
@@ -2555,7 +2774,11 @@ function ShipCalculator({shipping}){
                       <td rowSpan={2}><button className="ship-remove" aria-label={`Remove ${p.name} ${fmtPack(it)}`} onClick={()=>removeLine(l.itemId)}><Icon.Close size={12}/></button></td>
                     </tr>
                     <tr className="ship-line-used">
-                      <td colSpan={2} className="group-start"><ShipUsed item={it.pallet} weight={it.palletWeight}/></td>
+                      <td colSpan={2} className="group-start">
+                        <ShipUsed item={it.pallet} weight={it.palletWeight}/>
+                        {/* Products aren't mixed on a pallet, so a part pallet can't be filled up with something else. */}
+                        {!isWhole(c.pallets)&&<div className="ship-warn">Add {fmtNum(wholeUp(c.pallets)*it.palletSize-(l.qty||0),3)} {it.unit} for {fmtNum(wholeUp(c.pallets))} full {wholeUp(c.pallets)===1?'pallet':'pallets'}</div>}
+                      </td>
                       <td colSpan={2} className="group-start"><ShipUsed item={it.container} weight={it.containerWeight}/></td>
                       <td colSpan={2} className="group-start">{it.box?<ShipUsed item={it.box} weight={it.boxWeight}/>:'No box'}</td>
                     </tr>
@@ -2577,12 +2800,12 @@ function ShipCalculator({shipping}){
               <tr>
                 <td>Total</td>
                 <td className="num">{fmtNum(known.reduce((n,r)=>n+(r.l.qty||0),0))}</td>
-                <td className="num group-start"><ShipCount n={sum('pallets')} whole={wholeSum('pallets')} title={`Each line rounded up, then added. ${fmtNum(sharedPallets)} if part pallets share.`}/></td><td className="num">{fmtNum(sum('palletKg'))}</td>
+                <td className="num group-start"><ShipCount n={sum('pallets')} whole={wholeSum('pallets')} title="Each line rounded up, then added: products aren't mixed on a pallet"/></td><td className="num">{fmtNum(sum('palletKg'))}</td>
                 <td className="num group-start"/><td className="num">{fmtNum(sum('productKg'))}</td>
                 <td className="num group-start"><ShipCount n={sum('units')} whole={wholeSum('units')} title="Each line rounded up, then added"/></td><td className="num">{fmtNum(sum('containerKg'))}</td>
                 <td className="num group-start"><ShipCount n={sum('boxes')} whole={wholeSum('boxes')} title="Each line rounded up, then added"/></td><td className="num">{fmtNum(sum('boxKg'))}</td>
                 <td className="num group-start">{fmtNum(sum('strapKg'))}</td>
-                <td className="num">{fmtNum(sum('totalKg'))}</td>
+                <td className={'num'+(overTruck?' ship-warn':'')}>{fmtNum(totalKg)}</td>
                 <td/>
                 <td className="num">{anyPrice?fmtNum(totalCost):'–'}</td>
                 <td/>
@@ -3262,6 +3485,7 @@ const shipProblem=p=>{
   if(!p.name?.trim())return 'needs a name';
   if(p.packs?.length&&p.unit==='L'&&!(p.density>0))return 'needs a density';
   if(p.packs?.length&&!(p.strapWeight>0))return 'needs a strap weight';
+  if(p.customsCode?.trim()&&!/^\d{10}$/.test(p.customsCode.trim()))return 'needs a customs code of 10 digits';
   for(const k of p.packs??[]){
     if(!(k.packSize>0))return 'has a pack with no size';
     const size=`${k.packSize} ${p.unit}`;
@@ -3788,6 +4012,11 @@ function ShipTablesEditor({draft,setDraft}){
   return(
     <div className="scroll-y">
       <div className="ship-ref-grid wide">
+        <div className="card-flat">
+          <div className="card-title">Truck</div>
+          <div className="hint">The calculator warns when a shipment weighs more than this.</div>
+          <div className="input-unit ship-num" style={{marginTop:'var(--space-2)'}}><NumInput aria-label="Most a truck can carry" value={draft.truckMaxKg??null} onChange={v=>setDraft({...draft,truckMaxKg:v})}/><span>kg</span></div>
+        </div>
         {SHIP_CATALOGUES.map(cat=>{
           const rows=draft[cat.key]??[];
           const used=catalogueUse(draft,cat.usedBy);

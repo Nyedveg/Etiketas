@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs, quote, unquote
 
 import organizer
+import packing_list
 from labelnames import Catalogue, LANG_ALIASES, label_entry, label_kind, norm_name, pack_amount, take_date
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
@@ -607,8 +608,11 @@ def _replace_story_contents(xml_text, replacements):
         return m.group(0)
     return re.sub(r'<Content>(.*?)</Content>', repl, xml_text, flags=re.DOTALL)
 
-def _get_story_replacements(story_title, trans):
+def _get_story_replacements(story_title, trans, sku=''):
     """Return ordered replacement strings for a story given its StoryTitle."""
+    if story_title.endswith('_FIELDS'):     # all six fields flowing in one story, for narrow columns
+        return [text for key in _FIELD_KEYS
+                for text in (trans.get(key, {}).get('label', ''), trans.get(key, {}).get('value', ''))]
     if story_title.endswith('_HEADER'):
         header = trans.get('lang1', {}).get('header', '')
         if ' | ' in header:
@@ -635,7 +639,7 @@ def _get_story_replacements(story_title, trans):
     if story_title.endswith('_FOOTER_SKU_BLOCK'):
         f = trans.get('footer', {})
         return [
-            f.get('sku_label', ''), '',  # SKU value is left blank -- not sourced from translations
+            f.get('sku_label', ''), sku,  # the SKU comes from the wizard, not the translation
             f.get('mfg_date_label', ''),
             f.get('batch_label', ''),
             f.get('exp_date_label', ''), f.get('exp_date_value', ''),
@@ -656,12 +660,12 @@ def _get_story_replacements(story_title, trans):
         return [f.get('mfg_date_label', ''), f.get('batch_label', '')]
     return None
 
-def apply_lang_translation(pkg, slot, trans):
+def apply_lang_translation(pkg, slot, trans, sku=''):
     """Replace the LANG{slot}_* stories' contents with translated text."""
     prefix = f'LANG{slot}_'
     for name, title in pkg.stories():
         if title.startswith(prefix):
-            texts = _get_story_replacements(title, trans)
+            texts = _get_story_replacements(title, trans, sku)
             if texts is not None:
                 pkg.set_text(name, _replace_story_contents(pkg.text(name), texts))
     return True
@@ -683,11 +687,11 @@ def apply_box_weight_text(pkg, box_mult):
             pkg.set_text(name, _replace_story_contents(pkg.text(name), [weight_text]))
     return True
 
-# Most current templates hold SKU/mfg-date/batch/shelf-life in one shared
-# "SHARED_SKU" story (label text baked in once, not per language slot); a few
-# still carry the older per-language footer stories (LANG{n}_FOOTER_SKU_BLOCK /
-# _FOOTER_PRODUCER_BLOCK), which _get_story_replacements fills from the
-# translation file. This fills the shared one. Manufacturing date and batch
+# Many templates hold SKU/mfg-date/batch/shelf-life in one shared "SHARED_SKU"
+# story (label text baked in once, not per language slot); others carry
+# per-language footer stories (LANG{n}_FOOTER_SKU_BLOCK / _FOOTER_PRODUCER_BLOCK),
+# which _get_story_replacements fills from the translation file and the
+# wizard's SKU. This fills the shared one. Manufacturing date and batch
 # number are stamped on later at the print line, so only their *labels* live
 # in the template -- there is deliberately no value to write for those two.
 # SKU code and shelf life ARE set at creation time -- SKU from the wizard (per
@@ -853,11 +857,12 @@ def fill_idml(path, *, is_label, is_template, colors, qr_path, logo_path, box_mu
         ops["logo"] = run(patch_logo_in_idml, logo_path)
     if not is_label:
         ops["weight"] = run(apply_box_weight_text, box_mult)
+    sku = (footer_values or {}).get('sku', '')
     for slot, trans in enumerate(translations, 1):
-        ops["translations"].append(run(apply_lang_translation, slot, trans) if trans else None)
+        ops["translations"].append(run(apply_lang_translation, slot, trans, sku) if trans else None)
     if is_label:
         ops["footer"] = run(apply_footer_content, translations, footer_values)
-        ops["icons"]  = run(apply_trait_icons, trait_icons)
+    ops["icons"] = run(apply_trait_icons, trait_icons)
     if pkg:
         pkg.save()
     return ops
@@ -1803,6 +1808,11 @@ def _abs_label_path(p):
     """Client-supplied paths are relative to LABELS_DIR unless already absolute."""
     return str(LABELS_DIR / p) if p and not Path(p).is_absolute() else p
 
+def _attachment(name):
+    """The header that makes a response a download, with a plain name for anything that can't read the real one."""
+    ascii_name = re.sub(r'[^A-Za-z0-9._ +()-]', '_', name)
+    return {"Content-Disposition": f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(name)}'}
+
 def _ok_json(fn):
     """POST handler -> {"ok": True, **returned} on success, {"ok": False, "error": ...} on any exception."""
     def wrapper(self, body):
@@ -1927,6 +1937,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/file_info":       "api_file_info",
         "/api/export":          "api_export",
         "/api/shipping":        "api_shipping",
+        "/api/shipping/label_skus": "api_label_skus",
         "/api/update/check":    "api_update_check",
         "/api/update/progress": "api_update_progress",
     }
@@ -1938,6 +1949,16 @@ class Handler(BaseHTTPRequestHandler):
         with _WRITE_LOCK:     # the first read also writes the seed file
             data = load_shipping()
         self.send_json(data if data is not None else {"error": f"Could not read {SHIPPING_FILE.name} or {TECHNICAL_FILE.name}"})
+
+    def api_label_skus(self):
+        """The SKUs on the labels of a shipment's packs. packs: JSON, [{id, labels, packaging}]."""
+        try:
+            packs = json.loads(self._arg("packs", "[]"))
+        except ValueError:
+            return self._send(400)
+        files = load_json(MAP_FILE, {"files": []}).get("files", [])
+        self.send_json({p["id"]: packing_list.label_skus(files, _resolve_label_path, p.get("labels") or [], p.get("packaging"))
+                        for p in packs})
 
     def api_update_check(self):
         self.send_json(check_for_update(force=self._arg("force") == "1"))
@@ -2054,10 +2075,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_404()
         if export:
             name = Path(rel).stem + ("_mockup_back" if view == "back" else "_mockup") + ".png"
-            ascii_name = re.sub(r'[^A-Za-z0-9._ +()-]', '_', name)
-            self._send(200, result[0], result[1], {
-                "Content-Disposition": f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(name)}',
-                "Cache-Control": "no-store"})
+            self._send(200, result[0], result[1], {**_attachment(name), "Cache-Control": "no-store"})
         else:
             self.send_image(*result)
 
@@ -2101,6 +2119,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/colors/save":          "api_colors_save",
         "/api/icon_assignments/save":"api_icon_assignments_save",
         "/api/shipping/save":        "api_shipping_save",
+        "/api/shipping/packing_list":"api_packing_list",
         "/api/update/install":       "api_update_install",
         "/api/find_template":        "api_find_template",
         "/api/create":               "api_create",
@@ -2140,6 +2159,16 @@ class Handler(BaseHTTPRequestHandler):
         if not all(isinstance(body.get(k), list) for k in ("products", "pallets", "containers", "boxes", "tables")):
             raise ValueError("Shipping data must have products, pallets, containers, boxes and tables")
         save_shipping(body)
+
+    def api_packing_list(self, body):
+        try:
+            # The logo as a browser draws its SVG, trimmed to its ink: MuPDF draws those styled paths all black.
+            data = packing_list.build_docx(body, (STATIC_DIR / "img" / "Nando-color.png").read_bytes())
+            name = packing_list.file_name(body["customer"])
+        except Exception as e:
+            print("packing list failed", file=sys.stderr); traceback.print_exc()
+            return self.send_json({"error": str(e)}, 500)
+        self._send(200, data, packing_list.MIME, {**_attachment(name), "Cache-Control": "no-store"})
 
     @_ok_json
     def api_update_install(self, body):
