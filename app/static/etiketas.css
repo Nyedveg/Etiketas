@@ -87,6 +87,10 @@
 .ship-section{margin-bottom:var(--space-5)}
 .ship-qty{width:108px;margin-left:auto}
 .ship-price{width:76px;margin-left:auto}
+.ship-pallets{display:flex;align-items:center;justify-content:flex-end;gap:var(--space-1);white-space:nowrap}
+.ship-pallets-input{width:72px}
+.input-unit.ship-truck-pallets{width:128px}
+.input-unit.ship-truck-pallets .input{padding-right:68px}
 .ship-clip{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ship-remove{border:none;background:none;color:var(--text3);cursor:pointer;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .ship-remove:hover{background:rgba(var(--danger-rgb),.12);color:var(--danger)}

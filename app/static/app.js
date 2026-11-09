@@ -2224,10 +2224,14 @@ const parseNum=s=>{
 // can't read is marked and leaves the value as it was.
 function NumInput({value,onChange,className='',...rest}){
   const [text,setText]=useState(value==null?'':String(value));
+  // What the box holds now. A render can be a step behind it when two boxes set one value, as an order's
+  // amount and its pallets do, and someone types quickly: comparing with that render left the old number showing.
+  const shown=useRef(text);
+  const show=t=>{shown.current=t;setText(t);};
   const parsed=parseNum(text);
-  useEffect(()=>{if(parsed!==(value??null)&&!Number.isNaN(parsed))setText(value==null?'':String(value));},[value]);
+  useEffect(()=>{const p=parseNum(shown.current);if(p!==(value??null)&&!Number.isNaN(p))show(value==null?'':String(value));},[value]);
   return <input {...rest} className={`input mono ${className}${Number.isNaN(parsed)?' invalid':''}`} inputMode="decimal" value={text}
-    onChange={e=>{const t=e.target.value;setText(t);const n=parseNum(t);if(!Number.isNaN(n))onChange(n);}}/>;
+    onChange={e=>{const t=e.target.value;show(t);const n=parseNum(t);if(!Number.isNaN(n))onChange(n);}}/>;
 }
 
 // ── Shipment: the data ───────────────────────────────────────────────────────────────
@@ -2257,6 +2261,12 @@ const shipCalc=(it,qty)=>{
   const palletKg=wholeUp(pallets)*(it.palletWeight||0),productKg=q*(it.density||0),containerKg=wholeUp(units)*(it.containerWeight||0),boxKg=wholeUp(boxes)*(it.boxWeight||0),strapKg=wholeUp(pallets)*(it.strapWeight||0);
   return {pallets,palletKg,productKg,units,containerKg,boxes,boxKg,strapKg,totalKg:palletKg+productKg+containerKg+boxKg+strapKg};
 };
+// The order that comes to a given number of pallets, for typing pallets instead of litres or kilos.
+const qtyForPallets=(it,n)=>n==null?null:Math.round(n*it.palletSize*1e6)/1e6;
+// A pallet count as its field shows it. Four decimals keep what someone types from being rewritten under them.
+const palletsField=n=>Math.round(n*1e4)/1e4;
+// Each line rounded up, then added: a pallet holds one product, so the parts of two can't share one.
+const palletsNeeded=rows=>rows.reduce((n,r)=>n+wholeUp(r.c.pallets),0);
 const fmtNum=(n,digits=2)=>n==null||Number.isNaN(n)?'–':n.toLocaleString(undefined,{maximumFractionDigits:digits});
 const fmtPack=it=>`${fmtNum(it.packSize,3)} ${it.unit}`;
 const fmtMonths=m=>m>0?txn(m,'{0} month','{0} months'):'–';
@@ -2623,7 +2633,7 @@ const packingListDoc=({customer,transport},rows,rules)=>{
 // What to say before the document is made. `must`: the figures or the heading would be wrong or missing, so it
 // waits for a fix. `check`: a gap someone may have a reason for, so they are told and can go ahead.
 const packingListChecks=({customer,transport},rows,gone,shipping)=>{
-  const truckMax=shipping?.truckMaxKg;
+  const truckMax=shipping?.truckMaxKg,palletMax=shipping?.truckMaxPallets;
   const must=[],check=[];
   if(!customer.trim())must.push(tx('Add the customer. Their name goes at the top of the document.'));
   if(gone.length)must.push(txn(gone.length,'Remove the line whose product is no longer in the shipping data.','Remove the {0} lines whose product is no longer in the shipping data.'));
@@ -2662,6 +2672,8 @@ const packingListChecks=({customer,transport},rows,gone,shipping)=>{
   }
   const totalKg=rows.reduce((n,r)=>n+r.c.totalKg,0);
   if(transport==='Truck'&&truckMax>0&&totalKg>truckMax)check.push(tx('Too heavy for one truck: {0} kg, {1} kg over the {2} kg limit.',fmtNum(totalKg),fmtNum(totalKg-truckMax),fmtNum(truckMax)));
+  const palletCount=palletsNeeded(rows);
+  if(transport==='Truck'&&palletMax>0&&palletCount>palletMax)check.push(tx('Too many pallets for one truck: {0}, {1} more than the {2} a truck carries.',fmtNum(palletCount),fmtNum(palletCount-palletMax),fmtNum(palletMax)));
   return {must,check};
 };
 
@@ -2772,6 +2784,7 @@ function ShipCalculator({shipping}){
   };
   const canAdd=!!picked&&qty>0;
   const partPack=picked&&qty>0&&!isWhole(qty/picked.packSize);
+  const byPallet=picked?.palletSize>0;
   const addLine=()=>{
     if(!canAdd)return;
     setLines(ls=>ls.some(l=>l.itemId===packId)
@@ -2805,10 +2818,12 @@ function ShipCalculator({shipping}){
   // Each line rounded up, then added: a box or a pallet holds one product, so parts of them can't be put together.
   const wholeSum=key=>known.reduce((n,r)=>n+wholeUp(r.c[key]),0);
   const exactNote=key=>isWhole(sum(key))&&Math.round(sum(key))===wholeSum(key)?null:`${fmtNum(sum(key))} exact`;
-  // The limit is in the shared data with the other figures. A file without one just gives no warning.
-  const truckMax=shipping.truckMaxKg;
+  // The limits are in the shared data with the other figures. A file without one just gives no warning.
+  const truckMax=shipping.truckMaxKg,palletMax=shipping.truckMaxPallets;
   const totalKg=sum('totalKg');
   const overTruck=truckMax>0&&totalKg>truckMax;
+  const palletCount=palletsNeeded(known);
+  const overPallets=palletMax>0&&palletCount>palletMax;
   const totalCost=known.reduce((n,r)=>n+(r.cost??0),0);
   const anyPrice=known.some(r=>r.cost!=null);
   const shipped=lineGroups.map(g=>g.product);
@@ -2841,6 +2856,12 @@ function ShipCalculator({shipping}){
           <NumInput id="ship-qty" value={qty} onChange={setQty} placeholder="0" onKeyDown={e=>{if(e.key==='Enter')addLine();}}/>
         </div>
         <div className="field ship-add-num">
+          <label htmlFor="ship-pallets">{tx('Pallets')}</label>
+          {/* The same order counted in pallets: typing here fills in the amount. */}
+          <NumInput id="ship-pallets" value={byPallet&&qty!=null?palletsField(qty/picked.palletSize):null} disabled={!byPallet} placeholder="0"
+            onChange={v=>setQty(qtyForPallets(picked,v))} onKeyDown={e=>{if(e.key==='Enter')addLine();}}/>
+        </div>
+        <div className="field ship-add-num">
           <label htmlFor="ship-new-price">{tx('Price per {0}',product?.unit??tx('L or kg'))}</label>
           <NumInput id="ship-new-price" value={price} onChange={setPrice} placeholder="–" onKeyDown={e=>{if(e.key==='Enter')addLine();}}/>
         </div>
@@ -2863,9 +2884,10 @@ function ShipCalculator({shipping}){
         <StatCard label={tx('Boxes')} value={fmtNum(wholeSum('boxes'))} sub={exactNote('boxes')}/>
         <StatCard label={tx('Total price')} value={anyPrice?fmtNum(totalCost):'–'}/>
       </div>
-      {overTruck&&(
+      {(overTruck||overPallets)&&(
         <div className="ship-alerts">
-          <div className="alert alert-error">{tx('Too heavy for one truck: this shipment weighs {0} kg, {1} kg over the {2} kg limit.',fmtNum(totalKg),fmtNum(totalKg-truckMax),fmtNum(truckMax))}</div>
+          {overTruck&&<div className="alert alert-error">{tx('Too heavy for one truck: this shipment weighs {0} kg, {1} kg over the {2} kg limit.',fmtNum(totalKg),fmtNum(totalKg-truckMax),fmtNum(truckMax))}</div>}
+          {overPallets&&<div className="alert alert-error">{tx('Too many pallets for one truck: this shipment takes {0}, {1} more than the {2} a truck carries.',fmtNum(palletCount),fmtNum(palletCount-palletMax),fmtNum(palletMax))}</div>}
         </div>
       )}
 
@@ -2920,7 +2942,16 @@ function ShipCalculator({shipping}){
                     <tr className="ship-line">
                       <td rowSpan={2} className="mono nowrap">{fmtPack(it)}</td>
                       <td rowSpan={2} className="num"><div className="input-unit ship-qty"><NumInput aria-label={tx('Order for {0} {1}',p.name,fmtPack(it))} value={l.qty} onChange={v=>updateLine(l.itemId,{qty:v})}/><span>{it.unit}</span></div></td>
-                      <td className="num group-start"><ShipCount n={c.pallets}/></td><td className="num">{fmtNum(c.palletKg)}</td>
+                      <td className="num group-start">
+                        {/* Typing a pallet count sets the order to what that many pallets hold. */}
+                        {it.palletSize>0?(
+                          <div className="ship-pallets">
+                            <NumInput className="ship-pallets-input" aria-label={tx('Pallets for {0} {1}',p.name,fmtPack(it))} value={l.qty==null?null:palletsField(c.pallets)} onChange={v=>updateLine(l.itemId,{qty:qtyForPallets(it,v)})}/>
+                            {!isWhole(c.pallets)&&<span className="ship-count" title={tx('Works out at {0}, so {1} are needed',fmtNum(c.pallets,2),fmtNum(wholeUp(c.pallets)))}><span className="ship-arrow" aria-hidden="true">→ </span><b>{fmtNum(wholeUp(c.pallets))}</b></span>}
+                          </div>
+                        ):<ShipCount n={c.pallets}/>}
+                      </td>
+                      <td className="num">{fmtNum(c.palletKg)}</td>
                       <td rowSpan={2} className="num group-start">{fmtNum(it.density,3)}</td><td rowSpan={2} className="num">{fmtNum(c.productKg)}</td>
                       <td className={'num group-start'+(isWhole(c.units)?'':' ship-warn')} title={isWhole(c.units)?undefined:tx('This order isn\'t a whole number of {0} packs',fmtPack(it))}><ShipCount n={c.units}/></td><td className="num">{fmtNum(c.containerKg)}</td>
                       <td className="num group-start"><ShipCount n={c.boxes}/></td><td className="num">{fmtNum(c.boxKg)}</td>
@@ -2957,7 +2988,7 @@ function ShipCalculator({shipping}){
               <tr>
                 <td>{tx('Total')}</td>
                 <td className="num">{fmtNum(known.reduce((n,r)=>n+(r.l.qty||0),0))}</td>
-                <td className="num group-start"><ShipCount n={sum('pallets')} whole={wholeSum('pallets')} title={tx('Each line rounded up, then added: products aren\'t mixed on a pallet')}/></td><td className="num">{fmtNum(sum('palletKg'))}</td>
+                <td className={'num group-start'+(overPallets?' ship-warn':'')}><ShipCount n={sum('pallets')} whole={wholeSum('pallets')} title={tx('Each line rounded up, then added: products aren\'t mixed on a pallet')}/></td><td className="num">{fmtNum(sum('palletKg'))}</td>
                 <td className="num group-start"/><td className="num">{fmtNum(sum('productKg'))}</td>
                 <td className="num group-start"><ShipCount n={sum('units')} whole={wholeSum('units')} title={tx('Each line rounded up, then added')}/></td><td className="num">{fmtNum(sum('containerKg'))}</td>
                 <td className="num group-start"><ShipCount n={sum('boxes')} whole={wholeSum('boxes')} title={tx('Each line rounded up, then added')}/></td><td className="num">{fmtNum(sum('boxKg'))}</td>
@@ -4378,8 +4409,11 @@ function ShipTablesEditor({draft,setDraft}){
       <div className="ship-ref-grid wide">
         <div className="card-flat">
           <div className="card-title">{tx('Truck')}</div>
-          <div className="hint">{tx('The calculator warns when a shipment weighs more than this.')}</div>
-          <div className="input-unit ship-num" style={{marginTop:'var(--space-2)'}}><NumInput aria-label={tx('Most a truck can carry')} value={draft.truckMaxKg??null} onChange={v=>setDraft({...draft,truckMaxKg:v})}/><span>kg</span></div>
+          <div className="hint">{tx('The calculator warns when a shipment weighs more than this, or takes more pallets.')}</div>
+          <div className="flex items-center gap-3" style={{marginTop:'var(--space-2)'}}>
+            <div className="input-unit ship-num"><NumInput aria-label={tx('Most a truck can carry')} value={draft.truckMaxKg??null} onChange={v=>setDraft({...draft,truckMaxKg:v})}/><span>kg</span></div>
+            <div className="input-unit ship-num ship-truck-pallets"><NumInput aria-label={tx('Most pallets a truck can carry')} value={draft.truckMaxPallets??null} onChange={v=>setDraft({...draft,truckMaxPallets:v})}/><span>{tx('pallets')}</span></div>
+          </div>
         </div>
         {SHIP_CATALOGUES.map(cat=>{
           const rows=draft[cat.key]??[];
