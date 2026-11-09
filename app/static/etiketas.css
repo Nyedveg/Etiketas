@@ -67,6 +67,15 @@
 .zz-stick{stroke-dashoffset:1;animation:zzDraw .3s var(--ease) both}
 .zz-joint{opacity:0;transform:scale(0);transform-box:fill-box;transform-origin:center;animation:zzJointIn .22s var(--ease) both}
 
+/* -- Label and box size reference (Shipment → Pallets & packaging) ---------------- */
+.size-ref{display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-3)}
+.size-ref-kind{font:600 var(--fs-2xs) var(--font-mono);text-transform:uppercase;letter-spacing:var(--tracking-label);color:var(--text3);margin-bottom:6px}
+.size-ref-row{display:flex;flex-wrap:wrap;gap:6px}
+.size-ref-chip{min-width:72px;padding:6px 11px;border-radius:var(--radius-sm);background:var(--surface2);border:1px solid var(--border);text-align:center}
+.size-ref-chip.muted{opacity:.6}
+.size-ref-size{font:600 var(--fs-sm) var(--font-display);color:var(--text)}
+.size-ref-dims{font:var(--fs-2xs) var(--font-mono);color:var(--text3);margin-top:2px}
+
 /* -- Searchable dropdown (SearchSelect) ------------------------------------------- */
 /* The arrow is drawn in the field's background, so the field sizes exactly as the <select> it replaced did. */
 .input.ss-input{padding-right:30px;text-overflow:ellipsis;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a8f9c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center}
@@ -105,7 +114,6 @@
 .ship-pallets-input{width:72px}
 .ship-truck{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-2)}
 .ship-truck .field{margin-bottom:0}
-.ship-clip{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ship-remove{border:none;background:none;color:var(--text3);cursor:pointer;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .ship-remove:hover{background:rgba(var(--danger-rgb),.12);color:var(--danger)}
 .ship-alerts{display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-3)}
@@ -258,8 +266,6 @@
 .ship-table-fit>.table.sticky-first>thead th:first-child{z-index:3;box-shadow:1px 0 0 var(--border),inset 0 -1px 0 var(--border)}
 .ship-unit-long .input{padding-right:64px}
 .ship-sheet-line{margin-top:var(--space-1)}
-.ship-open-sheet{margin-top:var(--space-3)}
-.ship-open-sheet .ship-profile{margin-bottom:0}
 .ship-used{display:block;text-align:center;font-size:var(--fs-xs);cursor:help}
 .ship-table-edit .kind-col{width:120px}
 .ship-table-edit td{padding:var(--space-1) 6px}

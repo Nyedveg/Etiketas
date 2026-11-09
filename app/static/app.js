@@ -400,7 +400,8 @@ function App(){
   const refreshMap=useCallback(async()=>{const m=await api.scanLabels();setMap(m);},[]);
   if(loading)return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:20}}>
-      <img src="/static/img/Nando-white.png" alt="Etiketas" style={{height:52,opacity:.7}}/>
+      <img src="/static/img/Nando-color.png" alt="Etiketas" className="logo-on-light" style={{height:52}}/>
+      <img src="/static/img/Nando-white.png" alt="Etiketas" className="logo-on-dark" style={{height:52,opacity:.85}}/>
       <div className="spinner" style={{width:28,height:28,marginTop:4}}/>
       <span style={{color:'var(--text2)',fontSize:13,fontFamily:'var(--font-mono)'}}>{tx('Loading Etiketas...')}</span>
     </div>
@@ -417,7 +418,7 @@ function App(){
             {view==='new'&&<NewLabelWizard config={config} map={map} setMap={setMap} shipping={shipping}/>}
             {view==='browse'&&<LabelsBrowser map={map} setMap={setMap} config={config} onNewLabel={()=>navigate('new')}/>}
             {view==='information'&&<Information config={config} map={map} setMap={setMap} shipping={shipping}/>}
-            {view==='shipment'&&<Shipment shipping={shipping}/>}
+            {view==='shipment'&&<Shipment shipping={shipping} config={config}/>}
             {view==='sku'&&<SkuPage shipping={shipping} config={config} files={map?.files} setSkuList={setSkuList}/>}
             {view==='editor'&&<Editor config={config} saveConfig={saveConfig} shipping={shipping} saveShipping={saveShipping} setSafety={setSafety} setSkuRules={setSkuRules} setSkuList={setSkuList} unsaved={unsaved} files={map?.files}/>}
             {view==='settings'&&<AppSettings config={config} saveConfig={saveConfig} refreshMap={refreshMap} unsaved={unsaved} checkUpdates={updates.checkNow}/>}
@@ -437,8 +438,10 @@ function Sidebar({view,setView,map,refreshMap}){
   return(
     <div className="sidebar">
       <div className="sidebar-logo">
-        <img src="/static/img/Nando-ico.png" alt="" className="sidebar-logo-mark"/>
-        <img src="/static/img/Nando-white.png" alt="Nando" className="sidebar-logo-img"/>
+        <img src="/static/img/Nando-mark.png" alt="" className="sidebar-logo-mark logo-on-light"/>
+        <img src="/static/img/Nando-ico.png" alt="" className="sidebar-logo-mark logo-on-dark"/>
+        <img src="/static/img/Nando-color.png" alt="Nando" className="sidebar-logo-img logo-on-light"/>
+        <img src="/static/img/Nando-white.png" alt="Nando" className="sidebar-logo-img logo-on-dark"/>
         <div className="sidebar-label">
           <div className="sidebar-logo-text">Etiketas</div>
           <div className="sidebar-logo-sub">Nando Bio</div>
@@ -1358,21 +1361,22 @@ function NewLabelWizard({config,map,setMap,shipping}){
 }
 // Label sizes per category, with the product's own category highlighted.
 const DIM_ROWS=[['PAM_normal',tx('PAM Normal'),'var(--pam)'],['PAM_acidic',tx('PAM Acidic'),'var(--warning)'],['MO','MO','var(--mo)'],['MO_liquid',tx('MO Liquid'),'var(--mo)'],['CE','CE','var(--ce)'],['CE_solid',tx('CE Solid'),'var(--ce)']];
-function SizeTable({config,dimKey}){
+// Every label size by product kind, and how many of each pack go in a box. Shown under Shipment → Pallets & packaging.
+function SizeTable({config}){
+  const noBox=[...new Set(Object.values(config?.packagingSizes??{}).flat())].filter(sz=>!config?.boxMultipliers?.[sz]);
   return(
-    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+    <div className="size-ref">
       {DIM_ROWS.map(([key,label,clr])=>{
-        const isActive=dimKey===key;
         const entries=Object.entries(config?.dimensions?.[key]??{});
         if(!entries.length)return null;
         return(
           <div key={key}>
-            <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:isActive?clr:'var(--text3)',fontWeight:isActive?700:400,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:6}}>{label}</div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+            <div className="size-ref-kind" style={{color:clr}}>{label}</div>
+            <div className="size-ref-row">
               {entries.map(([sz,dims])=>(
-                <div key={sz} style={{background:isActive?'var(--surface2)':'var(--surface3)',border:'1px solid '+(isActive?clr:'var(--border2)'),borderRadius:6,padding:'6px 11px',textAlign:'center',minWidth:64,transition:'all .2s'}}>
-                  <div style={{fontSize:12,fontWeight:600,fontFamily:'var(--font-display)',color:isActive?'var(--text)':'var(--text3)'}}>{sz}</div>
-                  <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text3)',marginTop:2}}>{dims}mm</div>
+                <div key={sz} className="size-ref-chip">
+                  <div className="size-ref-size">{sz}</div>
+                  <div className="size-ref-dims">{dims} mm</div>
                 </div>
               ))}
             </div>
@@ -1380,18 +1384,18 @@ function SizeTable({config,dimKey}){
         );
       })}
       <div>
-        <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text3)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:6}}>{tx('Box')}</div>
-        <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+        <div className="size-ref-kind">{tx('Box')}</div>
+        <div className="size-ref-row">
           {Object.entries(config?.boxMultipliers??{}).map(([sz,box])=>(
-            <div key={sz} style={{background:'var(--surface3)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 11px',textAlign:'center',minWidth:64}}>
-              <div style={{fontSize:11,fontFamily:'var(--font-mono)',color:'var(--text3)'}}>{sz}</div>
-              <div style={{fontSize:11,fontWeight:600,fontFamily:'var(--font-display)',color:'var(--text)',marginTop:2}}>{box}</div>
+            <div key={sz} className="size-ref-chip">
+              <div className="size-ref-dims">{sz}</div>
+              <div className="size-ref-size">{box}</div>
             </div>
           ))}
-          {[...new Set(Object.values(config?.packagingSizes??{}).flat())].filter(sz=>!config?.boxMultipliers?.[sz]).map(sz=>(
-            <div key={sz} style={{background:'var(--surface3)',border:'1px solid var(--border2)',borderRadius:6,padding:'6px 11px',textAlign:'center',minWidth:64}}>
-              <div style={{fontSize:11,fontFamily:'var(--font-mono)',color:'var(--text3)'}}>{sz}</div>
-              <div style={{fontSize:11,fontFamily:'var(--font-display)',color:'var(--text3)',marginTop:2}}>{tx('No box')}</div>
+          {noBox.map(sz=>(
+            <div key={sz} className="size-ref-chip muted">
+              <div className="size-ref-dims">{sz}</div>
+              <div className="size-ref-size">{tx('No box')}</div>
             </div>
           ))}
         </div>
@@ -1416,7 +1420,6 @@ function Information({config,map,setMap,shipping}){
   const [fileType,setFileType]=useState('all');
   const [showWip,setShowWip]=useState('all');
   const [catFilter,setCatFilter]=useState('all');
-  const [sizeRefOpen,setSizeRefOpen]=useState(false);
   const [iconLib,setIconLib]=useState(null);
   const [iconAssign,setIconAssign]=useState({});
   useEffect(()=>{
@@ -1460,7 +1463,7 @@ function Information({config,map,setMap,shipping}){
         </div>
         <div className="scroll-y pick-list">
           {filteredProds.map(p=>(
-            <button key={p.name} className={'pick-row'+(selected===p.name?' on':'')} onClick={()=>{setSelected(selected===p.name?null:p.name);setSizeRefOpen(false);}}>
+            <button key={p.name} className={'pick-row'+(selected===p.name?' on':'')} onClick={()=>setSelected(selected===p.name?null:p.name)}>
               <span className="pick-row-name">{p.name}</span>
               <span style={{fontSize:9,fontFamily:'var(--font-mono)',padding:'1px 4px',borderRadius:2,background:catStyle(p.category).bg,color:catStyle(p.category).color,flexShrink:0}}>{p.category}</span>
             </button>
@@ -1472,20 +1475,7 @@ function Information({config,map,setMap,shipping}){
       {/* ── RIGHT: detail panel ── */}
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
         {!selected?(
-          <div style={{flex:1,display:'flex',flexDirection:'column',gap:12,overflow:'hidden'}}>
-            <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'4px 0'}}>{tx('Select a product to view details.')}</div>
-            {/* Collapsible size reference */}
-            <button onClick={()=>setSizeRefOpen(o=>!o)}
-              style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',borderRadius:'var(--radius-sm)',border:'1px solid var(--border2)',background:'var(--surface2)',cursor:'pointer',transition:'all .15s',flexShrink:0,textAlign:'left'}}>
-              <span style={{fontSize:12,fontWeight:500,color:'var(--text)',flex:1}}>{tx('Label & Box Size Reference')}</span>
-              <span style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--font-mono)',transition:'transform .2s',display:'inline-block',transform:sizeRefOpen?'rotate(180deg)':'none'}}>▾</span>
-            </button>
-            {sizeRefOpen&&(
-              <div style={{flex:1,overflowY:'auto',paddingRight:4}}>
-                <SizeTable config={config} dimKey={dimKey}/>
-              </div>
-            )}
-          </div>
+          <div style={{color:'var(--text3)',fontSize:13,fontStyle:'italic',padding:'4px 0'}}>{tx('Select a product to view details.')}</div>
         ):(
           <div key={selected} style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
             {/* Large Z watermark, low opacity, behind the panel content */}
@@ -1511,7 +1501,7 @@ function Information({config,map,setMap,shipping}){
                 <div key={i} title={`Brand${i+1}: ${c||'#808080'}`} className="info-swatch" style={{flex:1,height:12,borderRadius:3,background:c||'#808080',border:'1px solid rgba(255,255,255,.08)',animationDelay:`${i*45}ms`,boxShadow:`0 2px 6px ${(c||'#808080')}55`}}/>
               ))}
             </div>
-            {/* Asset dots + size reference — inline, no separate tabs */}
+            {/* Asset dots and this product's label sizes. Every size is under Shipment → Pallets & packaging. */}
             <div style={{display:'flex',alignItems:'center',gap:'var(--space-2)',marginBottom:'var(--space-3)',flexShrink:0,flexWrap:'wrap'}}>
               {[['QR',prodAssets.qr,'qrcodes'],[tx('Logo'),prodAssets.logo,'logos']].map(([label,ok,dirKey])=>(
                 <button key={label} title={tx('{0}: {1} — click to open folder',label,ok?'found':'missing')}
@@ -1529,15 +1519,7 @@ function Information({config,map,setMap,shipping}){
                   </span>
                 ))}
               </div>
-              <button onClick={()=>setSizeRefOpen(o=>!o)}
-                style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--accent)',background:'none',border:'none',cursor:'pointer',padding:'3px 4px',display:'flex',alignItems:'center',gap:3,flexShrink:0}}>{txj('All sizes{0}',<span style={{display:'inline-block',transition:'transform .2s',transform:sizeRefOpen?'rotate(180deg)':'none'}}>▾</span>)}
-              </button>
             </div>
-            {sizeRefOpen&&(
-              <div style={{marginBottom:'var(--space-3)',padding:'var(--space-3)',borderRadius:'var(--radius-sm)',background:'var(--surface2)',border:'1px solid var(--border2)',maxHeight:280,overflowY:'auto',flexShrink:0}}>
-                <SizeTable config={config} dimKey={dimKey}/>
-              </div>
-            )}
             {/* Traits — always visible, not tucked behind a tab */}
             <div style={{display:'flex',flexWrap:'wrap',gap:'var(--space-2)',marginBottom:'var(--space-4)',flexShrink:0}}>
               {prodIcons.length===0?(
@@ -2709,7 +2691,8 @@ const readShipment=()=>{
 };
 const shipmentMemory={tab:'calc'};   // which tab, kept until the page is reloaded
 
-function Shipment({shipping}){
+// Product details and data sheets are on the Information page, so this page is the calculator and its reference tables.
+function Shipment({shipping,config}){
   const [tab,setTabState]=useState(shipmentMemory.tab);
   const setTab=t=>{shipmentMemory.tab=t;setTabState(t);};
   if(shipping?.error)return <div className="alert alert-error">{tx('{0}. Close whatever has it open, then reload this page.',txs(shipping.error))}</div>;
@@ -2722,15 +2705,13 @@ function Shipment({shipping}){
   return(
     <div>
       <div className="tabs">
-        {[['calc',tx('Calculator')],['products',tx('Product data')],['sheets',tx('Data sheets')],['reference',tx('Pallets & packaging')]].map(([t,l])=>(
+        {[['calc',tx('Calculator')],['reference',tx('Pallets & packaging')]].map(([t,l])=>(
           <button key={t} className={`tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>{l}</button>
         ))}
       </div>
       <div key={tab} className="view-anim">
         {tab==='calc'&&<ShipCalculator shipping={shipping}/>}
-        {tab==='products'&&<ShipProducts shipping={shipping}/>}
-        {tab==='sheets'&&<ShipDataSheets shipping={shipping}/>}
-        {tab==='reference'&&<ShipReference shipping={shipping}/>}
+        {tab==='reference'&&<ShipReference shipping={shipping} config={config}/>}
       </div>
     </div>
   );
@@ -3228,128 +3209,6 @@ function ShipCalculator({shipping}){
   );
 }
 
-// Every product with its details; clicking one shows its packs.
-function ShipProducts({shipping}){
-  const [search,setSearch]=useState('');
-  const [group,setGroup]=useState('all');
-  const [open,setOpen]=useState(null);
-  const [sort,setSortState]=useState(shipmentMemory.productSort??'az');
-  const setSort=s=>{shipmentMemory.productSort=s;setSortState(s);};
-  const all=shipping.products??[];
-  const groups=useMemo(()=>[...new Set(all.map(p=>p.group).filter(Boolean))],[all]);
-  // New products go on the end of the list, so its own order is the order they were entered in.
-  const shown=useMemo(()=>{
-    const list=all
-      .filter(p=>group==='all'||p.group===group)
-      .filter(p=>matchesSearch(`${p.name} ${p.customsCode} ${unCodeOf(p,shipping)} ${skuCodesOf(p)} ${p.subgroup} ${(p.links??[]).join(' ')}`,search));
-    return sort==='az'?list.sort(byProfileName):sort==='newest'?list.reverse():list;
-  },[all,group,search,sort,shipping]);
-  return(
-    <>
-      <div className="fb">
-        <div className="fb-row">
-          <div className="fb-search">
-            <span className="fb-search-ico"><Icon.Search size={15}/></span>
-            <input className="input" type="text" value={search} placeholder={tx('Search products, customs codes…')} aria-label={tx('Search product data')} onChange={e=>setSearch(e.target.value)}/>
-          </div>
-          <div className="seg" role="group" aria-label={tx('Group')}>
-            {['all',...groups].map(g=>(
-              <button key={g} type="button" aria-pressed={group===g} className={'seg-btn'+(group===g?' on':'')} onClick={()=>setGroup(g)}>{g==='all'?tx('All'):g}</button>
-            ))}
-          </div>
-          <div className="seg" role="group" aria-label={tx('Sort')}>
-            {[['az','A–Z'],['newest',tx('Newest')],['oldest',tx('Oldest')]].map(([k,l])=>(
-              <button key={k} type="button" aria-pressed={sort===k} className={'seg-btn'+(sort===k?' on':'')} onClick={()=>setSort(k)}>{l}</button>
-            ))}
-          </div>
-          <span className="fb-total">{tx('{0} of {1} products · edit in Editor → Shipping',shown.length,all.length)}</span>
-        </div>
-      </div>
-      <div className="card table-scroll ship-table-fit">
-        <table className="table dense sticky-first">
-          <thead>
-            <tr>
-              <th>{tx('Product')}</th><th>{tx('Packs')}</th><th>{tx('Group')}</th><th>{tx('Subgroup')}</th><th>{tx('SKU code')}</th><th>{tx('Customs code')}</th><th>{tx('Origin')}</th>
-              <th>{tx('Shelf life')}</th><th>{tx('Storage')}</th><th>ADR</th><th>{tx('UN code')}</th><th>{tx('Packing group')}</th><th>{tx('Air')}</th>
-              <th className="num">{tx('Density')}</th><th>{tx('Note')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map(p=>(
-              <Fragment key={p.id}>
-                <tr className={open===p.id?'row-selected':''} style={{cursor:'pointer'}} onClick={()=>setOpen(o=>o===p.id?null:p.id)}>
-                  <td className="ship-name">{p.name}</td>
-                  <td className="mono nowrap">{[...(p.packs??[])].sort((a,b)=>a.packSize-b.packSize).map(k=>fmtNum(k.packSize,3)).join(' · ')} {p.unit}</td>
-                  <td>{groupBadge(p.group)}</td>
-                  <td><div className="ship-clip" title={p.subgroup}>{p.subgroup||'–'}</div></td>
-                  <td className="mono nowrap">{skuCodesOf(p)||'–'}</td>
-                  <td className="mono nowrap">{p.customsCode||'–'}</td>
-                  <td className="mono">{p.origin||'–'}</td>
-                  <td className="nowrap">{fmtMonths(p.shelfLifeMonths)}{(p.tds??[]).length===0&&<span className="muted" title={tx('No data sheet is linked, so this hasn\'t been checked against a document')}> *</span>}</td>
-                  <td className="nowrap">{fmtStorage(p)}</td>
-                  <td className="mono">{p.adrClass||tx('None')}</td>
-                  <td className="mono nowrap">{unCodeOf(p,shipping)||'–'}</td>
-                  <td className="mono">{p.packingGroup||'–'}</td>
-                  <td><AirBadge p={p}/></td>
-                  <td className="num">{p.unit==='L'?fmtNum(p.density,3):'–'}</td>
-                  <td><div className="ship-clip" title={p.note}>{p.note||''}</div></td>
-                </tr>
-                {open===p.id&&<tr className="ship-open-row"><td colSpan={15}><div className="ship-open"><ShipPackTable product={p} shipping={shipping}/>{tdsOf(p,shipping).map(t=><div key={t.id} className="ship-open-sheet"><TdsCard sheet={t}/></div>)}</div></td></tr>}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
-// Every TDS document on file; clicking one shows what it says.
-function ShipDataSheets({shipping}){
-  const [search,setSearch]=useState('');
-  const [open,setOpen]=useState(null);
-  const all=shipping.tds??[];
-  const shown=useMemo(()=>all.filter(t=>matchesSearch(`${t.name} ${t.code} ${t.type} ${t.file}`,search)).sort((a,b)=>a.name.localeCompare(b.name)),[all,search]);
-  return(
-    <>
-      <div className="fb">
-        <div className="fb-row">
-          <div className="fb-search">
-            <span className="fb-search-ico"><Icon.Search size={15}/></span>
-            <input className="input" type="text" value={search} placeholder={tx('Search data sheets…')} aria-label={tx('Search data sheets')} onChange={e=>setSearch(e.target.value)}/>
-          </div>
-          <span className="fb-total">{tx('{0} of {1}{2} · edit in Editor → Data sheets',shown.length,all.length,shipping.tdsReadOn?tx(' · read from the TDS documents on {0}',shipping.tdsReadOn):'')}</span>
-        </div>
-      </div>
-      <div className="card table-scroll ship-table-fit">
-        <table className="table dense sticky-first">
-          <thead><tr><th>{tx('Product')}</th><th>{tx('Code')}</th><th>{tx('Version')}</th><th>{tx('Revised')}</th><th>{tx('Shelf life')}</th><th>{tx('Storage')}</th><th>{tx('Form')}</th><th>pH</th><th>{tx('Density')}</th><th>{tx('Packaging')}</th><th>{tx('Hazard classification')}</th></tr></thead>
-          <tbody>
-            {shown.map(t=>(
-              <Fragment key={t.id}>
-                <tr className={open===t.id?'row-selected':''} style={{cursor:'pointer'}} onClick={()=>setOpen(o=>o===t.id?null:t.id)}>
-                  <td className="ship-name">{t.name}{t.older&&<div className="hint">{tx('Older document')}</div>}</td>
-                  <td className="mono">{t.code||'–'}</td>
-                  <td className="mono">{t.version||'–'}</td>
-                  <td className="mono nowrap">{t.revised||'–'}</td>
-                  <td className="nowrap">{fmtMonths(t.shelfLifeMonths)}</td>
-                  <td className="nowrap">{fmtStorage(t)}</td>
-                  <td>{t.form||'–'}</td>
-                  <td className="mono nowrap">{t.ph||'–'}</td>
-                  <td className="mono nowrap">{t.density||'–'}</td>
-                  <td className="nowrap">{t.packaging||'–'}</td>
-                  <td><div className="ship-clip" title={t.hazard}>{t.hazard||'–'}</div></td>
-                </tr>
-                {open===t.id&&<tr className="ship-open-row"><td colSpan={11}><div className="ship-open"><TdsCard sheet={t}/></div></td></tr>}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
 // The catalogues the packs pick from, then the workbook's other reference tables.
 const SHIP_CATALOGUES=[
   {key:'pallets',title:tx('Pallets'),usedBy:'palletId',hint:tx('Only a pallet with a weight can be picked for a pack.'),columns:[
@@ -3378,11 +3237,17 @@ const RefTable=({title,hint,columns,rows})=>(
     </table>
   </div>
 );
-const ShipReference=({shipping})=>(
-  <div className="ship-ref-grid">
-    {SHIP_CATALOGUES.map(c=><RefTable key={c.key} title={c.title} hint={c.hint} columns={c.columns} rows={shipping[c.key]??[]}/>)}
-    {(shipping.tables??[]).map(t=><RefTable key={t.id} title={tx(t.title)} hint={t.note} columns={tableColumns(t)} rows={t.rows}/>)}
-  </div>
+const ShipReference=({shipping,config})=>(
+  <>
+    <div className="card ship-section">
+      <div className="card-title">{tx('Label & Box Size Reference')}</div>
+      <SizeTable config={config}/>
+    </div>
+    <div className="ship-ref-grid">
+      {SHIP_CATALOGUES.map(c=><RefTable key={c.key} title={c.title} hint={c.hint} columns={c.columns} rows={shipping[c.key]??[]}/>)}
+      {(shipping.tables??[]).map(t=><RefTable key={t.id} title={tx(t.title)} hint={t.note} columns={tableColumns(t)} rows={t.rows}/>)}
+    </div>
+  </>
 );
 
 // ── Settings ─────────────────────────────────────────────────────────────────────────
