@@ -1143,14 +1143,14 @@ function NewLabelWizard({config,map,setMap,shipping}){
                     <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text3)',background:'var(--surface3)',padding:'2px 6px',borderRadius:3}}>{code}</span>
                     <span style={{fontSize:11,color:'var(--text3)',marginLeft:'auto'}}>{tx('Slot LANG{0}',i+1)}</span>
                   </div>
-                  <select className="input"
-                    style={{color:langFiles[i]?'var(--text)':'var(--text3)',fontSize:'var(--fs-sm)'}}
+                  <SearchSelect aria-label={tx('Translation for slot LANG{0}',i+1)}
+                    style={{fontSize:'var(--fs-sm)'}}
                     value={langFiles[i]??''}
-                    onChange={e=>{const v=e.target.value||null;setLangFiles(prev=>{const n=[...prev];n[i]=v;return n;})}}>
+                    onChange={v=>setLangFiles(prev=>{const n=[...prev];n[i]=v||null;return n;})}>
                     <option value=''>{tx('— Skip (keep template text) —')}</option>
                     {translationsByName.some(f=>f.code===code)&&<optgroup label={l?.name??code}>{translationsByName.filter(f=>f.code===code).map(translationOption)}</optgroup>}
                     {translationsByName.some(f=>f.code!==code)&&<optgroup label={tx('Other languages')}>{translationsByName.filter(f=>f.code!==code).map(translationOption)}</optgroup>}
-                  </select>
+                  </SearchSelect>
                   {(()=>{const sel=transFiles.find(f=>f.path===langFiles[i]);return sel?.product&&!sameProduct(sel.product,product)?(<div style={{marginTop:6,fontSize:11,color:'var(--warning)',display:'flex',alignItems:'center',gap:5}}><span>⚠</span><span>{txj('This file is for {0}, not {1}. The text may not match.',<strong>{sel.product}</strong>,<strong>{product}</strong>)}</span></div>):null;})()}
                   {(()=>{const sel=transFiles.find(f=>f.path===langFiles[i]);return sel?.status==='draft'?(<div style={{marginTop:6,fontSize:11,color:'var(--warning)',display:'flex',alignItems:'center',gap:5}}><span>⚠</span><span>{txj('This translation is marked {0} — some fields may still be blank. Check it in Etiketas+ before using it on a real label.',<strong>{tx('draft')}</strong>)}</span></div>):null;})()}
                 </div>
@@ -1409,6 +1409,7 @@ function Information({config,map,setMap,shipping}){
     const own=(shipping?.tds??[]).filter(t=>t.labels?.includes(selected));
     return own.length?own:[...new Set(profiles.flatMap(p=>tdsOf(p,shipping)))];     // TerraFol: only Periterra's document, through the profile they share
   },[shipping,selected,profiles]);
+  const safety=selected?shipping?.safety?.[selected]:null;
   const [search,setSearch]=useState('');
   const [colors,setColors]=useState({});
   const [assets,setAssets]=useState({});
@@ -1549,7 +1550,7 @@ function Information({config,map,setMap,shipping}){
               ))}
             </div>
             <div className="seg" role="group" aria-label={tx('Show')} style={{alignSelf:'flex-start',flexShrink:0,marginBottom:'var(--space-3)'}}>
-              {[['files',tx('Files'),prodFiles.length],['shipping',tx('Shipping'),profiles.length+sheets.length]].map(([v,l,n])=>(
+              {[['files',tx('Files'),prodFiles.length],['shipping',tx('Shipping'),profiles.length],['sheets',tx('Data sheets'),sheets.length+(safety?1:0)]].map(([v,l,n])=>(
                 <button key={v} type="button" aria-pressed={detail===v} className={'seg-btn'+(detail===v?' on':'')} onClick={()=>setDetail(v)}>
                   {l} <span className="mono muted" style={{fontSize:'var(--fs-xs)'}}>{n}</span>
                 </button>
@@ -1559,8 +1560,14 @@ function Information({config,map,setMap,shipping}){
               <div style={{flex:1,overflowY:'auto',minHeight:0}}>
                 {profiles.length===0
                   ?<div className="muted" style={{fontSize:'var(--fs-md)',fontStyle:'italic',marginBottom:'var(--space-4)'}}>{tx('No shipping data for {0} yet. Add it in Editor → Shipping.',selected)}</div>
-                  :profiles.map(p=><ShippingProfile key={p.id} product={p} shipping={shipping}/>)}
+                  :profiles.map(p=><ShippingProfile key={p.id} product={p} shipping={shipping} withSafety={false}/>)}
+              </div>
+            ):detail==='sheets'?(
+              /* The data sheets on their own, with the room the hazard labelling needs */
+              <div style={{flex:1,overflowY:'auto',minHeight:0}}>
+                {safety&&<SafetyCard safety={safety}/>}
                 {sheets.map(t=><TdsCard key={t.id} sheet={t}/>)}
+                {!safety&&!sheets.length&&<div className="muted" style={{fontSize:'var(--fs-md)',fontStyle:'italic'}}>{tx('No data sheet information for {0} yet.',selected)}</div>}
               </div>
             ):(
             /* Files, and the product's mockup beside them */
@@ -1674,8 +1681,8 @@ const facetCounts=(entries,filters,query,ctx,langCodes)=>{
   return out;
 };
 
-// The applied filters as removable pills, in toolbar order.
-const appliedItems=filters=>{
+// The applied filters as removable pills, in toolbar order. A language shows by name when the language list has it.
+const appliedItems=(filters,langName)=>{
   const label=(opts,v)=>opts.find(o=>o[0]===v)?.[1]??v;
   const items=[];
   if(filters.cat)items.push({key:'cat',value:filters.cat,k:tx('Category'),label:filters.cat,tone:catStyle(filters.cat)});
@@ -1683,7 +1690,7 @@ const appliedItems=filters=>{
   filters.formats.forEach(v=>items.push({key:'formats',value:v,k:tx('Format'),label:label(FORMAT_OPTIONS,v),tone:TONE[v]}));
   filters.sizes.forEach(v=>items.push({key:'sizes',value:v,k:tx('Size'),label:label(SIZE_OPTIONS,v),tone:TONE.neutral}));
   filters.status.forEach(v=>items.push({key:'status',value:v,k:tx('Status'),label:label(STATUS_OPTIONS,v),tone:TONE[STATUS_TONE[v]]}));
-  filters.langs.forEach(v=>items.push({key:'langs',value:v,k:tx('Language'),label:v,tone:TONE.neutral}));
+  filters.langs.forEach(v=>items.push({key:'langs',value:v,k:tx('Language'),label:langName[v]||v,tone:TONE.neutral}));
   return items;
 };
 const withoutItem=(filters,{key,value})=>key==='cat'?{...filters,cat:null}:{...filters,[key]:filters[key].filter(v=>v!==value)};
@@ -1891,7 +1898,7 @@ function LabelsBrowser({map,setMap,config,onNewLabel}){
     ()=>sortFiles(filterFiles(entries,filters,deferredSearch,ctx).map(e=>e.f),sort,catOf),
     [entries,filters,deferredSearch,ctx,sort,catOf]);
   const counts=useMemo(()=>facetCounts(entries,filters,deferredSearch,ctx,langOptions),[entries,filters,deferredSearch,ctx,langOptions]);
-  const applied=useMemo(()=>appliedItems(filters),[filters]);
+  const applied=useMemo(()=>appliedItems(filters,langName),[filters,langName]);
 
   const toggleIn=useCallback((key,value)=>setFilters(f=>({...f,[key]:f[key].includes(value)?f[key].filter(v=>v!==value):[...f[key],value]})),[]);
   const clearKey=useCallback(key=>setFilters(f=>({...f,[key]:[]})),[]);
@@ -1994,7 +2001,7 @@ function LabelsBrowser({map,setMap,config,onNewLabel}){
             </div>
           )}
         </div>
-        <FilePreviewPanel file={selected} sharepointBase={config?.sharepointBaseUrl} onDeleted={removeFile}/>
+        <FilePreviewPanel file={selected} sharepointBase={config?.sharepointBaseUrl} langName={langName} onDeleted={removeFile}/>
       </div>
     </div>
   );
@@ -2084,7 +2091,7 @@ function ProductMockup({product,mapRev}){
 // Pages / Mockup and Front / Back, kept while you click through files (until the page is reloaded).
 const previewMemory={mode:'pages',view:'front'};
 
-function FilePreviewPanel({file,sharepointBase,onDeleted}){
+function FilePreviewPanel({file,sharepointBase,langName,onDeleted}){
   const [infoRaw,setInfo]=useState(null);
   const panelRef=useRef(null);
   const [maxH,setMaxH]=useState(null);
@@ -2155,7 +2162,8 @@ function FilePreviewPanel({file,sharepointBase,onDeleted}){
       <div style={{fontSize:12,color:'var(--text2)',display:'flex',flexDirection:'column',gap:3}}>
         {file.product&&<div><b>{tx('Product:')}</b> {file.product}</div>}
         {file.packaging&&<div><b>{tx('Pack size:')}</b> {file.packaging}</div>}
-        {file.languages?.length>0&&<div><b>{tx('Languages:')}</b> {file.languages.join(', ')}</div>}
+        {/* By name when the language list has it; a code it doesn't have shows as it is. */}
+        {file.languages?.length>0&&<div><b>{tx('Languages:')}</b> {file.languages.map(c=>langName[c]||c).join(', ')}</div>}
         {file.date&&<div><b>{tx('Date:')}</b> {file.date}</div>}
         {sizeKb!=null&&<div><b>{tx('File size:')}</b> {sizeKb} KB</div>}
         {isPdf&&<div><b>{tx('Pages:')}</b> {pageCount||'...'}</div>}
@@ -2232,6 +2240,114 @@ function NumInput({value,onChange,className='',...rest}){
   useEffect(()=>{const p=parseNum(shown.current);if(p!==(value??null)&&!Number.isNaN(p))show(value==null?'':String(value));},[value]);
   return <input {...rest} className={`input mono ${className}${Number.isNaN(parsed)?' invalid':''}`} inputMode="decimal" value={text}
     onChange={e=>{const t=e.target.value;show(t);const n=parseNum(t);if(!Number.isNaN(n))onChange(n);}}/>;
+}
+
+// ── Searchable dropdown ──────────────────────────────────────────────────────────────
+// Every dropdown in the app. Typing finds any part of an entry, and of its group ("drop" finds Perifolis / Drop Gold,
+// "pam" every PAM product), where a plain <select> only jumps to the first entry starting with the letter pressed.
+// Written like a <select>, with <option> and <optgroup> children, so each list reads as it did; onChange gets the value.
+const optionText=children=>React.Children.toArray(children).map(c=>typeof c==='string'||typeof c==='number'?String(c):'').join('');
+const readOptions=(children,group=null,out=[])=>{
+  React.Children.forEach(children,c=>{
+    if(!React.isValidElement(c))return;
+    if(c.type==='optgroup')readOptions(c.props.children,c.props.label,out);
+    else if(c.type===Fragment)readOptions(c.props.children,group,out);
+    else if(c.type==='option'){
+      const label=optionText(c.props.children);
+      out.push({value:String(c.props.value??label),label,group,disabled:!!c.props.disabled});
+    }
+  });
+  return out;
+};
+const nextEnabled=(list,from,step)=>{
+  for(let i=from+step;i>=0&&i<list.length;i+=step)if(!list[i].disabled)return i;
+  return from;
+};
+function SearchSelect({value,onChange,children,className='',disabled,...rest}){
+  const options=readOptions(children);
+  const chosen=String(value??'');
+  const current=options.find(o=>o.value===chosen);
+  const [open,setOpen]=useState(false);
+  const [query,setQuery]=useState(null);      // what is typed while the list is open; null when it isn't
+  const [active,setActive]=useState(-1);
+  const [pos,setPos]=useState(null);
+  const input=useRef(null),list=useRef(null);
+  const listId=React.useId();
+  const shownFor=q=>q?options.filter(o=>matchesSearch(`${o.label} ${o.group??''}`,q)):options;
+  const shown=shownFor(query);
+  // Under the field, or above it when there's more room there. On the page itself, so no table or dialog clips it.
+  const place=useCallback(()=>{
+    const r=input.current?.getBoundingClientRect();
+    if(!r)return;
+    const below=window.innerHeight-r.bottom,up=below<240&&r.top>below;
+    const width=Math.max(r.width,220);
+    setPos({left:Math.max(8,Math.min(r.left,window.innerWidth-width-8)),width,
+      top:up?undefined:r.bottom+4,bottom:up?window.innerHeight-r.top+4:undefined,maxHeight:Math.max(160,Math.min(320,(up?r.top:below)-12))});
+  },[]);
+  useEffect(()=>{
+    if(!open)return;
+    window.addEventListener('scroll',place,true);
+    window.addEventListener('resize',place);
+    return()=>{window.removeEventListener('scroll',place,true);window.removeEventListener('resize',place);};
+  },[open,place]);
+  useEffect(()=>{if(open)list.current?.querySelector('.ss-opt.active')?.scrollIntoView({block:'nearest'});},[open,active]);
+  // Opening empties the field, so typing starts a search; what is chosen stays in it, greyed, until something else is.
+  const openList=()=>{
+    place();setOpen(true);setQuery('');
+    const at=options.findIndex(o=>o.value===chosen);
+    setActive(at>=0?at:nextEnabled(options,-1,1));
+  };
+  const close=()=>{setOpen(false);setQuery(null);};
+  const choose=o=>{
+    if(!o||o.disabled)return;
+    close();
+    if(o.value!==chosen)onChange(o.value);
+  };
+  const type=t=>{
+    if(!open){place();setOpen(true);}
+    setQuery(t);
+    const next=shownFor(t);
+    setActive(t?nextEnabled(next,-1,1):Math.max(0,next.findIndex(o=>o.value===chosen)));
+  };
+  const key=e=>{
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+      e.preventDefault();
+      if(!open)openList();
+      else setActive(a=>nextEnabled(shown,a,e.key==='ArrowDown'?1:-1));
+    }
+    else if(e.key==='Enter'){
+      e.preventDefault();
+      if(open)choose(shown[active]);else openList();
+    }
+    else if(e.key==='Escape'&&open){e.preventDefault();e.stopPropagation();close();}    // closes the list, not a dialog it is in
+    else if(e.key==='Tab'&&open)close();
+  };
+  const blank=current?.value==='';          // "Choose…", "None": shown greyed, like a placeholder
+  return(
+    <>
+      <input {...rest} ref={input} type="text" autoComplete="off" spellCheck={false} disabled={disabled}
+        className={`input ss-input ${className}`} role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
+        aria-activedescendant={open&&shown[active]?`${listId}-${active}`:undefined}
+        value={query??(blank?'':current?.label??'')} placeholder={open||blank?current?.label??'':''}
+        onChange={e=>type(e.target.value)} onKeyDown={key} onBlur={close}
+        onClick={()=>{if(!open)openList();else if(!query)close();}}/>
+      {open&&pos&&ReactDOM.createPortal(
+        <div ref={list} id={listId} role="listbox" className="ss-pop" onMouseDown={e=>e.preventDefault()}
+          style={{left:pos.left,width:pos.width,top:pos.top,bottom:pos.bottom,maxHeight:pos.maxHeight}}>
+          {shown.length===0&&<div className="ss-none">{tx('Nothing matches “{0}”.',query)}</div>}
+          {shown.map((o,i)=>(
+            <Fragment key={i}>
+              {o.group&&o.group!==shown[i-1]?.group&&<div className="ss-group">{o.group}</div>}
+              <div id={`${listId}-${i}`} role="option" aria-selected={o.value===chosen} aria-disabled={o.disabled||undefined}
+                className={'ss-opt'+(i===active?' active':'')+(o.value===chosen?' on':'')+(o.disabled?' disabled':'')+(o.group?' grouped':'')}
+                onMouseMove={()=>{if(!o.disabled&&i!==active)setActive(i);}} onClick={()=>choose(o)}>
+                {o.label||' '}
+              </div>
+            </Fragment>
+          ))}
+        </div>,document.body)}
+    </>
+  );
 }
 
 // ── Shipment: the data ───────────────────────────────────────────────────────────────
@@ -2377,6 +2493,77 @@ const skuCodesForLabel=(shipping,product)=>[...new Set((shipping?.products??[]).
 const GHS=[['GHS01',tx('Explosive')],['GHS02',tx('Flammable')],['GHS03',tx('Oxidising')],['GHS04',tx('Gas under pressure')],['GHS05',tx('Corrosive')],['GHS06',tx('Acute toxicity')],['GHS07',tx('Harmful or irritant')],['GHS08',tx('Serious health hazard')],['GHS09',tx('Hazardous to the environment')]];
 const SIGNAL_LABEL={Danger:tx('Danger'),Warning:tx('Warning')};
 const GhsIcon=({code,size=22})=><img className="ghs-icon" src={`/ghs/${code}.svg`} width={size} height={size} alt={code} title={`${code}: ${GHS.find(g=>g[0]===code)?.[1]??''}`}/>;
+// What each H and EUH code says, worded as CLP words it: assets/GHS/H_codes_EN.json and H_codes_LT.json, taken from
+// the regulation's English and Lithuanian texts and never translated here. Shown in the interface's language.
+let hStatementsLoad=null;
+const loadHStatements=()=>hStatementsLoad||(hStatementsLoad=fetch(`/ghs/H_codes_${UI_LANG==='lt'?'LT':'EN'}.json`)
+  .then(r=>r.ok?r.json():Promise.reject(new Error(r.status)))
+  .then(d=>d.statements??{})
+  .catch(()=>{hStatementsLoad=null;return null;}));    // tried again next time, rather than never
+function useHStatements(){
+  const [list,setList]=useState(null);
+  useEffect(()=>{
+    let live=true;
+    loadHStatements().then(s=>{if(live)setList(s);});
+    return()=>{live=false;};
+  },[]);
+  return list;
+}
+// "H 314" or "h314" is H314. H360Fd and H360FD are different statements, so the case only gives way when it can't mix them up.
+const hStatement=(list,code)=>{
+  const c=code.replace(/\s+/g,'');
+  if(list[c])return list[c];
+  const same=Object.keys(list).filter(k=>k.toUpperCase()===c.toUpperCase());
+  return same.length===1?list[same[0]]:null;
+};
+const sdsSource=src=>[src?.file?.split(/[\\/]/).pop(),src?.version&&`v${src.version}`,src?.revised].filter(Boolean).join(' · ');
+// What a product's safety data sheet puts on its label: the symbols, the signal word, and each hazard statement in full.
+function SafetyCard({safety:s}){
+  const statements=useHStatements();
+  const symbols=s.pictograms??[],codes=(s.hazardCodes??[]).filter(Boolean);
+  return(
+    <div className="card ship-profile">
+      <div className="flex items-center gap-2" style={{flexWrap:'wrap'}}>
+        <div className="card-title">{tx('Hazard labelling')}</div>
+        <span className="eyebrow">{tx('Safety data sheet')}</span>
+        {sdsSource(s.source)&&<span className="mono muted" style={{fontSize:'var(--fs-xs)'}}>{sdsSource(s.source)}</span>}
+      </div>
+      {!symbols.length&&!codes.length&&!s.signalWord&&<div className="muted info-safety-none">{tx('No hazard symbols or statements.')}</div>}
+      {(symbols.length>0||s.signalWord)&&(
+        <div className="info-ghs">
+          {symbols.map(c=>(
+            <figure key={c} className="info-ghs-symbol">
+              <GhsIcon code={c} size={72}/>
+              <figcaption><span className="mono">{c}</span>{GHS.find(g=>g[0]===c)?.[1]}</figcaption>
+            </figure>
+          ))}
+          {s.signalWord&&<span className={'badge info-signal '+(s.signalWord==='Danger'?'badge-danger':'badge-wip')}>{SIGNAL_LABEL[s.signalWord]??s.signalWord}</span>}
+        </div>
+      )}
+      {codes.length>0&&(
+        <table className="table dense info-h-table">
+          <tbody>
+            {codes.map(c=>{
+              const text=statements&&hStatement(statements,c);
+              return(
+                <tr key={c}>
+                  <td className="mono nowrap">{c}</td>
+                  <td>{text??(statements&&<span className="muted">{tx('Not a CLP hazard statement code')}</span>)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {(s.ufi||s.unCode)&&(
+        <dl className="facts">
+          {s.ufi&&<div><dt>UFI</dt><dd className="mono">{s.ufi}</dd></div>}
+          {s.unCode&&<div><dt>{tx('UN code')}</dt><dd className="mono">{s.unCode}</dd></div>}
+        </dl>
+      )}
+    </div>
+  );
+}
 const safetyOf=(p,shipping)=>(p.links?.length?p.links:[p.name]).map(n=>[n,shipping?.safety?.[n]]).filter(([,s])=>s);
 // A shipping product's UN code is what its safety data says. Linked names normally agree; if they don't, both show.
 const unCodeOf=(p,shipping)=>[...new Set(safetyOf(p,shipping).map(([,s])=>s.unCode).filter(Boolean))].join(' / ');
@@ -2453,8 +2640,9 @@ function ShipPackTable({product,shipping}){
   );
 }
 
-// Everything the shipping data says about one product. Also what the Information page shows.
-function ShippingProfile({product:p,shipping}){
+// Everything the shipping data says about one product. Also what the Information page shows, which has the
+// safety data on a page of its own with the data sheets, so it leaves it out here.
+function ShippingProfile({product:p,shipping,withSafety=true}){
   const adr=adrOf(p);
   return(
     <div className="card ship-profile">
@@ -2471,7 +2659,7 @@ function ShippingProfile({product:p,shipping}){
         <div><dt>{tx('ADR class')}</dt><dd>{adr?<span className="badge badge-wip">{adr}</span>:tx('None')}</dd></div>
         {(adr||unCodeOf(p,shipping))&&<div><dt>{tx('UN code')}</dt><dd className="mono">{unCodeOf(p,shipping)||'–'}</dd></div>}
         {adr&&<div><dt>{tx('Packing group')}</dt><dd className="mono">{p.packingGroup||'–'}</dd></div>}
-        {safetyOf(p,shipping).map(([name,s])=>(
+        {withSafety&&safetyOf(p,shipping).map(([name,s])=>(
           <div key={name} className="wide">
             <dt>{tx('Safety{0}',safetyOf(p,shipping).length>1?`: ${name}`:'')}</dt>
             <dd className="ship-safety-line">
@@ -2710,9 +2898,9 @@ function PackingListDialog({rows,gone,shipping,updateLine,onClose}){
         </div>
         <div className="field">
           <label htmlFor="ship-doc-transport">{tx('Transport')}</label>
-          <select id="ship-doc-transport" className="input" value={transport} onChange={e=>setTransport(e.target.value)}>
+          <SearchSelect id="ship-doc-transport" value={transport} onChange={setTransport}>
             {['Truck','Sea','Air'].map(t=><option key={t} value={t}>{tx(t)}</option>)}
-          </select>
+          </SearchSelect>
         </div>
       </div>
       <div className="ship-doc-lines">
@@ -2819,11 +3007,13 @@ function ShipCalculator({shipping}){
   const wholeSum=key=>known.reduce((n,r)=>n+wholeUp(r.c[key]),0);
   const exactNote=key=>isWhole(sum(key))&&Math.round(sum(key))===wholeSum(key)?null:`${fmtNum(sum(key))} exact`;
   // The limits are in the shared data with the other figures. A file without one just gives no warning.
-  const truckMax=shipping.truckMaxKg,palletMax=shipping.truckMaxPallets;
+  const truckMax=shipping.truckMaxKg,palletMax=shipping.truckMaxPallets,palletRed=shipping.truckPalletsRedAbove;
   const totalKg=sum('totalKg');
   const overTruck=truckMax>0&&totalKg>truckMax;
   const palletCount=palletsNeeded(known);
   const overPallets=palletMax>0&&palletCount>palletMax;
+  // A pallet or two over can still be made to fit, so that warns in yellow. Past the red figure, or with none set, it is red.
+  const palletsRed=overPallets&&!(palletRed>0&&palletCount<=palletRed);
   const totalCost=known.reduce((n,r)=>n+(r.cost??0),0);
   const anyPrice=known.some(r=>r.cost!=null);
   const shipped=lineGroups.map(g=>g.product);
@@ -2834,14 +3024,14 @@ function ShipCalculator({shipping}){
       <div className="card ship-add">
         <div className="field ship-add-product">
           <label htmlFor="ship-product">{tx('Product')}</label>
-          <select id="ship-product" className="input" value={productId} onChange={e=>pickProduct(e.target.value)}>
+          <SearchSelect id="ship-product" value={productId} onChange={pickProduct}>
             <option value="">{tx('Choose a product…')}</option>
             {groupsOfProducts.map(g=>(
               <optgroup key={g} label={g||tx('No group')}>
                 {products.filter(p=>p.group===g).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
               </optgroup>
             ))}
-          </select>
+          </SearchSelect>
         </div>
         <div className="field">
           <span className="field-label">{tx('Pack')}</span>
@@ -2887,7 +3077,7 @@ function ShipCalculator({shipping}){
       {(overTruck||overPallets)&&(
         <div className="ship-alerts">
           {overTruck&&<div className="alert alert-error">{tx('Too heavy for one truck: this shipment weighs {0} kg, {1} kg over the {2} kg limit.',fmtNum(totalKg),fmtNum(totalKg-truckMax),fmtNum(truckMax))}</div>}
-          {overPallets&&<div className="alert alert-error">{tx('Too many pallets for one truck: this shipment takes {0}, {1} more than the {2} a truck carries.',fmtNum(palletCount),fmtNum(palletCount-palletMax),fmtNum(palletMax))}</div>}
+          {overPallets&&<div className={'alert '+(palletsRed?'alert-error':'alert-warning')}>{tx('Too many pallets for one truck: this shipment takes {0}, {1} more than the {2} a truck carries.',fmtNum(palletCount),fmtNum(palletCount-palletMax),fmtNum(palletMax))}</div>}
         </div>
       )}
 
@@ -2988,7 +3178,7 @@ function ShipCalculator({shipping}){
               <tr>
                 <td>{tx('Total')}</td>
                 <td className="num">{fmtNum(known.reduce((n,r)=>n+(r.l.qty||0),0))}</td>
-                <td className={'num group-start'+(overPallets?' ship-warn':'')}><ShipCount n={sum('pallets')} whole={wholeSum('pallets')} title={tx('Each line rounded up, then added: products aren\'t mixed on a pallet')}/></td><td className="num">{fmtNum(sum('palletKg'))}</td>
+                <td className={'num group-start'+(palletsRed?' ship-danger':overPallets?' ship-warn':'')}><ShipCount n={sum('pallets')} whole={wholeSum('pallets')} title={tx('Each line rounded up, then added: products aren\'t mixed on a pallet')}/></td><td className="num">{fmtNum(sum('palletKg'))}</td>
                 <td className="num group-start"/><td className="num">{fmtNum(sum('productKg'))}</td>
                 <td className="num group-start"><ShipCount n={sum('units')} whole={wholeSum('units')} title={tx('Each line rounded up, then added')}/></td><td className="num">{fmtNum(sum('containerKg'))}</td>
                 <td className="num group-start"><ShipCount n={sum('boxes')} whole={wholeSum('boxes')} title={tx('Each line rounded up, then added')}/></td><td className="num">{fmtNum(sum('boxKg'))}</td>
@@ -3381,10 +3571,10 @@ function SafetyTab({draft,setDraft,dirty,config,shipping,setSafety}){
                     </div>
                   </td>
                   <td>
-                    <select className="input ship-safety-signal" aria-label={tx('Signal word for {0}',n)} value={r.signalWord??''} onChange={e=>update(n,{signalWord:e.target.value})}>
+                    <SearchSelect className="ship-safety-signal" aria-label={tx('Signal word for {0}',n)} value={r.signalWord??''} onChange={v=>update(n,{signalWord:v})}>
                       <option value="">{tx('None')}</option>
                       {Object.entries(SIGNAL_LABEL).map(([v,l])=><option key={v} value={v}>{l}</option>)}
-                    </select>
+                    </SearchSelect>
                   </td>
                   <td><input className="input mono ship-safety-h" aria-label={tx('H codes for {0}',n)} value={(r.hazardCodes??[]).join(' ')} onChange={e=>update(n,{hazardCodes:e.target.value.split(/[\s,]+/).filter((v,i,a)=>v||i<a.length-1)})}/></td>
                   <td className="ship-safety-sheet">
@@ -3995,12 +4185,12 @@ function AddShipProduct({config,draft,onCreate,onOpen,onClose}){
       {kind==='label'?(
         <div className="field modal-section" style={{marginBottom:0}}>
           <label htmlFor="ship-link">{tx('Product')}</label>
-          <select id="ship-link" className="input" value={linkName} onChange={e=>setLinkName(e.target.value)}>
+          <SearchSelect id="ship-link" value={linkName} onChange={setLinkName}>
             <option value="">{tx('Choose a product…')}</option>
             {['MO','PAM','CE'].map(cat=>(
               <optgroup key={cat} label={cat}>{appProducts.filter(p=>p.category===cat).map(p=><option key={p.name} value={p.name}>{p.name}</option>)}</optgroup>
             ))}
-          </select>
+          </SearchSelect>
           {preview
             ?<div className="hint">{tx('Fills in: unit {0} · group {1} · shelf life {2}{3}',preview.unit,preview.group,preview.shelfLifeMonths?fmtMonths(preview.shelfLifeMonths):tx('not in a data sheet'),preview.storageMin!=null?tx(' · storage {0}',fmtStorage(preview)):'')}</div>
             :<div className="hint">{tx('Fills in its unit, group, and from its data sheet the shelf life and storage.')}</div>}
@@ -4090,22 +4280,22 @@ function ShipField({spec:[k,label,type,placeholder],value,set,disabled,hint}){
       :type==='months'?<div className="input-unit ship-unit-long"><NumInput id={id} value={value} onChange={set}/><span>{tx('months')}</span></div>
       :type==='celsius'?<div className="input-unit"><NumInput id={id} value={value} onChange={set}/><span>°C</span></div>
       :type==='unit'?(
-        <select id={id} className="input" value={value} onChange={e=>set(e.target.value)}><option>L</option><option>kg</option></select>
+        <SearchSelect id={id} value={value} onChange={set}><option>L</option><option>kg</option></SearchSelect>
       ):type==='group'?(
-        <select id={id} className="input" value={value??''} onChange={e=>set(e.target.value)}>
+        <SearchSelect id={id} value={value??''} onChange={set}>
           <option value="">—</option>
           {[...new Set([...SHIP_GROUPS,value].filter(Boolean))].map(g=><option key={g}>{g}</option>)}
-        </select>
+        </SearchSelect>
       ):type==='adr'?(
-        <select id={id} className="input" value={value??''} onChange={e=>set(e.target.value)}>
+        <SearchSelect id={id} value={value??''} onChange={set}>
           <option value="">{tx('None')}</option>
           {[...new Set([...ADR_CLASSES,value].filter(Boolean))].map(c=><option key={c}>{c}</option>)}
-        </select>
+        </SearchSelect>
       ):type==='pg'?(
-        <select id={id} className="input" disabled={disabled} value={value??''} onChange={e=>set(e.target.value)}>
+        <SearchSelect id={id} disabled={disabled} value={value??''} onChange={set}>
           <option value="">{disabled?tx('Not applicable'):'—'}</option>
           {['I','II','III'].map(g=><option key={g}>{g}</option>)}
-        </select>
+        </SearchSelect>
       ):type==='bool'?(
         <label className="toggle"><input id={id} type="checkbox" checked={!!value} onChange={e=>set(e.target.checked)}/><span className="toggle-slider"/></label>
       ):type==='long'?(
@@ -4139,10 +4329,10 @@ function LinkChips({values,options,isGone,goneTitle,keptTitle,onChange,label,add
           {nameOf(v)}<button type="button" aria-label={tx('Unlink {0}',nameOf(v))} onClick={()=>onChange(values.filter(x=>x!==v))}><Icon.Close size={10}/></button>
         </span>
       ))}
-      <select className="input ship-link-add" aria-label={label} value="" onChange={e=>e.target.value&&onChange([...values,e.target.value])}>
+      <SearchSelect className="ship-link-add" aria-label={label} value="" onChange={v=>v&&onChange([...values,v])}>
         <option value="">{values.length?addMore:addFirst}</option>
         {options.filter(o=>!values.includes(o.value)).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      </SearchSelect>
     </div>
   );
 }
@@ -4294,27 +4484,27 @@ function ShipPacksEditor({product:p,draft,config,update}){
                       {count!=null&&<div className={'ship-derived'+(uneven?' warn':'')} title={uneven?tx('A pallet would hold part of a pack or box. Check the size, what a pallet holds, or the units per box.'):undefined}>{tx('{0} packs{1}',fmtNum(count,2),boxCount!=null?tx(' · {0} boxes',fmtNum(boxCount,2)):'')}</div>}
                     </td>
                     <td>
-                      <select className={'input'+(k.palletId?'':' invalid')} aria-label={tx('Pallet')} value={k.palletId??''} onChange={e=>setPack(k.id,{palletId:e.target.value||null})}>
+                      <SearchSelect className={k.palletId?'':'invalid'} aria-label={tx('Pallet')} value={k.palletId??''} onChange={v=>setPack(k.id,{palletId:v||null})}>
                         <option value="">{tx('Choose…')}</option>
                         {pickable.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight)} kg</option>)}
-                      </select>
+                      </SearchSelect>
                     </td>
                     <td>
-                      <select className={'input'+(k.containerId?'':' invalid')} aria-label={tx('Container or bag')} value={k.containerId??''} onChange={e=>setPack(k.id,{containerId:e.target.value||null})}>
+                      <SearchSelect className={k.containerId?'':'invalid'} aria-label={tx('Container or bag')} value={k.containerId??''} onChange={v=>setPack(k.id,{containerId:v||null})}>
                         <option value="">{tx('Choose…')}</option>
                         {made.length>0&&<optgroup label={tx('For {0} {1}',fmtNum(k.packSize,3),p.unit)}>{made.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}</optgroup>}
                         {kinds.map(([kind,label])=>{
                           const rest=containers.filter(x=>x.kind===kind&&!made.includes(x));
                           return rest.length?<optgroup key={kind} label={made.length?tx('Other {0}',label.toLowerCase()):label}>{rest.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}</optgroup>:null;
                         })}
-                      </select>
+                      </SearchSelect>
                       {container?.forSize>0&&k.packSize>0&&container.forSize!==k.packSize&&<FieldNote>{tx('Made for {0} {1}',fmtNum(container.forSize,3),p.unit)}</FieldNote>}
                     </td>
                     <td>
-                      <select className="input" aria-label={tx('Box')} value={k.boxId??''} onChange={e=>setBox(k,e.target.value)}>
+                      <SearchSelect aria-label={tx('Box')} value={k.boxId??''} onChange={v=>setBox(k,v)}>
                         <option value="">{tx('No box')}</option>
                         {boxes.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}
-                      </select>
+                      </SearchSelect>
                       {k.boxId&&k.packSize>0&&noBoxOnSheet(config,k.packSize,p.unit)&&<FieldNote>{tx('This size has no box label')}</FieldNote>}
                     </td>
                     <td>
@@ -4401,7 +4591,7 @@ function ShipTablesEditor({draft,setDraft}){
   const cell=(c,r,set)=>c.type==='number'
     ?<NumInput aria-label={c.label} value={r[c.key]??null} onChange={set}/>
     :c.type==='kind'
-      ?<select className="input" aria-label={c.label} value={r[c.key]??'container'} onChange={e=>set(e.target.value)}><option value="container">{tx('Container')}</option><option value="bag">{tx('Bag')}</option></select>
+      ?<SearchSelect aria-label={c.label} value={r[c.key]??'container'} onChange={set}><option value="container">{tx('Container')}</option><option value="bag">{tx('Bag')}</option></SearchSelect>
       :<input className="input" aria-label={c.label} value={r[c.key]??''} onChange={e=>set(e.target.value)}/>;
   const numClass=c=>c.type==='number'?'num-col':c.type==='kind'?'kind-col':'';
   return(
@@ -4409,10 +4599,20 @@ function ShipTablesEditor({draft,setDraft}){
       <div className="ship-ref-grid wide">
         <div className="card-flat">
           <div className="card-title">{tx('Truck')}</div>
-          <div className="hint">{tx('The calculator warns when a shipment weighs more than this, or takes more pallets.')}</div>
-          <div className="flex items-center gap-3" style={{marginTop:'var(--space-2)'}}>
-            <div className="input-unit ship-num"><NumInput aria-label={tx('Most a truck can carry')} value={draft.truckMaxKg??null} onChange={v=>setDraft({...draft,truckMaxKg:v})}/><span>kg</span></div>
-            <div className="input-unit ship-num ship-truck-pallets"><NumInput aria-label={tx('Most pallets a truck can carry')} value={draft.truckMaxPallets??null} onChange={v=>setDraft({...draft,truckMaxPallets:v})}/><span>{tx('pallets')}</span></div>
+          <div className="hint">{tx('The calculator warns when a shipment weighs more than this or takes more pallets. The pallet warning is yellow, and red above the last figure.')}</div>
+          <div className="ship-truck">
+            <div className="field">
+              <label htmlFor="ship-truck-kg">{tx('Weight')}</label>
+              <div className="input-unit ship-num"><NumInput id="ship-truck-kg" value={draft.truckMaxKg??null} onChange={v=>setDraft({...draft,truckMaxKg:v})}/><span>kg</span></div>
+            </div>
+            <div className="field">
+              <label htmlFor="ship-truck-pallets">{tx('Pallets')}</label>
+              <NumInput id="ship-truck-pallets" className="ship-num" value={draft.truckMaxPallets??null} onChange={v=>setDraft({...draft,truckMaxPallets:v})}/>
+            </div>
+            <div className="field">
+              <label htmlFor="ship-truck-red">{tx('Red above')}</label>
+              <NumInput id="ship-truck-red" className="ship-num" value={draft.truckPalletsRedAbove??null} onChange={v=>setDraft({...draft,truckPalletsRedAbove:v})}/>
+            </div>
           </div>
         </div>
         {SHIP_CATALOGUES.map(cat=>{
@@ -4617,15 +4817,15 @@ function SkuEditor({section,rules,setRules,list,setList,rulesDirty,listDirty,shi
     brands:[
       [tx('Name'),r=>textCell(r,'name',tx('Name'))],
       [tx('Kind'),r=>(
-        <select className="input" aria-label={tx('Kind')} value={r.kind??'distributor'} onChange={e=>update(r.id,{kind:e.target.value,...(e.target.value==='name'?{}:{product:''})})}>
+        <SearchSelect aria-label={tx('Kind')} value={r.kind??'distributor'} onChange={v=>update(r.id,{kind:v,...(v==='name'?{}:{product:''})})}>
           {SKU_KINDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}
-        </select>
+        </SearchSelect>
       )],
       [tx('Label product'),r=>(
-        <select className="input" aria-label={tx('Label product')} disabled={r.kind!=='name'} value={r.product??''} onChange={e=>update(r.id,{product:e.target.value})}>
+        <SearchSelect aria-label={tx('Label product')} disabled={r.kind!=='name'} value={r.product??''} onChange={v=>update(r.id,{product:v})}>
           <option value="">{r.kind==='name'?tx('Any'):'–'}</option>
           {[...new Set([...productNames,r.product].filter(Boolean))].map(n=><option key={n} value={n}>{n}</option>)}
-        </select>
+        </SearchSelect>
       )],
       [tx('Note'),r=>textCell(r,'note',tx('Note'))],
     ],
@@ -4754,7 +4954,6 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
   const [search,setSearch]=useState('');
   const deferred=useDeferredValue(search);
   const [filters,setFilters]=useState({product:[],language:[],pack:[],brand:[]});
-  const [toCheck,setToCheck]=useState(false);
   const [openFacet,setOpenFacet]=useState(null);
   const [openCode,setOpenCode]=useState(null);
   const [addError,setAddError]=useState('');
@@ -4772,7 +4971,7 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
     &&(skip==='language'||filters.language.every(c=>r.labels.includes(c)))
     &&(skip==='pack'||!filters.pack.length||filters.pack.includes(r.read.pack))
     &&(skip==='brand'||!filters.brand.length||filters.brand.includes(r.brand));
-  const matched=useMemo(()=>rows.filter(r=>matchesSearch(r.all,deferred)&&(!toCheck||r.wrong.length)),[rows,deferred,toCheck]);
+  const matched=useMemo(()=>rows.filter(r=>matchesSearch(r.all,deferred)),[rows,deferred]);
   // What the search found in a SKU's own code or name comes before what it found in the product or brand: Spuma's own SKUs before all of Foamex's.
   const shown=useMemo(()=>{
     const found=matched.filter(r=>fits(r));
@@ -4798,8 +4997,7 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
   };
   const FILTER_NAMES={product:tx('Product'),language:tx('Languages'),pack:tx('Pack'),brand:tx('Brand')};
   const applied=Object.entries(filters).flatMap(([key,values])=>values.map(v=>({key,value:v,k:FILTER_NAMES[key],label:labelOf[key](v),tone:TONE.neutral})));
-  const clearAll=()=>{setFilters({product:[],language:[],pack:[],brand:[]});setToCheck(false);setSearch('');};
-  const wrongCount=useMemo(()=>rows.filter(r=>r.wrong.length).length,[rows]);
+  const clearAll=()=>{setFilters({product:[],language:[],pack:[],brand:[]});setSearch('');};
   // A whole SKU searched for that isn't on the list: what it would mean, and adding it if the rules know all of it.
   const typed=deferred.trim().toUpperCase();
   const pasted=/^[A-Z]\d{4}/.test(typed)&&!list.some(s=>s.code===typed)?skuRead(rules,typed):null;
@@ -4819,12 +5017,11 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
           {facet('language',tx('Languages'),Icon.Globe,langCodes.map(c=>({value:c,label:labelOf.language(c),search:langs[c]?langText(langs[c]):c,count:counts.language[c]??0,node:coded(c,labelOf.language(c))})),{searchable:true})}
           {facet('pack',tx('Pack'),Icon.Ruler,(rules.packs??[]).map(k=>({value:k.code,label:k.code,count:counts.pack[k.code]??0,node:coded(k.code,labelOf.pack(k.code))})))}
           {facet('brand',tx('Brand'),Icon.Tag,(rules.brands??[]).map(b=>({value:b.code,label:b.name,search:`${b.code} ${b.name}`,count:counts.brand[b.code]??0,node:coded(b.code,b.name)})),{searchable:true})}
-          {wrongCount>0&&<button type="button" className={'fb-btn'+(toCheck?' on':'')} aria-pressed={toCheck} title={tx('SKUs with a code the rules don\'t have')} onClick={()=>setToCheck(v=>!v)}><Icon.Flag/><span>{tx('To check')}</span><span className="fb-badge">{wrongCount}</span></button>}
         </div>
         <div className="fb-row fb-summary">
           <span className="fb-total">{tx('{0} of {1}',shown.length,list.length)}</span>
           {applied.map(it=><FilterPill key={it.key+it.value} item={it} onRemove={()=>setFilters(f=>({...f,[it.key]:f[it.key].filter(v=>v!==it.value)}))}/>)}
-          {(applied.length>0||toCheck||search)&&<button type="button" className="fb-link" onClick={clearAll}>{tx('Clear all')}</button>}
+          {(applied.length>0||search)&&<button type="button" className="fb-link" onClick={clearAll}>{tx('Clear all')}</button>}
         </div>
       </div>
       {showPasted&&(
@@ -4842,7 +5039,7 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
       )}
       <div className="card table-scroll ship-table-fit sku-table">
         <table className="table dense sku-found">
-          <thead><tr><th>SKU</th><th>{tx('Name')}</th><th>{tx('Product')}</th><th>{tx('Version')}</th><th>{tx('Pack')}</th><th>{tx('Languages')}</th><th>{tx('Brand')}</th><th/></tr></thead>
+          <thead><tr><th>SKU</th><th>{tx('Name')}</th><th>{tx('Product')}</th><th>{tx('Version')}</th><th>{tx('Pack')}</th><th>{tx('Languages')}</th><th>{tx('Brand')}</th></tr></thead>
           <tbody>
             {shown.map(({s,read,wrong})=>{
               const open=openCode===s.code||shown.length===1;
@@ -4851,18 +5048,22 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
               return(
                 <Fragment key={s.id??s.code}>
                   <tr className="sku-row" onClick={toggle}>
-                    <td className="nowrap"><button type="button" className={'sku-found-code mono'+(wrong.length?' wrong':'')} aria-expanded={open} title={wrong.join(' ')||undefined} onClick={e=>{e.stopPropagation();toggle();}}>{s.code}</button></td>
+                    <td className="nowrap">
+                      <span className="sku-found-cell">
+                        <button type="button" className={'sku-found-code mono'+(wrong.length?' wrong':'')} aria-expanded={open} title={wrong.join(' ')||undefined} onClick={e=>{e.stopPropagation();toggle();}}>{s.code}</button>
+                        <CopySku code={s.code}/>
+                      </span>
+                    </td>
                     <td>{s.name||'–'}</td>
                     <td>{value('product')}</td>
                     <td className="mono nowrap" title={value('version')}>{read.version||'–'}</td>
                     <td className="nowrap">{value('pack')}</td>
                     <td>{read.part('ending')?.value??value('language')}</td>
                     <td>{read.part('ending')?'–':value('brand')}</td>
-                    <td className="sku-copy-cell"><CopySku code={s.code}/></td>
                   </tr>
                   {open&&(
                     <tr className="ship-open-row">
-                      <td colSpan={8}>
+                      <td colSpan={7}>
                         <SkuParts parts={read.parts}/>
                         <SkuWarnings lines={wrong}/>
                         {(s.oldCode||s.note)&&<div className="hint sku-found-note">{[s.oldCode&&tx('Old code: {0}',s.oldCode),s.note].filter(Boolean).join(' · ')}</div>}
@@ -4873,7 +5074,7 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
                 </Fragment>
               );
             })}
-            {shown.length===0&&<tr><td colSpan={8} className="muted" style={{fontStyle:'italic'}}>{tx('No SKU matches.')}</td></tr>}
+            {shown.length===0&&<tr><td colSpan={7} className="muted" style={{fontStyle:'italic'}}>{tx('No SKU matches.')}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -4906,10 +5107,10 @@ function SkuCreate({rules,list,shipping,files,onAdd}){
   const select=(id,label,value,onChange,children,disabled)=>(
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      <select id={id} className="input" value={value} disabled={disabled} onChange={e=>{onChange(e.target.value);setAdded('');setError('');}}>
+      <SearchSelect id={id} value={value} disabled={disabled} onChange={v=>{onChange(v);setAdded('');setError('');}}>
         <option value="">{tx('Choose…')}</option>
         {children}
-      </select>
+      </SearchSelect>
     </div>
   );
   const add=async()=>{
