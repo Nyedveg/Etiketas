@@ -10,7 +10,9 @@ import re
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from labelnames import LANG_ALIASES
+from labelnames import LANG_ALIASES, pack_base, parse_pack
+from pdfpage import MM_PER_PT
+import stories
 
 GHS_CODES = [f"GHS0{n}" for n in range(1, 10)]
 
@@ -40,14 +42,12 @@ def size_rule(litres):
 
 def capacity_litres(size):
     """A pack as the app names it ("5L", "250ml", "1kg", "1kgx10") in litres, with a box counted whole. None if it can't tell."""
-    m = re.match(r"^\s*(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml)\s*(?:x\s*(\d+))?\s*$", size or "", re.I)
-    if not m:
+    pack = parse_pack(size)
+    if not pack:
         return None
-    amount = float(m.group(1).replace(",", ".")) * (.001 if m.group(2).lower() in ("g", "ml") else 1)
-    return amount * int(m.group(3) or 1)
+    return pack_base(pack)[0] * (pack.count or 1)
 
 # ── Finding the pictograms in a template ──────────────────────────────────────
-_MM = 25.4 / 72
 
 def _mat(s):
     return [float(v) for v in s.split()] if s else [1, 0, 0, 1, 0, 0]
@@ -128,7 +128,7 @@ def find_pictograms(spread_xml, reds):
                     groups.append({"self": c.get("Self"), "layer": c.get("ItemLayer") or "", "box": (min(xs), min(ys), max(xs), max(ys)),
                                    "centre": ((min(p[0] for p in true_pts) + max(p[0] for p in true_pts)) / 2,
                                               (min(p[1] for p in true_pts) + max(p[1] for p in true_pts)) / 2),
-                                   "edgeMm": math.dist(true_pts[0], true_pts[1]) * _MM})
+                                   "edgeMm": math.dist(true_pts[0], true_pts[1]) * MM_PER_PT})
     walk(root, [1, 0, 0, 1, 0, 0])
     for g in groups:
         g["onPage"] = any(x0 <= g["centre"][0] <= x1 and y0 <= g["centre"][1] <= y1 for x0, y0, x1, y1 in pages)
@@ -200,20 +200,6 @@ def place_pictograms(pkg, codes, ghs_dir):
     return result
 
 # ── The text beside them ──────────────────────────────────────────────────────
-def _escape(s):
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-def _set_runs(xml, text):
-    """Put text in a story's first run and empty its others."""
-    first = [True]
-    def repl(m):
-        if m.group(1).strip() or first[0]:
-            value = text if first[0] else ""
-            first[0] = False
-            return f"<Content>{_escape(value)}</Content>"
-        return m.group(0)
-    return re.sub(r"<Content>(.*?)</Content>", repl, xml, flags=re.S)
-
 _UFI_RUN = re.compile(r"UFI:?\s*[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}\s*")
 
 def set_ufi(pkg, ufi):
@@ -238,10 +224,10 @@ def set_signal_word(pkg, word, languages):
     found = False
     for part in pkg.parts("Stories/"):
         xml = pkg.text(part)
-        runs = "".join(re.findall(r"<Content>(.*?)</Content>", xml, flags=re.S)).strip()
+        runs = "".join(stories.contents(xml)).strip()
         words = [w.strip() for w in runs.split("/")] if runs else []
         if words and all(w.upper() in _SIGNAL_WORDS_UPPER for w in words):
-            pkg.set_text(part, _set_runs(xml, signal_text(word, languages).upper()))
+            pkg.set_text(part, stories.set_first_run(xml, signal_text(word, languages).upper()))
             found = True
     return found
 

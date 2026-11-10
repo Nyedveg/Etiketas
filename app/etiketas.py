@@ -5,7 +5,7 @@ Run with:  python app/etiketas.py   (or double-click Etiketas.vbs / Start_Etiket
 Opens at:  http://127.0.0.1:7842
 """
 
-import ctypes, html, io, json, mimetypes, os, re, shutil, socket, stat, sys, tempfile, threading, time, traceback, webbrowser, subprocess, urllib.request, zipfile
+import ctypes, io, json, mimetypes, os, re, shutil, socket, stat, sys, tempfile, threading, time, traceback, webbrowser, subprocess, urllib.request, zipfile
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -15,7 +15,9 @@ from urllib.parse import urlparse, parse_qs, quote, unquote
 import organizer
 import packing_list
 import safety
-from labelnames import Catalogue, LANG_ALIASES, label_entry, label_kind, norm_name, pack_amount, take_date
+import stories
+from labelnames import Catalogue, LANG_ALIASES, label_entry, label_kind, norm_name, pack_base, parse_pack, take_date
+from pdfpage import MM_PER_PT, page_image, pymupdf
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 # Project layout: this file lives in app/ (code, default config, the web UI in app/static/);
@@ -97,13 +99,6 @@ def _upgrade_saved_config(cfg):
     have = {l["code"] for l in languages}
     cfg["languages"] = [{**l, "code": LANG_ALIASES.get(l["code"], l["code"])} for l in languages
                         if l["code"] not in LANG_ALIASES or LANG_ALIASES[l["code"]] not in have]
-    # The cheat sheet said 40, but 250 ml boxes hold 32: it is what the real box labels say.
-    boxes = cfg.get("boxMultipliers", {})
-    if boxes.get("250ml") == "250mlx40":
-        boxes["250ml"] = "250mlx32"
-    # 20 L packs have no box label, so the size has no entry.
-    if boxes.get("20L") == "20Lx1":
-        del boxes["20L"]
     return cfg
 
 FOLDER_SETTINGS = ("templatesDir", "qrCodesDir", "logosDir", "translationsDir")
@@ -131,15 +126,11 @@ def save_config(cfg):
         else:
             local["sharepointBaseUrl"] = cfg["sharepointBaseUrl"]
     save_json(LOCAL_FILE, local)
-    out = {k: v for k, v in cfg.items() if k not in FOLDER_SETTINGS}
+    # The rules come from the code with each read (config_rules), so a page sending them back can't store them.
+    out = {k: v for k, v in cfg.items() if k not in FOLDER_SETTINGS and k != "rules"}
     if "sharepointBaseUrl" in shared:
         out["sharepointBaseUrl"] = shared["sharepointBaseUrl"]
     save_json(CFG_FILE, out)
-
-def load_config():
-    """The live config, or the bundled default if none has been saved yet."""
-    cfg = load_json(CFG_FILE)
-    return _with_local(_upgrade_saved_config(cfg) if cfg is not None else load_json(DEFAULT_CFG_FILE, {}))
 
 def append_history(entry):
     history = load_json(HISTORY_FILE, None)
@@ -224,6 +215,20 @@ def load_sku_list():
 def save_sku_list(skus):
     save_json(SKU_LIST_FILE, {"schemaVersion": 1, "skus": skus})
 
+def _base36(n):
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    out = ""
+    while True:
+        n, d = divmod(n, 36)
+        out = digits[d] + out
+        if not n:
+            return out
+
+def new_id(prefix):
+    """An id made like the Editor's newId: the time and a random part, so it never depends on a code that can be edited."""
+    import random
+    return f"{prefix}-{_base36(int(time.time() * 1000))}{_base36(random.randrange(1296))}"
+
 def add_to_sku_list(code, name):
     """One more SKU, added to the file as it is now rather than to what a page loaded earlier,
     so it can't undo one someone else has just added."""
@@ -232,7 +237,7 @@ def add_to_sku_list(code, name):
         raise ValueError("The SKU list could not be read")
     if any(s.get("code") == code for s in skus):
         raise ValueError(f"{code} is already on the SKU list")
-    sku = {"id": f"sku-{code}", "code": code, "name": name, "oldCode": "", "note": ""}
+    sku = {"id": new_id("sku"), "code": code, "name": name, "oldCode": "", "note": ""}
     save_sku_list(sorted([*skus, sku], key=lambda s: s.get("code", "")))
     return sku
 
@@ -290,7 +295,6 @@ def get_sync_status():
 #   {MO|PAM|CE}[_PH]_TEMPLATE_{size}_{N}LANG_{WxH}[mm]_{YYYY}_{MM}[_BOX]
 RE_DIMS_MM  = re.compile(r'^(\d+x\d+)(?:mm)?$', re.I)
 RE_NLANG    = re.compile(r'^(\d+)LANG$', re.I)
-RE_BOX_MULT = re.compile(r'^(\d+(?:\.\d+)?)(kg|g|l|ml)x(\d+)$', re.I)
 RE_TMPL     = re.compile(r'^(MO|PAM|CE)(_PH)?_TEMPLATE_', re.I)
 
 def parse_template_stem(stem):
@@ -323,15 +327,11 @@ def _norm_packaging(p: str) -> str:
     """Normalise packaging to kg/L so 250g==0.25kg, 500ml==0.5L, etc."""
     if not p:
         return ''
-    amount = pack_amount(p)
-    if not amount:
+    pack = parse_pack(p)
+    if not pack:
         return p.lower().strip()
-    amt, unit = amount
-    if unit == 'g':
-        return f"{amt/1000:g}kg"
-    if unit == 'ml':
-        return f"{amt/1000:g}l"
-    return f"{amt:g}{unit}"
+    amount, unit = pack_base(pack)
+    return f"{amount:g}{unit}"
 
 def dim_key_for(prod_cfg: dict) -> str:
     """Which table of config['dimensions'] a product's label sizes come from."""
@@ -342,6 +342,12 @@ def dim_key_for(prod_cfg: dict) -> str:
     if category == "CE":
         return "CE_solid" if unit == "kg" else "CE"
     return "MO_liquid" if (category == "MO" and unit == "L") else "MO"
+
+def config_rules(cfg):
+    """What the page decides the way the server does, sent along with the config so there is one copy of
+    each rule: the old language codes, and the size table each product's labels come from. Never saved."""
+    return {"langAliases": LANG_ALIASES,
+            "dimKeys": {p["name"]: dim_key_for(p) for p in cfg.get("products", []) if p.get("category")}}
 
 def scan_templates():
     """The IDML templates in the templates folder that follow the template naming convention."""
@@ -465,7 +471,7 @@ def scan_labels():
     files = []
     if not LABELS_DIR.exists():
         return files
-    cat = make_catalogue(merged_config())
+    cat = make_catalogue(load_config())
     for root, dirs, fnames in os.walk(LABELS_DIR):
         dirs[:] = [d for d in dirs if not d.startswith('.') and d.lower() not in ('qrcodes', 'template')]
         for fname in fnames:
@@ -671,18 +677,6 @@ def patch_qr_in_idml(pkg, qr_path):
 # -- Text frames -----------------------------------------------------------------
 _FIELD_KEYS = ['composition', 'carriers', 'form', 'usage', 'preparation', 'storage']
 
-def _replace_story_contents(xml_text, replacements):
-    """Replace non-whitespace <Content> values in order with replacements list.
-    Extra content nodes beyond len(replacements) are cleared."""
-    idx = [0]
-    def repl(m):
-        if m.group(1).strip():
-            val = html.escape(replacements[idx[0]]) if idx[0] < len(replacements) else ''
-            idx[0] += 1
-            return f'<Content>{val}</Content>'
-        return m.group(0)
-    return re.sub(r'<Content>(.*?)</Content>', repl, xml_text, flags=re.DOTALL)
-
 def _get_story_replacements(story_title, trans, sku=''):
     """Return ordered replacement strings for a story given its StoryTitle."""
     if story_title.endswith('_FIELDS'):     # all six fields flowing in one story, for narrow columns
@@ -742,16 +736,15 @@ def apply_lang_translation(pkg, slot, trans, sku=''):
         if title.startswith(prefix):
             texts = _get_story_replacements(title, trans, sku)
             if texts is not None:
-                pkg.set_text(name, _replace_story_contents(pkg.text(name), texts))
+                pkg.set_text(name, stories.fill_runs(pkg.text(name), texts))
     return True
 
 def _format_box_weight_text(box_mult: str) -> str:
     """Turn a boxMultiplier code like '1kgx10' into display text '1 kg x 10'."""
-    m = RE_BOX_MULT.match(box_mult or '')
-    if not m:
+    pack = parse_pack(box_mult)
+    if not pack or not pack.count:
         return box_mult or ''
-    amount, unit, count = m.groups()
-    return f"{amount} {unit} x {count}"
+    return f"{pack.amount:g} {pack.unit} x {pack.count}"
 
 def apply_box_weight_text(pkg, box_mult):
     """Set the SHARED_WEIGHT story to this box's pack size and count. Not
@@ -759,7 +752,7 @@ def apply_box_weight_text(pkg, box_mult):
     weight_text = _format_box_weight_text(box_mult)
     for name, title in pkg.stories():
         if title == 'SHARED_WEIGHT':
-            pkg.set_text(name, _replace_story_contents(pkg.text(name), [weight_text]))
+            pkg.set_text(name, stories.fill_runs(pkg.text(name), [weight_text]))
     return True
 
 # Many templates hold SKU/mfg-date/batch/shelf-life in one shared "SHARED_SKU"
@@ -792,7 +785,7 @@ def _find_run_index(contents, markers):
 def _fill_shared_sku_xml(xml_text, sku_value, shelf_value):
     """Return updated XML for a SHARED_SKU story, or None if its structure
     wasn't recognized (left untouched rather than guessed at)."""
-    contents = re.findall(r'<Content>(.*?)</Content>', xml_text, re.DOTALL)
+    contents = stories.contents(xml_text)
     if not contents:
         return None
     mfg_i = _find_run_index(contents, _MFG_LABEL_MARKERS)
@@ -820,12 +813,8 @@ def _fill_shared_sku_xml(xml_text, sku_value, shelf_value):
 
     if new_contents == contents:
         return None
-    idx = [0]
-    def repl(m):
-        val = html.escape(new_contents[idx[0]])
-        idx[0] += 1
-        return f'<Content>{val}</Content>'
-    return re.sub(r'<Content>(.*?)</Content>', repl, xml_text, flags=re.DOTALL)
+    # Only the runs that changed are written: the others keep their text exactly as it stands in the XML.
+    return stories.edit_contents(xml_text, lambda i, old: None if new_contents[i] == old else new_contents[i])
 
 def apply_footer_content(pkg, translations, footer_values=None):
     """Fill the SHARED_SKU story's SKU-code and shelf-life values.
@@ -1285,19 +1274,11 @@ def _render_pdf_png(pdf_path, page, size, min_zoom, alpha) -> bytes:
     MuPDF's pixmap limit ("Overly large image"). With alpha, the result is a
     transparent PNG cropped to its ink -- that's the logo case; without, it's
     the whole page, which *is* the label's content."""
-    import fitz  # PyMuPDF
     from PIL import Image
-    doc = fitz.open(str(pdf_path))
-    try:
-        if not 0 <= page < doc.page_count:
-            raise IndexError(f"page {page} of {doc.page_count}")
-        pg   = doc.load_page(page)
-        dim  = max(pg.rect.width, pg.rect.height, 1)
-        zoom = min(max(min_zoom, size / dim), 3000 / dim)
-        pix  = pg.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=alpha)
-        img  = Image.frombytes("RGBA" if alpha else "RGB", (pix.width, pix.height), pix.samples)
-    finally:
-        doc.close()
+    def frame(pg):
+        dim = max(pg.rect.width, pg.rect.height, 1)
+        return None, min(max(min_zoom, size / dim), 3000 / dim)
+    img = page_image(pdf_path, page, frame, alpha)
     if alpha:
         img = _trim_to_content(img)
     img.thumbnail((size, size), Image.LANCZOS)
@@ -1344,19 +1325,23 @@ def get_logo_thumbnail(product_name: str):
 # thumbnail InDesign embeds in the file's XMP metadata, as of its last save.
 _PREVIEW_EXTS = ('.pdf', '.idml', '.indd')
 
+def _inside(base: Path, path):
+    """path, resolved, if it is base or inside it; None if it leads anywhere else. Every path a client sends
+    that must stay in one folder is checked here."""
+    try:
+        full = Path(path).resolve()
+        full.relative_to(base.resolve())
+        return full
+    except (ValueError, OSError):
+        return None
+
 def _resolve_label_path(rel_path: str, exts=_PREVIEW_EXTS):
     """Validate a client-supplied path as an in-bounds file under LABELS_DIR with
     one of the given extensions. Returns the resolved Path, or None."""
     if not rel_path or Path(rel_path).suffix.lower() not in exts:
         return None
-    full = (LABELS_DIR / rel_path).resolve()
-    try:
-        full.relative_to(LABELS_DIR.resolve())
-    except ValueError:
-        return None  # outside LABELS_DIR -- reject
-    if not full.is_file():
-        return None
-    return full
+    full = _inside(LABELS_DIR, LABELS_DIR / rel_path)
+    return full if full and full.is_file() else None
 
 _XMP_IMG_OPEN, _XMP_IMG_CLOSE = b"<xmpGImg:image>", b"</xmpGImg:image>"
 _B64_RUN = re.compile(rb"(?:[A-Za-z0-9+/=\r\n ]|&#x[0-9A-Fa-f]+;)+")
@@ -1516,7 +1501,7 @@ def _pdf_color_info(doc) -> dict:
 def _pdf_size_mm(doc) -> list:
     """First page's size in mm as the PDF defines it (bleed included, if any)."""
     r = doc.load_page(0).rect
-    return [round(r.width / 72 * 25.4, 1), round(r.height / 72 * 25.4, 1)]
+    return [round(r.width * MM_PER_PT, 1), round(r.height * MM_PER_PT, 1)]
 
 def get_file_info(rel_path: str):
     """Metadata for the Browse Files preview panel, or None for a bad path.
@@ -1530,8 +1515,7 @@ def get_file_info(rel_path: str):
     info = {"kind": ext[1:], "size_bytes": st.st_size, "rev": int(st.st_mtime), "page_count": 0}
     try:
         if ext == '.pdf':
-            import fitz  # PyMuPDF
-            doc = fitz.open(str(full))
+            doc = pymupdf().open(str(full))
             try:
                 info["page_count"] = doc.page_count
                 if doc.page_count:
@@ -1592,7 +1576,7 @@ def _mockup_plan(rel_path: str):
     mk, missing = _mockups_module()
     if mk is None:
         return None, missing
-    cfg = merged_config()
+    cfg = load_config()
     entry = label_entry(rel_path, full.name, make_catalogue(cfg))
     if entry["deze"]:
         return None, "Box labels have no mockup."
@@ -1833,9 +1817,10 @@ def update_progress():
     return {**status, "log": str(UPDATE_LOG)}
 
 # ── Config merging ─────────────────────────────────────────────────────────────
-def merged_config():
+def load_config():
     """The live config, completed with any languages and sizes new in the bundled default. Not written back:
-    saving does that. Products are left alone: the Editor decides those, and one removed there stays removed."""
+    saving does that. Products are left alone: the Editor decides those, and one removed there stays removed.
+    The one way the config is read, so the screens and label creation always see the same languages and sizes."""
     cfg = load_json(CFG_FILE)
     default = load_json(DEFAULT_CFG_FILE, {})
     if not cfg:
@@ -1927,10 +1912,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def send_under(self, base, rel):
         """Serve base/rel, refusing anything that resolves outside base."""
-        try:
-            full = (base / unquote(rel)).resolve()
-            full.relative_to(base.resolve())
-        except (ValueError, OSError):
+        full = _inside(base, base / unquote(rel))
+        if full is None:
             return self.send_404()
         self.send_file(full, mimetypes.guess_type(full.name)[0] or "application/octet-stream")
 
@@ -2004,7 +1987,8 @@ class Handler(BaseHTTPRequestHandler):
     }
 
     def api_config(self):
-        self.send_json(merged_config())
+        cfg = load_config()
+        self.send_json({**cfg, "rules": config_rules(cfg)})
 
     def api_shipping(self):
         with _WRITE_LOCK:     # the first read also writes the seed file
@@ -2276,10 +2260,10 @@ class Handler(BaseHTTPRequestHandler):
     @_ok_json
     def api_trash(self, body):
         p = _abs_label_path(body.get("path", ""))
-        try:
-            rel = str(Path(p).resolve().relative_to(LABELS_DIR.resolve()))
-        except (ValueError, OSError):
+        full = _inside(LABELS_DIR, p) if p else None
+        if full is None or full == LABELS_DIR.resolve():
             raise ValueError("Only files inside the labels folder can be deleted")
+        rel = str(full.relative_to(LABELS_DIR.resolve()))
         trash_path(p)
         def drop(map_data):
             map_data["files"] = [f for f in map_data.get("files", []) if f.get("path") != rel]
@@ -2291,7 +2275,7 @@ class Handler(BaseHTTPRequestHandler):
         if not src_path or not Path(src_path).exists():
             raise ValueError("Invalid or missing path")
         LABELS_DIR.mkdir(parents=True, exist_ok=True)
-        result = organizer.ingest(Path(src_path), LABELS_DIR, cat=make_catalogue(merged_config()))
+        result = organizer.ingest(Path(src_path), LABELS_DIR, cat=make_catalogue(load_config()))
         if result["entries"]:
             def add_ingested(map_data):
                 by_path = {f["path"]: f for f in map_data.get("files", [])}

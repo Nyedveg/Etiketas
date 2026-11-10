@@ -12,7 +12,7 @@ import os
 import shutil
 from pathlib import Path
 
-from labelnames import Catalogue, label_entry, label_kind, pack_amount, parse_stem
+from labelnames import Catalogue, label_entry, label_kind, parse_pack, parse_stem
 
 UNSORTED = "unsorted"
 
@@ -25,10 +25,10 @@ def _destination(path: Path, labels_dir: Path, cat: Catalogue) -> Path:
     if info["deze"]:
         pack_folder = "Box"
     else:
-        amount = pack_amount(info["packaging"])
-        if amount:
-            unit = 'L' if amount[1] == 'l' else amount[1]
-            pack_folder = f"{amount[0]:g}{unit}"
+        pack = parse_pack(info["packaging"])
+        if pack:
+            unit = pack.unit.lower()
+            pack_folder = f"{pack.amount:g}{'L' if unit == 'l' else unit}"
         else:
             pack_folder = info["packaging"]
     return labels_dir / prod_cfg["category"] / prod_cfg["name"] / ",".join(info["languages"]) / pack_folder

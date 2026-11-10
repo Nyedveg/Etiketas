@@ -8,10 +8,10 @@ at all, "0,25kg", "2025 11"). Those are understood too, but only with a
 Catalogue -- the known products and languages -- to confirm the guess.
 """
 import re
+from collections import namedtuple
 from pathlib import Path
 
-RE_PACK     = re.compile(r'^\d+([.,]\d+)?(kg|g|l|ml)(x\d+)?$', re.I)
-RE_PACK_AMT = re.compile(r'^(\d+(?:[.,]\d+)?)(kg|g|l|ml)', re.I)
+RE_PACK     = re.compile(r'^\s*(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml)\s*(?:x\s*(\d+))?\s*$', re.I)
 RE_LANG     = re.compile(r'^[A-Z]{2}$')
 RE_DIMS     = re.compile(r'^\d+x\d+$', re.I)
 RE_YEAR     = re.compile(r'^(19|20)\d{2}$')
@@ -30,10 +30,21 @@ def norm_name(s: str) -> str:
     logo/QR files and catalogue entries ("Opti Oil" == "OptiOil")."""
     return re.sub(r'[^a-z0-9]', '', (s or '').lower())
 
-def pack_amount(packaging: str):
-    """("0,25kgx40" -> (0.25, "kg")), or None if it doesn't start with an amount and unit."""
-    m = RE_PACK_AMT.match((packaging or '').strip())
-    return (float(m.group(1).replace(',', '.')), m.group(2).lower()) if m else None
+# A pack as the app writes it: "250ml", "1L", "0,25kgx40". The unit is as written; count is how many go in a box,
+# None outside one. Every module reads pack sizes through parse_pack, so they all accept the same spellings.
+Pack = namedtuple("Pack", "amount unit count")
+
+def parse_pack(packaging: str):
+    """"0,25kgx40" -> Pack(0.25, "kg", 40); None if it isn't a pack."""
+    m = RE_PACK.match(packaging or '')
+    if not m:
+        return None
+    return Pack(float(m.group(1).replace(',', '.')), m.group(2), int(m.group(3)) if m.group(3) else None)
+
+def pack_base(pack: Pack):
+    """The pack's amount in kg or litres, and which: 250 ml -> (0.25, "l"), 50 g -> (0.05, "kg")."""
+    unit = pack.unit.lower()
+    return (pack.amount / 1000 if unit in ('g', 'ml') else pack.amount), ('l' if unit in ('l', 'ml') else 'kg')
 
 class Catalogue:
     """The products and languages the app knows about. With one, a filename's

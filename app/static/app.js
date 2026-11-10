@@ -5,7 +5,8 @@ const {useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, useDe
 // Same-origin requests: the server only accepts calls made from its own page.
 const api = {
   get:  (p)    => fetch(p).then(r=>r.json()),
-  post: (p, b) => fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json()),
+  send: (p, b) => fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}),   // the response itself, for a download
+  post: (p, b) => api.send(p, b).then(r=>r.json()),
   loadConfig:   ()    => api.get('/api/config'),
   saveConfig:   (cfg) => api.post('/api/config/save', cfg),
   loadMap:      ()    => api.get('/api/map'),
@@ -91,6 +92,14 @@ const langLabel=l=>{
   catch{return l.name;}
 };
 const langText=l=>`${l.code} ${l.iso??''} ${l.name} ${langLabel(l)} ${l.alt??''}`;
+// The label languages, looked up the same way on every page: the list, each by its code, and each one's name here.
+const NO_LANGUAGES=[];
+function useLanguages(config){
+  return useMemo(()=>{
+    const list=config?.languages??NO_LANGUAGES;
+    return {list,byCode:Object.fromEntries(list.map(l=>[l.code,l])),names:Object.fromEntries(list.map(l=>[l.code,langLabel(l)]))};
+  },[config]);
+}
 // Sorted by use, the list has a clear break: languages on labels, then the rest by name.
 const langGroups=(langs,sort,usage)=>sort!=='used'?[{items:langs}]:[
   {title:tx('On your labels'),items:langs.filter(l=>usage[l.code])},
@@ -110,7 +119,18 @@ const LangSortToggle=({sort,onChange})=>(
   </div>
 );
 // Which translation a language slot starts on: the product's own file, then the general one.
-const sameProduct=(a,b)=>!!a&&!!b&&a.toLowerCase().replace(/[^a-z0-9]/g,'')===b.toLowerCase().replace(/[^a-z0-9]/g,'');
+// A name without case, spaces or punctuation, so "Opti Oil" is "OptiOil" (norm_name in labelnames.py, for the server).
+const nameKey=s=>(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const sameProduct=(a,b)=>!!a&&!!b&&nameKey(a)===nameKey(b);
+// A pack as the app writes it, "250ml", "1L", "0,25kg": its amount in kg or litres, and whether it is a liquid.
+// Every pack size on the page is read through this one, as every one on the server is through parse_pack.
+const parsePack=size=>{
+  const m=/^\s*(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml)/i.exec(size||'');
+  if(!m)return null;
+  const u=m[2].toLowerCase();
+  return {amount:parseFloat(m[1].replace(',','.'))*(u==='g'||u==='ml'?.001:1),liquid:u==='l'||u==='ml'};
+};
+const packAmount=size=>parsePack(size)?.amount??null;
 const translationFor=(files,code,product)=>{
   const own=files.filter(f=>f.code===code);
   return own.find(f=>sameProduct(f.product,product))??own.find(f=>!f.product)??own[0];
@@ -120,7 +140,9 @@ const translationFor=(files,code,product)=>{
 // midnight is still the previous UTC day, which shifted every chart bar by one day.
 const localDateKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
-// Category colours: PAM brown, CE green, anything else (MO) navy.
+// The product categories, in the order every list and choice of them uses.
+const CATEGORIES=['PAM','MO','CE'];
+// Category colours, for every badge and button that shows a category: PAM brown, CE green, anything else (MO) navy.
 const CAT_STYLE={
   PAM:{color:'var(--pam)',bg:'rgba(var(--pam-rgb),.15)'},
   CE: {color:'var(--ce)', bg:'rgba(var(--accent-rgb),.15)'},
@@ -128,15 +150,9 @@ const CAT_STYLE={
 };
 const catStyle=c=>CAT_STYLE[c]||CAT_STYLE.MO;
 
-// Which table of config.dimensions / config.packagingSizes a product is sized from
-// (mirrors dim_key_for in etiketas.py).
-const dimKeyFor=p=>{
-  if(!p)return null;
-  const {category,acidic,unit}=p, u=unit||(category==='PAM'?'L':'kg');
-  if(category==='PAM')return acidic?'PAM_acidic':'PAM_normal';
-  if(category==='CE')return u==='kg'?'CE_solid':'CE';
-  return u==='L'?'MO_liquid':'MO';
-};
+// Which table of config.dimensions / config.packagingSizes a product is sized from. The server decides
+// (dim_key_for in etiketas.py) and sends it with the config, so the page never works it out a second way.
+const dimKeyFor=(config,p)=>p?config?.rules?.dimKeys?.[p.name]??null:null;
 
 // File tag colours: one table for the badges in every file list and for the Browse
 // toolbar's filter options and pills, so a filter always looks like the thing it filters.
@@ -225,14 +241,20 @@ const UPDATE_SNOOZE_KEY='etiketas.updateSnooze';
 const UPDATE_DONE_KEY='etiketas.updateDone';
 const UPDATE_TIMEOUT_MS=10*60000;     // a slow download and dependency install
 const UPDATE_DOWN_MS=2*60000;         // the server being gone is only the swap and restart
+// Every use of localStorage and sessionStorage goes through these: storage can be unavailable (private window,
+// full disk), and then what was chosen lasts until the page is reloaded instead.
 const storeGet=(store,key)=>{try{return store.getItem(key);}catch{return null;}};
 const storeSet=(store,key,value)=>{try{store.setItem(key,value);}catch{/* the choice lasts until reload instead */}};
+const storeRemove=(store,key)=>{try{store.removeItem(key);}catch{/* nothing to clear */}};
+// A stored value read as JSON: the fallback when there is none, or it can't be read.
+const storeGetJson=(store,key,fallback)=>{try{return JSON.parse(storeGet(store,key))??fallback;}catch{return fallback;}};
+const storeSetJson=(store,key,value)=>storeSet(store,key,JSON.stringify(value));
 
 function useUpdates(){
   // Set just before the reload that follows a finished update, to say it worked.
   const [offer,setOffer]=useState(()=>{
     const done=storeGet(sessionStorage,UPDATE_DONE_KEY);
-    if(done)sessionStorage.removeItem(UPDATE_DONE_KEY);
+    if(done)storeRemove(sessionStorage,UPDATE_DONE_KEY);
     return done?{done:true}:null;
   });
   const snoozedUntil=useRef(Number(storeGet(localStorage,UPDATE_SNOOZE_KEY))||0);
@@ -381,7 +403,12 @@ function App(){
   useEffect(()=>{
     Promise.all([api.loadConfig(),api.loadMap(),api.getShipping()]).then(([cfg,m,s])=>{setConfig(cfg);setMap(m);setShipping(s);setLoading(false);});
   },[]);
-  const saveConfig=useCallback(async cfg=>{const r=await api.saveConfig(cfg);if(r?.ok!==false)setConfig(cfg);return r;},[]);
+  // What was saved, with the rules read back: the server works them out from it (a new product's size table).
+  const saveConfig=useCallback(async cfg=>{
+    const r=await api.saveConfig(cfg);
+    if(r?.ok!==false)setConfig({...cfg,rules:(await api.loadConfig()).rules});
+    return r;
+  },[]);
   const saveShipping=useCallback(async s=>{const r=await api.saveShipping(s);if(r.ok)setShipping(s);return r;},[]);
   // Safety data has its own file; what the calculator shows of it, it reads from the shipping data.
   const setSafety=useCallback(products=>setShipping(s=>s&&!s.error?{...s,safety:products}:s),[]);
@@ -855,7 +882,7 @@ function Dashboard({map,config,refreshMap}){
                     <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 14px',borderBottom:'1px solid var(--border)',fontSize:12}}>
                       <span style={{flex:1,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={t.filename}>{t.filename.replace(/\.idml$/i,'')}</span>
                       <span style={{flexShrink:0,fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text3)'}}>{t.dimensions}</span>
-                      {t.deze?<span className="badge badge-pam" style={{fontSize:9}}>{tx('Box')}</span>:<span className="badge badge-ok" style={{fontSize:9}}>{tx('Label')}</span>}
+                      <BadgeKind f={t}/>
                       <button className="btn btn-sm" style={{padding:'2px 6px',flexShrink:0}} title={tx('Reveal in Explorer')} onClick={()=>api.revealFile(t.path)}><Icon.Folder/></button>
                     </div>
                   ))}
@@ -975,14 +1002,14 @@ function NewLabelWizard({config,map,setMap,shipping}){
   useEffect(()=>{api.getColors().then(r=>{if(r?.colors)setProdColors(r.colors);});},[]);
   useEffect(()=>{api.checkAssets().then(r=>{if(r&&!r.error)setProdAssets(r);});},[]);
   const enabledProducts=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
-  const allLangs=config?.languages??[];
+  const {list:allLangs,byCode:langByCode}=useLanguages(config);
   const usage=useMemo(()=>langUsage(map?.files),[map]);
   const shownLangs=useMemo(()=>sortLangs(allLangs.filter(l=>l.enabled&&matchesSearch(langText(l),langSearch)),langSort,usage),[allLangs,langSearch,langSort,usage]);
-  const langOf=code=>allLangs.find(l=>l.code===code);
+  const langOf=code=>langByCode[code];
   const translationsByName=useMemo(()=>[...transFiles].sort((a,b)=>a.name.localeCompare(b.name)||(a.product??'').localeCompare(b.product??'')),[transFiles]);
   const translationOption=f=><option key={f.path} value={f.path}>{f.name} ({f.code}){f.product?` — ${f.product}`:''}{f.status==='draft'?tx(' — draft'):''}</option>;
   const productCfg=product?config.products.find(p=>p.name===product):null;
-  const dimKey=dimKeyFor(productCfg);
+  const dimKey=dimKeyFor(config,productCfg);
   const sizes=dimKey?(config?.packagingSizes?.[dimKey]??[]):[];
   const filtered=enabledProducts.filter(p=>matchesSearch(p.name,search));
   useEffect(()=>{
@@ -1044,10 +1071,7 @@ function NewLabelWizard({config,map,setMap,shipping}){
       {step===1&&(
         <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
           <div className="field" style={{flexShrink:0}}>
-            <div className="search-wrap">
-              <span className="search-icon"><Icon.Search size={14}/></span>
-              <input className="input" placeholder={tx('Search products...')} value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
-            </div>
+            <SearchBox block value={search} onChange={setSearch} placeholder={tx('Search products...')} autoFocus/>
           </div>
           <div className="product-grid" style={{flex:1,alignContent:'start'}}>
             {filtered.map(p=>(
@@ -1096,10 +1120,7 @@ function NewLabelWizard({config,map,setMap,shipping}){
               }
             </div>
             <div className="flex gap-2 items-center" style={{marginTop:'var(--space-2)'}}>
-              <div className="search-wrap" style={{flex:1}}>
-                <span className="search-icon"><Icon.Search size={14}/></span>
-                <input className="input" placeholder={tx('Search languages...')} aria-label={tx('Search languages')} value={langSearch} onChange={e=>setLangSearch(e.target.value)} autoFocus/>
-              </div>
+              <SearchBox block style={{flex:1}} value={langSearch} onChange={setLangSearch} placeholder={tx('Search languages...')} label={tx('Search languages')} autoFocus/>
               <LangSortToggle sort={langSort} onChange={setLangSort}/>
             </div>
           </div>
@@ -1198,7 +1219,7 @@ function NewLabelWizard({config,map,setMap,shipping}){
                 onFocus={e=>{const end=e.target.value.length;e.target.setSelectionRange(end,end);}}/>
               {!skuTyped&&<div style={{fontSize:11,color:'var(--warning)',marginTop:6}}>{tx('⚠ No SKU provided')}</div>}
               <div className="hint" style={{marginTop:6}}>{skuMeaning(shipping?.skuRules,sku)}</div>
-              {skuTyped?<SkuWarnings lines={skuChecks(shipping?.skuRules,skuTyped,{languages,packSize:labelPackAmount(size),name:product,codes:skuCodesForLabel(shipping,product)})}/>:null}
+              {skuTyped?<SkuWarnings lines={skuChecks(shipping?.skuRules,skuTyped,{languages,packSize:packAmount(size),name:product,codes:skuCodesForLabel(shipping,product)})}/>:null}
               <SkuHints lines={skuHints(shipping?.skuRules,languages,product)}/>
             </div>
           )}
@@ -1361,45 +1382,35 @@ function NewLabelWizard({config,map,setMap,shipping}){
 }
 // Label sizes per category, with the product's own category highlighted.
 const DIM_ROWS=[['PAM_normal',tx('PAM Normal'),'var(--pam)'],['PAM_acidic',tx('PAM Acidic'),'var(--warning)'],['MO','MO','var(--mo)'],['MO_liquid',tx('MO Liquid'),'var(--mo)'],['CE','CE','var(--ce)'],['CE_solid',tx('CE Solid'),'var(--ce)']];
-// Every label size by product kind, and how many of each pack go in a box. Shown under Shipment → Pallets & packaging.
+// Every label size by product kind, and how many of each pack go in a box: one small table for the sizes in ml and L,
+// one for those in g and kg, a kind to a row. Shown under Shipment → Pallets & packaging.
+const isLiquidSize=sz=>!!parsePack(sz)?.liquid;
 function SizeTable({config}){
-  const noBox=[...new Set(Object.values(config?.packagingSizes??{}).flat())].filter(sz=>!config?.boxMultipliers?.[sz]);
+  const dims=config?.dimensions??{};
+  const groups=[true,false].map(liquid=>{
+    const rows=DIM_ROWS.filter(([key])=>Object.keys(dims[key]??{}).some(sz=>isLiquidSize(sz)===liquid));
+    const sizes=[...new Set(rows.flatMap(([key])=>Object.keys(dims[key])))].sort((a,b)=>packAmount(a)-packAmount(b));
+    return {liquid,rows,sizes};
+  }).filter(g=>g.rows.length);
   return(
     <div className="size-ref">
-      {DIM_ROWS.map(([key,label,clr])=>{
-        const entries=Object.entries(config?.dimensions?.[key]??{});
-        if(!entries.length)return null;
-        return(
-          <div key={key}>
-            <div className="size-ref-kind" style={{color:clr}}>{label}</div>
-            <div className="size-ref-row">
-              {entries.map(([sz,dims])=>(
-                <div key={sz} className="size-ref-chip">
-                  <div className="size-ref-size">{sz}</div>
-                  <div className="size-ref-dims">{dims} mm</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-      <div>
-        <div className="size-ref-kind">{tx('Box')}</div>
-        <div className="size-ref-row">
-          {Object.entries(config?.boxMultipliers??{}).map(([sz,box])=>(
-            <div key={sz} className="size-ref-chip">
-              <div className="size-ref-dims">{sz}</div>
-              <div className="size-ref-size">{box}</div>
-            </div>
-          ))}
-          {noBox.map(sz=>(
-            <div key={sz} className="size-ref-chip muted">
-              <div className="size-ref-dims">{sz}</div>
-              <div className="size-ref-size">{tx('No box')}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {groups.map(g=>(
+        <table key={String(g.liquid)} className="table dense size-ref-table">
+          <thead><tr><th aria-label={tx('Product kind')}/>{g.sizes.map(sz=><th key={sz} className="num">{sz}</th>)}</tr></thead>
+          <tbody>
+            {g.rows.map(([key,label,clr])=>(
+              <tr key={key}>
+                <td className="size-ref-kind" style={{color:clr}}>{label}</td>
+                {g.sizes.map(sz=><td key={sz} className="num mono">{dims[key][sz]?.replace('x','×')??'–'}</td>)}
+              </tr>
+            ))}
+            <tr className="size-ref-box">
+              <td>{tx('Per box')}</td>
+              {g.sizes.map(sz=><td key={sz} className="num mono">{boxCount(config?.boxMultipliers?.[sz])??'–'}</td>)}
+            </tr>
+          </tbody>
+        </table>
+      ))}
     </div>
   );
 }
@@ -1419,7 +1430,7 @@ function Information({config,map,setMap,shipping}){
   const [assets,setAssets]=useState({});
   const [fileType,setFileType]=useState('all');
   const [showWip,setShowWip]=useState('all');
-  const [catFilter,setCatFilter]=useState('all');
+  const [catFilter,setCatFilter]=useState(null);   // null: every category
   const [iconLib,setIconLib]=useState(null);
   const [iconAssign,setIconAssign]=useState({});
   useEffect(()=>{
@@ -1430,10 +1441,10 @@ function Information({config,map,setMap,shipping}){
   },[]);
   const enabledProds=(config?.products??[]).filter(p=>p.enabled).sort((a,b)=>a.name.localeCompare(b.name));
   const filteredProds=enabledProds
-    .filter(p=>catFilter==='all'||p.category===catFilter)
+    .filter(p=>!catFilter||p.category===catFilter)
     .filter(p=>matchesSearch(p.name,search));
   const prodCfg=selected?(config?.products??[]).find(p=>p.name===selected):null;
-  const dimKey=dimKeyFor(prodCfg);
+  const dimKey=dimKeyFor(config,prodCfg);
   const swatches=selected?(colors[selected]||Array(6).fill('#808080')):[];
   const allFiles=map?.files??[];
   const prodFiles=allFiles.filter(f=>f.product===selected);
@@ -1449,18 +1460,8 @@ function Information({config,map,setMap,shipping}){
     <div style={{display:'flex',height:'100%',gap:'var(--space-5)',overflow:'hidden'}}>
       {/* ── LEFT: product list sidebar ── */}
       <div style={{width:200,flexShrink:0,display:'flex',flexDirection:'column',gap:'var(--space-2)',minHeight:0}}>
-        <div className="search-wrap">
-          <span className="search-icon"><Icon.Search size={14}/></span>
-          <input className="input" placeholder={tx('Search...')} value={search} onChange={e=>setSearch(e.target.value)}/>
-        </div>
-        <div style={{display:'flex',gap:'var(--space-1)',flexWrap:'wrap',marginBottom:'var(--space-1)'}}>
-          {[['all',tx('All')],['MO','MO'],['PAM','PAM'],['CE','CE']].map(([v,l])=>(
-            <button key={v} onClick={()=>{setCatFilter(v);setSelected(null);}}
-              style={{fontSize:10,fontFamily:'var(--font-mono)',padding:'2px 8px',borderRadius:10,border:'1px solid '+(catFilter===v?catStyle(v==='all'?'MO':v).color:'var(--border2)'),background:catFilter===v?catStyle(v==='all'?'MO':v).bg:'transparent',color:catFilter===v?catStyle(v==='all'?'MO':v).color:'var(--text3)',cursor:'pointer',transition:'all .15s'}}>
-              {l}
-            </button>
-          ))}
-        </div>
+        <SearchBox block value={search} onChange={setSearch} label={tx('Search products')}/>
+        <CategorySegment small value={catFilter} onChange={c=>{setCatFilter(c);setSelected(null);}}/>
         <div className="scroll-y pick-list">
           {filteredProds.map(p=>(
             <button key={p.name} className={'pick-row'+(selected===p.name?' on':'')} onClick={()=>setSelected(selected===p.name?null:p.name)}>
@@ -1605,14 +1606,14 @@ function Information({config,map,setMap,shipping}){
 // colours in the toolbar -- the same ones the table rows use, so a filter looks like what it
 // filters. Everything else is neutral, and the accent means "on".
 
-// Pack-size groups (matched against the lower-cased packaging, e.g. "5kgx2").
-const PACK_GROUPS={'1kg-1l':/^(1kg|1l)/,'5kg-5l':/^(5kg|5l)/,'250g':/^250g/,'500g':/^500g/};
+// Pack-size groups, by the amount in a file's packaging (a box, "5kgx2", is in its pack's group).
+const isAmount=(a,b)=>Math.abs(a-b)<1e-9;
+const PACK_GROUPS={'1kg-1l':p=>isAmount(p.amount,1),'5kg-5l':p=>isAmount(p.amount,5),'250g':p=>!p.liquid&&isAmount(p.amount,.25),'500g':p=>!p.liquid&&isAmount(p.amount,.5)};
 const sizeMatches=(f,group)=>{
-  const p=(f.packaging??'').toLowerCase();
-  if(group==='other')return !p||!Object.values(PACK_GROUPS).some(re=>re.test(p));
-  return !!p&&PACK_GROUPS[group].test(p);
+  const p=parsePack(f.packaging);
+  if(group==='other')return !p||!Object.values(PACK_GROUPS).some(fits=>fits(p));
+  return !!p&&PACK_GROUPS[group](p);
 };
-const CATS=['PAM','MO','CE'];
 const KIND_OPTIONS=[['label',tx('Label')],['box',tx('Box')]];
 const FORMAT_OPTIONS=[['indd','InDesign'],['idml','IDML'],['print',tx('Print')]];
 const SIZE_OPTIONS=[['1kg-1l','1kg / 1L'],['5kg-5l','5kg / 5L'],['250g','250g'],['500g','500g'],['other',tx('Other')]];
@@ -1653,7 +1654,7 @@ const searchText=(f,langName)=>`${f.filename} ${f.product||''} ${(f.languages??[
 // option gives on its own) -- except language "all" matching, counted with it (what adding the
 // option would leave), so an option that would empty the list reads 0.
 const facetCounts=(entries,filters,query,ctx,langCodes)=>{
-  const values={cat:CATS,kinds:KIND_OPTIONS.map(o=>o[0]),formats:FORMAT_OPTIONS.map(o=>o[0]),sizes:SIZE_OPTIONS.map(o=>o[0]),status:STATUS_OPTIONS.map(o=>o[0]),langs:langCodes};
+  const values={cat:CATEGORIES,kinds:KIND_OPTIONS.map(o=>o[0]),formats:FORMAT_OPTIONS.map(o=>o[0]),sizes:SIZE_OPTIONS.map(o=>o[0]),status:STATUS_OPTIONS.map(o=>o[0]),langs:langCodes};
   const out={};
   for(const key of FACET_KEYS){
     const pool=filterFiles(entries,filters,query,ctx,key==='langs'&&filters.langMode==='all'?null:key);
@@ -1680,12 +1681,6 @@ const withoutItem=(filters,{key,value})=>key==='cat'?{...filters,cat:null}:{...f
 // Sorting. Empty values always go last, and ties fall back to the path (which groups a
 // product's files together).
 const NAT=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'});
-const packAmount=p=>{
-  const m=/^(\d+(?:[.,]\d+)?)(kg|g|l|ml)/i.exec(p||'');
-  if(!m)return null;
-  const n=parseFloat(m[1].replace(',','.')),u=m[2].toLowerCase();
-  return u==='g'||u==='ml'?n/1000:n;
-};
 const SORT_KEY={
   filename:f=>f.filename,
   product:f=>f.product||null,
@@ -1719,35 +1714,41 @@ const SortTh=({k,label,sort,onSort})=>{
 };
 
 // ── Toolbar pieces ──
-function SearchBox({value,onChange,inputRef}){
+// Every search field in the app: a magnifier, the text, and a clear button once something is typed. Esc clears
+// it, then a second Esc leaves it. `block` fills a narrow column (a product list) instead of sitting in a toolbar.
+function SearchBox({value,onChange,inputRef,placeholder=tx('Search...'),label,hotkey,block,style,autoFocus}){
+  const own=useRef(null),ref=inputRef??own;
   return(
-    <div className="fb-search">
+    <div className={'fb-search'+(block?' block':'')} style={style}>
       <span className="fb-search-ico"><Icon.Search size={15}/></span>
-      <input ref={inputRef} className="input" type="text" value={value} placeholder={tx('Search files, products, languages…')} aria-label={tx('Search files')}
+      <input ref={ref} className="input" type="text" autoComplete="off" value={value} placeholder={placeholder} aria-label={label??placeholder} autoFocus={autoFocus}
         onChange={e=>onChange(e.target.value)}
         onKeyDown={e=>{if(e.key==='Escape'){if(value)onChange('');else e.target.blur();}}}/>
       {value
-        ?<button type="button" className="fb-search-clear" aria-label={tx('Clear search')} onClick={()=>{onChange('');inputRef.current?.focus();}}><Icon.Close size={12}/></button>
-        :<kbd className="fb-kbd">/</kbd>}
+        ?<button type="button" className="fb-search-clear" aria-label={tx('Clear search')} onClick={()=>{onChange('');ref.current?.focus();}}><Icon.Close size={12}/></button>
+        :hotkey&&<kbd className="fb-kbd">{hotkey}</kbd>}
     </div>
   );
 }
 
 // Category: one capsule with a segment per category. A category's colour shows as a dot until it
 // is chosen, then fills its segment -- the same colours as the Cat badges in the table.
-function CategorySegment({value,onChange,counts}){
+// Every choice of category in the app. As a filter (Browse, Information) it starts with All and a second click
+// on a category clears it; with required, as in the Editor, one of them is always chosen.
+function CategorySegment({value,onChange,counts,required,small}){
   const seg=(v,label)=>{
     const on=(value??'all')===v,st=v==='all'?null:catStyle(v),n=st?counts?.[v]:null;
     return(
-      <button key={v} type="button" aria-pressed={on} title={n==null?tx('All categories'):txn(n,'{0} file in {1}','{0} files in {1}',v)}
+      <button key={v} type="button" aria-pressed={on}
+        title={counts?(st?txn(n??0,'{0} file in {1}','{0} files in {1}',v):tx('All categories')):undefined}
         className={'seg-btn'+(on?' on':'')+(!on&&n===0?' dim':'')}
         style={on&&st?{background:st.color,color:'var(--on-accent)'}:undefined}
-        onClick={()=>onChange(v==='all'||on?null:v)}>
+        onClick={()=>required?(!on&&onChange(v)):onChange(v==='all'||on?null:v)}>
         {st&&<span className="dot" style={{background:on?'var(--on-accent)':st.color}}/>}{label}
       </button>
     );
   };
-  return <div className="seg" role="group" aria-label={tx('Category')}>{seg('all',tx('All'))}{CATS.map(c=>seg(c,c))}</div>;
+  return <div className={'seg'+(small?' small':'')} role="group" aria-label={tx('Category')}>{!required&&seg('all',tx('All'))}{CATEGORIES.map(c=>seg(c,c))}</div>;
 }
 
 // A filter that opens a checklist: a capsule button with a caret, and a count badge once it is
@@ -1865,10 +1866,9 @@ function LabelsBrowser({map,setMap,config,onNewLabel}){
   const files=map?.files??NO_FILES;
   const catOf=useMemo(()=>categoryMap(config),[config]);
   const ctx=useMemo(()=>({catOf}),[catOf]);
-  const langName=useMemo(()=>Object.fromEntries((config?.languages??[]).map(l=>[l.code,langLabel(l)])),[config]);
+  const {names:langName,byCode:langByCode}=useLanguages(config);
   const entries=useMemo(()=>files.map(f=>({f,hay:searchText(f,langName)})),[files,langName]);
   const [langSort,setLangSort]=useLangSort();
-  const langByCode=useMemo(()=>Object.fromEntries((config?.languages??[]).map(l=>[l.code,l])),[config]);
   // Every language that has files, in the chosen order. Always by use across all files,
   // not the counts shown beside them, which change with the other filters and would reshuffle the list.
   const langOptions=useMemo(()=>{
@@ -1933,7 +1933,7 @@ function LabelsBrowser({map,setMap,config,onNewLabel}){
     <div>
       <div className="fb">
         <div className="fb-row">
-          <SearchBox value={search} onChange={setSearch} inputRef={searchRef}/>
+          <SearchBox value={search} onChange={setSearch} inputRef={searchRef} placeholder={tx('Search files, products, languages…')} label={tx('Search files')} hotkey="/"/>
           <CategorySegment value={filters.cat} counts={counts.cat} onChange={cat=>setFilters(f=>({...f,cat}))}/>
           {menu('kinds',Icon.Tag,kindOpts)}
           {menu('formats',Icon.File,formatOpts)}
@@ -2339,7 +2339,7 @@ function SearchSelect({value,onChange,children,className='',disabled,...rest}){
 // data sheets it follows. All of this lives in the shared folder, never in this public repo.
 const byId=list=>Object.fromEntries((list??[]).map(x=>[x.id,x]));
 const byProfileName=(a,b)=>a.name.localeCompare(b.name);
-const SHIP_GROUPS=['MO','PAM','CE','NON'];
+const SHIP_GROUPS=[...CATEGORIES,'NON'];
 // One entry per pack, with what the calculator needs read through to the catalogues.
 const shipEntries=shipping=>{
   const pallets=byId(shipping?.pallets),containers=byId(shipping?.containers),boxes=byId(shipping?.boxes);
@@ -2461,13 +2461,9 @@ const skuMeaning=(rules,sku,from=0)=>skuRead(rules,sku).parts.slice(from).map(p=
 const SkuHints=({lines})=>lines.length?<div className="sku-hints">{lines.map(l=><div key={l}>{l}</div>)}</div>:null;
 const SkuWarnings=({lines})=>lines.length?<div className="sku-warnings">{lines.map(l=><div key={l}>{l}</div>)}</div>:null;
 // A pack as labels name it, in the unit shipping uses: "250ml" is 0.25, "5L" is 5.
-const labelPackAmount=size=>{
-  const m=/^\s*(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml)/i.exec(size||'');
-  return m?parseFloat(m[1].replace(',','.'))*(/^(g|ml)$/i.test(m[2])?.001:1):null;
-};
 // Only when the shipping products linked to a label agree on where its SKU starts.
 const skuStartForLabel=(shipping,product,size)=>{
-  const found=(shipping?.products??[]).filter(p=>p.links?.includes(product)).map(p=>skuStart(p,product,labelPackAmount(size),shipping?.skuRules)).filter(Boolean);
+  const found=(shipping?.products??[]).filter(p=>p.links?.includes(product)).map(p=>skuStart(p,product,packAmount(size),shipping?.skuRules)).filter(Boolean);
   return new Set(found).size===1?found[0]:'';
 };
 const skuCodesForLabel=(shipping,product)=>[...new Set((shipping?.products??[]).filter(p=>p.links?.includes(product)).map(p=>skuCodeFor(p,product)).filter(Boolean))];
@@ -2581,18 +2577,22 @@ const tdsOf=(p,shipping)=>{
   return (p.tds??[]).map(id=>all[id]).filter(Boolean);
 };
 const tdsSource=t=>[t.code,t.version&&`v${t.version}`,t.revised&&`revised ${t.revised}`].filter(Boolean).join(' · ')||tx('no version given');
+// A shipping group in its category's colours; a group that isn't a category (NON) is neutral.
 const groupBadge=g=>{
-  const c={PAM:'badge-pam',MO:'badge-mo',CE:'badge-ce'}[g]??'badge-neutral';
-  return g?<span className={`badge ${c}`}>{g}</span>:null;
+  if(!g)return null;
+  const st=CAT_STYLE[g]??TONE.neutral;
+  return <span className="badge" style={{background:st.bg,color:st.color}}>{g}</span>;
 };
 const AirBadge=({p})=>p.airTransport?<span className="badge badge-ok">{tx('Allowed')}</span>:<span className="badge badge-danger">{tx('Not allowed')}</span>;
 
 // A pack's units per box, from the same cheat sheet the box labels are named by.
 const packSizeKey=(size,unit)=>size>=1?`${size}${unit}`:`${Math.round(size*1000)}${unit==='L'?'ml':'g'}`;
-const unitsPerBoxOnSheet=(config,size,unit)=>{
-  const m=/x(\d+)$/.exec(config?.boxMultipliers?.[packSizeKey(size,unit)]??'');
+// How many go in a box, from a cheat-sheet entry like "1kgx10".
+const boxCount=entry=>{
+  const m=/x(\d+)$/.exec(entry??'');
   return m?Number(m[1]):null;
 };
+const unitsPerBoxOnSheet=(config,size,unit)=>boxCount(config?.boxMultipliers?.[packSizeKey(size,unit)]);
 // A size labels come in, with no entry on the cheat sheet: 20 L, which has no box label.
 const noBoxOnSheet=(config,size,unit)=>{
   const key=packSizeKey(size,unit);
@@ -2686,8 +2686,8 @@ function TdsCard({sheet:t}){
 // person's order doesn't appear on anyone else's screen the way a shared file would.
 const SHIPMENT_KEY='etiketas.shipment';
 const readShipment=()=>{
-  try{const v=JSON.parse(localStorage.getItem(SHIPMENT_KEY)||'[]');return Array.isArray(v)?v:[];}
-  catch{return [];}
+  const v=storeGetJson(localStorage,SHIPMENT_KEY,[]);
+  return Array.isArray(v)?v:[];
 };
 const shipmentMemory={tab:'calc'};   // which tab, kept until the page is reloaded
 
@@ -2848,15 +2848,12 @@ const packingListChecks=({customer,transport},rows,gone,shipping)=>{
 
 // The transport stays with the open order, like its lines do. The customer doesn't: it is typed for each document.
 const DOC_INFO_KEY='etiketas.shipment.document';
-const readTransport=()=>{
-  try{return JSON.parse(localStorage.getItem(DOC_INFO_KEY)||'{}').transport||'Truck';}
-  catch{return 'Truck';}
-};
+const readTransport=()=>storeGetJson(localStorage,DOC_INFO_KEY,{})?.transport||'Truck';
 
 function PackingListDialog({rows,gone,shipping,updateLine,onClose}){
   const [customer,setCustomer]=useState('');
   const [transport,setTransport]=useState(readTransport);
-  useEffect(()=>{try{localStorage.setItem(DOC_INFO_KEY,JSON.stringify({transport}));}catch{/* storage unavailable: it lasts until closed */}},[transport]);
+  useEffect(()=>storeSetJson(localStorage,DOC_INFO_KEY,{transport}),[transport]);
   const info={customer,transport};
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
@@ -2864,7 +2861,7 @@ function PackingListDialog({rows,gone,shipping,updateLine,onClose}){
   const make=async()=>{
     setBusy(true);setError('');
     try{
-      const r=await fetch('/api/shipping/packing_list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packingListDoc(info,rows,shipping?.skuRules))});
+      const r=await api.send('/api/shipping/packing_list',packingListDoc(info,rows,shipping?.skuRules));
       if(!r.ok)throw new Error((await r.json().catch(()=>null))?.error||'');
       await saveDownload(r,'Packing_List.docx');
       onClose();
@@ -2930,7 +2927,7 @@ function PackingListDialog({rows,gone,shipping,updateLine,onClose}){
 // Pick a product, then one of its packs: everything for a product is in one place.
 function ShipCalculator({shipping}){
   const [lines,setLines]=useState(readShipment);
-  useEffect(()=>{try{localStorage.setItem(SHIPMENT_KEY,JSON.stringify(lines));}catch{/* storage unavailable: lines last until reload */}},[lines]);
+  useEffect(()=>storeSetJson(localStorage,SHIPMENT_KEY,lines),[lines]);
   const entries=useMemo(()=>shipEntries(shipping),[shipping]);
   const entryOf=useMemo(()=>byId(entries),[entries]);
   const products=useMemo(()=>(shipping.products??[]).filter(p=>p.packs?.length).sort(byProfileName),[shipping]);
@@ -2966,7 +2963,7 @@ function ShipCalculator({shipping}){
   const clearLines=()=>{
     if(!window.confirm(tx('Remove every line from this shipment?')))return;
     setLines([]);
-    try{localStorage.removeItem(DOC_INFO_KEY);}catch{/* storage unavailable: nothing to clear */}
+    storeRemove(localStorage,DOC_INFO_KEY);
   };
   const [docOpen,setDocOpen]=useState(false);
 
@@ -3237,17 +3234,19 @@ const RefTable=({title,hint,columns,rows})=>(
     </table>
   </div>
 );
+// The label sizes first, as one card of the grid like the rest.
 const ShipReference=({shipping,config})=>(
-  <>
-    <div className="card ship-section">
-      <div className="card-title">{tx('Label & Box Size Reference')}</div>
+  <div className="ship-ref-grid">
+    <div className="card ship-ref-card">
+      <div className="ship-ref-head">
+        <div className="card-title">{tx('Label & Box Size Reference')}</div>
+        <div className="hint">{tx('Label sizes in mm, and how many of each pack go in a box.')}</div>
+      </div>
       <SizeTable config={config}/>
     </div>
-    <div className="ship-ref-grid">
-      {SHIP_CATALOGUES.map(c=><RefTable key={c.key} title={c.title} hint={c.hint} columns={c.columns} rows={shipping[c.key]??[]}/>)}
-      {(shipping.tables??[]).map(t=><RefTable key={t.id} title={tx(t.title)} hint={t.note} columns={tableColumns(t)} rows={t.rows}/>)}
-    </div>
-  </>
+    {SHIP_CATALOGUES.map(c=><RefTable key={c.key} title={c.title} hint={c.hint} columns={c.columns} rows={shipping[c.key]??[]}/>)}
+    {(shipping.tables??[]).map(t=><RefTable key={t.id} title={tx(t.title)} hint={t.note} columns={tableColumns(t)} rows={t.rows}/>)}
+  </div>
 );
 
 // ── Settings ─────────────────────────────────────────────────────────────────────────
@@ -3262,8 +3261,13 @@ const SettingCard=({title,desc,children})=>(
 const CategoryHeading=({cat})=>(
   <div className="mono" style={{fontSize:'var(--fs-xs)',fontWeight:500,color:catStyle(cat).color,textTransform:'uppercase',letterSpacing:'var(--tracking-label)',marginBottom:'var(--space-2)'}}>{cat}</div>
 );
-const productsByCategory=cfg=>['MO','PAM','CE'].map(cat=>[cat,(cfg?.products??[]).filter(p=>p.category===cat).sort((a,b)=>a.name.localeCompare(b.name))]);
+const productsByCategory=cfg=>CATEGORIES.map(cat=>[cat,(cfg?.products??[]).filter(p=>p.category===cat).sort((a,b)=>a.name.localeCompare(b.name))]);
 const SavedNote=({show,children=tx('✓ Saved')})=>show?<span className="saved-note">{children}</span>:null;
+
+// Whether two drafts hold the same data, however they were built. Every "unsaved changes" check uses this.
+const sameData=(a,b)=>a===b||JSON.stringify(a)===JSON.stringify(b);
+// The config the user edits: everything but the rules the server adds to it (config_rules), which aren't theirs to change.
+const editable=({rules,...rest}={})=>rest;
 
 // A draft of the config, kept until someone saves it.
 function useConfigDraft(config,saveConfig){
@@ -3274,7 +3278,7 @@ function useConfigDraft(config,saveConfig){
     if(r?.ok!==false){setSaved(true);setTimeout(()=>setSaved(false),2000);}
     return r;
   };
-  const dirty=useMemo(()=>cfg!==config&&JSON.stringify(cfg)!==JSON.stringify(config),[cfg,config]);
+  const dirty=useMemo(()=>!sameData(editable(cfg),editable(config)),[cfg,config]);
   return {dirty,shared:{cfg,setCfg,save,saved}};
 }
 
@@ -3283,7 +3287,7 @@ function useDraft(load,store){
   const [saved,setSaved]=useState(null);
   const [draft,setDraft]=useState(null);
   useEffect(()=>{load().then(v=>{setSaved(v);setDraft(v);});},[]);
-  const dirty=draft!==saved&&JSON.stringify(draft)!==JSON.stringify(saved);
+  const dirty=!sameData(draft,saved);
   const commit=async()=>{const r=await store(draft);if(r?.ok!==false)setSaved(draft);return r;};
   return {draft,setDraft,dirty,commit};
 }
@@ -3307,7 +3311,7 @@ function Editor({config,saveConfig,shipping,saveShipping,setSafety,setSkuRules,s
   const [shipDraft,setShipDraft]=useState(shipping);
   // Safety data and SKUs are edited on their own tabs, so a change there doesn't count as an edit of the shipping draft.
   useEffect(()=>{setShipDraft(d=>d&&!d.error?{...d,safety:shipping?.safety,skuRules:shipping?.skuRules,skuList:shipping?.skuList}:d);},[shipping?.safety,shipping?.skuRules,shipping?.skuList]);
-  const shipDirty=useMemo(()=>shipDraft!==shipping&&JSON.stringify(shipDraft)!==JSON.stringify(shipping),[shipDraft,shipping]);
+  const shipDirty=useMemo(()=>!sameData(shipDraft,shipping),[shipDraft,shipping]);
   const [safetyDraft,setSafetyDraft]=useState(shipping?.safety??{});
   const safetyDirty=!sameValue(safetyDraft,shipping?.safety??{});
   const [skuRulesDraft,setSkuRulesDraft]=useState(shipping?.skuRules);
@@ -3353,7 +3357,7 @@ function Editor({config,saveConfig,shipping,saveShipping,setSafety,setSkuRules,s
 }
 
 // ── Editor: safety data ──────────────────────────────────────────────────────────────
-const sameValue=(a,b)=>JSON.stringify(a??'')===JSON.stringify(b??'');
+const sameValue=(a,b)=>sameData(a??'',b??'');
 const safetyProblem=(name,r)=>{
   if(r.ufi?.trim()&&!/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(r.ufi.trim()))return tx('{0}: a UFI is four groups of four letters or digits, like XXXX-XXXX-XXXX-XXXX.',name);
   if(r.unCode?.trim()&&!/^UN \d{4}$/.test(r.unCode.trim()))return tx('{0}: a UN code is written like UN 1760.',name);
@@ -3403,10 +3407,7 @@ function SafetyTab({draft,setDraft,dirty,config,shipping,setSafety}){
     <div className="page-fill">
       <div className="fb" style={{flexShrink:0}}>
         <div className="fb-row">
-          <div className="fb-search">
-            <span className="fb-search-ico"><Icon.Search size={15}/></span>
-            <input className="input" type="text" value={search} placeholder={tx('Search products, UFI, UN and H codes…')} aria-label={tx('Search safety data')} onChange={e=>setSearch(e.target.value)}/>
-          </div>
+          <SearchBox value={search} onChange={setSearch} placeholder={tx('Search products, UFI, UN and H codes…')} label={tx('Search safety data')}/>
           <div className="seg" role="group" aria-label={tx('Filter')}>
             {SAFETY_FILTERS.map(([k,l])=>(
               <button key={k} type="button" aria-pressed={filter===k} className={'seg-btn'+(filter===k?' on':'')} onClick={()=>setFilter(k)}>{l}</button>
@@ -3443,7 +3444,7 @@ function SafetyTab({draft,setDraft,dirty,config,shipping,setSafety}){
                   </td>
                   <td><input className="input mono ship-safety-h" aria-label={tx('H codes for {0}',n)} value={(r.hazardCodes??[]).join(' ')} onChange={e=>update(n,{hazardCodes:e.target.value.split(/[\s,]+/).filter((v,i,a)=>v||i<a.length-1)})}/></td>
                   <td className="ship-safety-sheet">
-                    <div className="hint" title={source?.file}>{source?`${(source.file||'').split('\\').pop()}${source.version?` · v${source.version}`:''}${source.revised?` · ${source.revised}`:''}`:tx('No sheet')}</div>
+                    <div className="hint" title={source?.file}>{source?sdsSource(source):tx('No sheet')}</div>
                     {checks.map(c=><div key={c} className="ship-safety-check">{c}</div>)}
                   </td>
                 </tr>
@@ -3487,18 +3488,11 @@ function AppSettings({config,saveConfig,refreshMap,unsaved,checkUpdates}){
 
 // Product names become folder and file names, and file names are split at underscores.
 const PRODUCT_NAME_BAD=/[_\\/:*?"<>|]/;
-const productKey=name=>name.toLowerCase().replace(/[^a-z0-9]/g,'');
-const CategoryPills=({value,onChange})=>(
-  <div className="pill-toggle" role="group" aria-label={tx('Category')}>
-    {['PAM','MO','CE'].map(c=>(
-      <button key={c} type="button" aria-pressed={value===c} className={`pill-btn ${value===c?'active-'+c.toLowerCase():'inactive'}`} onClick={()=>onChange(c)}>{c}</button>
-    ))}
-  </div>
-);
-const UnitPills=({value,onChange})=>(
-  <div className="pill-toggle" role="group" aria-label={tx('Unit')}>
+// L or kg, as a segment beside the category's, so the two choices look alike.
+const UnitChoice=({value,onChange})=>(
+  <div className="seg small" role="group" aria-label={tx('Unit')}>
     {['L','kg'].map(u=>(
-      <button key={u} type="button" aria-pressed={value===u} className={`pill-btn ${value===u?'active-mo':'inactive'}`} onClick={()=>onChange(u)}>{u}</button>
+      <button key={u} type="button" aria-pressed={value===u} className={'seg-btn'+(value===u?' on':'')} onClick={()=>onChange(u)}>{u}</button>
     ))}
   </div>
 );
@@ -3509,7 +3503,7 @@ function AddProduct({products,onCreate,onClose}){
   const [unit,setUnit]=useState('L');
   const [acidic,setAcidic]=useState(false);
   const clean=name.trim();
-  const clash=products.find(p=>productKey(p.name)===productKey(clean));
+  const clash=products.find(p=>nameKey(p.name)===nameKey(clean));
   const problem=!clean?'':PRODUCT_NAME_BAD.test(clean)?tx('A product name can\'t have any of _ \\ / : * ? " < > | in it, because it becomes part of file names.')
     :clash?tx('There is already a product called {0}.',clash.name):'';
   const can=!!clean&&!problem;
@@ -3522,8 +3516,8 @@ function AddProduct({products,onCreate,onClose}){
         {problem&&<div style={{fontSize:'var(--fs-sm)',color:'var(--danger)'}}>{problem}</div>}
       </div>
       <div className="product-facts modal-section">
-        <div><span className="field-label">{tx('Category')}</span><CategoryPills value={category} onChange={c=>{setCategory(c);setUnit(c==='MO'?'kg':'L');}}/></div>
-        <div><span className="field-label">{tx('Unit')}</span><UnitPills value={unit} onChange={setUnit}/></div>
+        <div><span className="field-label">{tx('Category')}</span><CategorySegment required small value={category} onChange={c=>{setCategory(c);setUnit(c==='MO'?'kg':'L');}}/></div>
+        <div><span className="field-label">{tx('Unit')}</span><UnitChoice value={unit} onChange={setUnit}/></div>
         {category==='PAM'&&<label className="product-check"><input type="checkbox" checked={acidic} onChange={e=>setAcidic(e.target.checked)}/>{tx('acidic')}</label>}
       </div>
       <div className="hint modal-section">{tx('Its colors and trait icons are set next. Nothing is saved until you press Save changes.')}</div>
@@ -3644,10 +3638,7 @@ function ProductEditor({cfg,setCfg,save,configDirty,colors,traits}){
     <div className="page-fill">
       <div className="ship-edit">
         <div className="ship-edit-list">
-          <div className="search-wrap" style={{flexShrink:0}}>
-            <span className="search-icon"><Icon.Search size={14}/></span>
-            <input className="input" placeholder={tx('Search...')} aria-label={tx('Search products')} value={search} onChange={e=>setSearch(e.target.value)}/>
-          </div>
+          <SearchBox block style={{flexShrink:0}} value={search} onChange={setSearch} label={tx('Search products')}/>
           <div className="scroll-y">
             {productsByCategory({products:shown}).map(([cat,prods])=>prods.length===0?null:(
               <div key={cat} style={{marginBottom:'var(--space-4)'}}>
@@ -3675,8 +3666,8 @@ function ProductEditor({cfg,setCfg,save,configDirty,colors,traits}){
                 <button className="btn btn-danger btn-sm" onClick={remove}>{tx('Delete')}</button>
               </div>
               <div className="product-facts" style={{marginTop:'var(--space-3)'}}>
-                <div><span className="field-label">{tx('Category')}</span><CategoryPills value={p.category} onChange={category=>update({category,acidic:category==='PAM'&&p.acidic})}/></div>
-                <div><span className="field-label">{tx('Unit')}</span><UnitPills value={p.unit} onChange={unit=>update({unit})}/></div>
+                <div><span className="field-label">{tx('Category')}</span><CategorySegment required small value={p.category} onChange={category=>update({category,acidic:category==='PAM'&&p.acidic})}/></div>
+                <div><span className="field-label">{tx('Unit')}</span><UnitChoice value={p.unit} onChange={unit=>update({unit})}/></div>
                 {p.category==='PAM'&&<label className="product-check"><input type="checkbox" checked={!!p.acidic} onChange={e=>update({acidic:e.target.checked})}/>{tx('acidic')}</label>}
                 <label className="product-check">
                   <span className="toggle"><input type="checkbox" checked={!!p.enabled} onChange={e=>update({enabled:e.target.checked})}/><span className="toggle-slider"/></span>
@@ -3722,7 +3713,7 @@ function LanguagesTab({cfg,setCfg,save,saved,files}){
   const code=newLang.code.trim().toUpperCase(),name=newLang.name.trim();
   const clash=cfg.languages.find(l=>l.code===code)??cfg.languages.find(l=>l.iso?.toUpperCase()===code);
   const problem=!code?'':!/^[A-Z]{2,3}$/.test(code)?tx('A code is 2 or 3 letters.')
-    :['BL','KR','CZ','EE','GR','UA'].includes(code)?tx('{0} is how older labels wrote another language.',code):clash?tx('{0} is already {1}.',code,clash.name):'';
+    :Object.keys(cfg.rules?.langAliases??{}).includes(code)?tx('{0} is how older labels wrote another language.',code):clash?tx('{0} is already {1}.',code,clash.name):'';
   const add=()=>{
     if(!code||!name||problem)return;
     setCfg({...cfg,languages:[...cfg.languages,{code,name,enabled:true}]});
@@ -3732,10 +3723,7 @@ function LanguagesTab({cfg,setCfg,save,saved,files}){
   return(
     <div className="page-fill">
       <div className="flex gap-2 items-center" style={{flexShrink:0,marginBottom:'var(--space-3)'}}>
-        <div className="search-wrap" style={{flex:'1 1 auto',maxWidth:380}}>
-          <span className="search-icon"><Icon.Search size={14}/></span>
-          <input className="input" placeholder={tx('Search languages...')} aria-label={tx('Search languages')} value={search} onChange={e=>setSearch(e.target.value)}/>
-        </div>
+        <SearchBox value={search} onChange={setSearch} placeholder={tx('Search languages...')} label={tx('Search languages')}/>
         <LangSortToggle sort={sort} onChange={setSort}/>
         <span className="hint ml-auto">{tx('Languages switched on here are offered in New Label for everyone who uses the labels folder.')}</span>
       </div>
@@ -3801,7 +3789,7 @@ function UpdatesCard({checkUpdates}){
   );
 }
 
-const THEME_KEY='etiketas.theme';
+const THEME_KEY=window.THEME_KEY;   // named in index.html, which applies the theme before the page first paints
 // Dark or not is kept in this browser, and index.html applies it before the page first paints.
 function useDarkMode(){
   const [dark,setDarkState]=useState(document.documentElement.dataset.theme==='dark');
@@ -3809,7 +3797,7 @@ function useDarkMode(){
     setDarkState(on);
     if(on)document.documentElement.dataset.theme='dark';
     else delete document.documentElement.dataset.theme;
-    try{localStorage.setItem(THEME_KEY,on?'dark':'light');}catch{/* storage unavailable: it lasts until reload */}
+    storeSet(localStorage,THEME_KEY,on?'dark':'light');
   };
   return [dark,setDark];
 }
@@ -4052,7 +4040,7 @@ function AddShipProduct({config,draft,onCreate,onOpen,onClose}){
           <label htmlFor="ship-link">{tx('Product')}</label>
           <SearchSelect id="ship-link" value={linkName} onChange={setLinkName}>
             <option value="">{tx('Choose a product…')}</option>
-            {['MO','PAM','CE'].map(cat=>(
+            {CATEGORIES.map(cat=>(
               <optgroup key={cat} label={cat}>{appProducts.filter(p=>p.category===cat).map(p=><option key={p.name} value={p.name}>{p.name}</option>)}</optgroup>
             ))}
           </SearchSelect>
@@ -4096,10 +4084,7 @@ function ShipProductsEditor({draft,setDraft,config}){
   return(
     <div className="ship-edit">
       <div className="ship-edit-list">
-        <div className="search-wrap" style={{flexShrink:0}}>
-          <span className="search-icon"><Icon.Search size={14}/></span>
-          <input className="input" placeholder={tx('Search...')} aria-label={tx('Search products')} value={search} onChange={e=>setSearch(e.target.value)}/>
-        </div>
+        <SearchBox block style={{flexShrink:0}} value={search} onChange={setSearch} label={tx('Search products')}/>
         <div className="scroll-y">
           {groups.map(g=>{
             const inGroup=shown.filter(p=>p.group===g);
@@ -4408,10 +4393,7 @@ function ShipSheetsEditor({draft,setDraft,config}){
   return(
     <div className="ship-edit">
       <div className="ship-edit-list">
-        <div className="search-wrap" style={{flexShrink:0}}>
-          <span className="search-icon"><Icon.Search size={14}/></span>
-          <input className="input" placeholder={tx('Search...')} aria-label={tx('Search data sheets')} value={search} onChange={e=>setSearch(e.target.value)}/>
-        </div>
+        <SearchBox block style={{flexShrink:0}} value={search} onChange={setSearch} label={tx('Search data sheets')}/>
         <div className="scroll-y">
           <div className="pick-list">
             {shown.map(t=>(
@@ -4626,7 +4608,8 @@ function SkuEditor({section,rules,setRules,list,setList,rulesDirty,listDirty,shi
   const [newRowId,setNewRowId]=useState(null);
   const [saved,setSaved]=useState(false);
   const [error,setError]=useState('');
-  const languageOptions=useMemo(()=>(config?.languages??[]).map(l=>({value:l.code,label:`${l.code} ${langLabel(l)}`})).sort((a,b)=>a.label.localeCompare(b.label)),[config]);
+  const {list:languageList,names:languageNames}=useLanguages(config);
+  const languageOptions=useMemo(()=>languageList.map(l=>({value:l.code,label:`${l.code} ${languageNames[l.code]}`})).sort((a,b)=>a.label.localeCompare(b.label)),[languageList,languageNames]);
   const productNames=useMemo(()=>(config?.products??[]).map(p=>p.name).sort((a,b)=>a.localeCompare(b)),[config]);
   if(!rules||!list)return <div className="alert alert-error">{tx('{0}. Close whatever has it open, then reload this page.',skuReadError(rules))}</div>;
   const isList=section==='skus';
@@ -4707,10 +4690,7 @@ function SkuEditor({section,rules,setRules,list,setList,rulesDirty,listDirty,shi
     <div className="page-fill">
       <div className="fb sku-bar">
         <div className="fb-row">
-          <div className="fb-search">
-            <span className="fb-search-ico"><Icon.Search size={15}/></span>
-            <input className="input" type="text" value={search} placeholder={tx('Search...')} aria-label={tx('Search {0}',SKU_SECTIONS.find(([t])=>t===section)[1])} onChange={e=>setSearch(e.target.value)}/>
-          </div>
+          <SearchBox value={search} onChange={setSearch} label={tx('Search {0}',SKU_SECTIONS.find(([t])=>t===section)[1])}/>
           {section==='products'&&(
             <div className="seg" role="group" aria-label={tx('Group')}>
               {[['',tx('All')],...skuGroups(rules).map(g=>[g.code,g.name])].map(([code,name])=>(
@@ -4786,7 +4766,7 @@ const skuLabelFiles=(rules,shipping,files,read)=>{
   if(!names.length)names=namesWhere(c=>c.slice(0,3)===code.slice(0,3));
   if(brand?.product)names=names.filter(n=>skuNameFits(n,brand.product));
   else if(brand?.kind==='standard')names=names.filter(n=>!(rules.brands??[]).some(b=>skuNameFits(n,b.product)));
-  return (files??[]).filter(f=>names.includes(f.product)&&f.languages&&sameSet(f.languages,language.labels)&&labelPackAmount(f.packaging)===pack.amount)
+  return (files??[]).filter(f=>names.includes(f.product)&&f.languages&&sameSet(f.languages,language.labels)&&packAmount(f.packaging)===pack.amount)
     .sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.filename.localeCompare(b.filename));
 };
 const SkuLabelFiles=({found})=>found&&(
@@ -4823,7 +4803,7 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
   const [openCode,setOpenCode]=useState(null);
   const [addError,setAddError]=useState('');
   const searchRef=useRef(null);
-  const langs=useMemo(()=>Object.fromEntries((config?.languages??[]).map(l=>[l.code,l])),[config]);
+  const {byCode:langs}=useLanguages(config);
   const rows=useMemo(()=>list.map(s=>{
     const read=skuRead(rules,s.code);
     const labels=skuRow(rules,'languages',read.part('language')?.code)?.labels??[];
@@ -4873,11 +4853,7 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
     <div className="page-fill">
       <div className="fb sku-bar">
         <div className="fb-row">
-          <div className="fb-search">
-            <span className="fb-search-ico"><Icon.Search size={15}/></span>
-            <input ref={searchRef} className="input" type="text" autoComplete="off" value={search} placeholder={tx('Search a SKU, product, language, brand…')} aria-label={tx('Search SKUs')} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setSearch('');}}/>
-            {search&&<button type="button" className="fb-search-clear" aria-label={tx('Clear search')} onClick={()=>{setSearch('');searchRef.current?.focus();}}><Icon.Close size={12}/></button>}
-          </div>
+          <SearchBox value={search} onChange={setSearch} inputRef={searchRef} placeholder={tx('Search a SKU, product, language, brand…')} label={tx('Search SKUs')}/>
           {facet('product',tx('Product'),Icon.File,(rules.products??[]).map(p=>({value:p.code,label:p.name,search:`${p.code} ${p.name}`,count:counts.product[p.code]??0,node:coded(p.code,p.name)})),{searchable:true})}
           {facet('language',tx('Languages'),Icon.Globe,langCodes.map(c=>({value:c,label:labelOf.language(c),search:langs[c]?langText(langs[c]):c,count:counts.language[c]??0,node:coded(c,labelOf.language(c))})),{searchable:true})}
           {facet('pack',tx('Pack'),Icon.Ruler,(rules.packs??[]).map(k=>({value:k.code,label:k.code,count:counts.pack[k.code]??0,node:coded(k.code,labelOf.pack(k.code))})))}

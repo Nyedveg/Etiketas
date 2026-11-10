@@ -25,24 +25,22 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
-try:
-    import pymupdf
-except ImportError:          # older PyMuPDF
-    import fitz as pymupdf
+from labelnames import pack_base, parse_pack
+from pdfpage import MM_PER_PT, page_image
+from pdfpage import pymupdf as _pymupdf
+
+pymupdf = _pymupdf()
 
 # ---- which photo ---------------------------------------------------------------------------
 def pack_key(packaging):
-    """'1l', '5l', '250ml', '5kg', '250g' ... -- the pack part of a photo's name, or None."""
-    import re
-    m = re.match(r'^(\d+(?:[.,]\d+)?)(kg|g|l|ml)$', (packaging or '').strip().lower())
-    if not m:
+    """'1l', '5l', '250ml', '5kg', '250g' ... -- the pack part of a photo's name, or None. A box ("1kgx10") has none."""
+    pack = parse_pack(packaging)
+    if not pack or pack.count:
         return None
-    n, unit = float(m.group(1).replace(',', '.')), m.group(2)
-    if unit in ('l', 'ml'):
-        litres = n / 1000 if unit == 'ml' else n
-        return f'{litres * 1000:g}ml' if litres < 1 else f'{litres:g}l'
-    grams = n * 1000 if unit == 'kg' else n
-    return f'{grams:g}g' if grams < 1000 else f'{grams / 1000:g}kg'
+    amount, unit = pack_base(pack)
+    if unit == 'l':
+        return f'{amount * 1000:g}ml' if amount < 1 else f'{amount:g}l'
+    return f'{amount * 1000:g}g' if amount < 1 else f'{amount:g}kg'
 
 def _read_config(mockup_dir: Path) -> dict:
     return json.loads((mockup_dir / 'mockups.json').read_text(encoding='utf-8'))
@@ -109,21 +107,17 @@ def _trim(page, dims, filename):
     if tb.is_valid and not tb.is_empty and (r.width - tb.width > 1 or r.height - tb.height > 1):
         clip = tb
     else:
-        b = bleed_mm(r.width / 72 * 25.4, r.height / 72 * 25.4, dims, filename) / 25.4 * 72
+        b = bleed_mm(r.width * MM_PER_PT, r.height * MM_PER_PT, dims, filename) / MM_PER_PT
         clip = pymupdf.Rect(r.x0 + b, r.y0 + b, r.x1 - b, r.y1 - b)
-    return clip, clip.width / 72 * 25.4, clip.height / 72 * 25.4
+    return clip, clip.width * MM_PER_PT, clip.height * MM_PER_PT
 
 def render_label(pdf: Path, page_no: int, dims, width_px: int):
     """(RGB image, width mm, height mm) of one page's trimmed label, `width_px` wide."""
-    doc = pymupdf.open(str(pdf))
-    try:
-        page = doc[page_no]
-        clip, w_mm, h_mm = _trim(page, dims, pdf.name)
-        zoom = max(0.5, min(width_px, 8000) / clip.width)
-        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=clip, alpha=False)
-        return Image.frombytes('RGB', (pix.width, pix.height), pix.samples), w_mm, h_mm
-    finally:
-        doc.close()
+    size = {}
+    def frame(page):
+        clip, size['w'], size['h'] = _trim(page, dims, pdf.name)
+        return clip, max(0.5, min(width_px, 8000) / clip.width)
+    return page_image(pdf, page_no, frame), size['w'], size['h']
 
 # ---- small numpy stand-ins for scipy -------------------------------------------------------------
 def _blur1d(a, sigma, axis):
