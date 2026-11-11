@@ -76,6 +76,10 @@
 .size-ref-kind{font-weight:600}
 .size-ref-box td{color:var(--text2);background:var(--surface2)}
 
+/* -- Show more, under a long list (usePageSize) ----------------------------------- */
+.show-more{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border)}
+.show-more span{font:var(--fs-sm) var(--font-mono);color:var(--text3)}
+
 /* -- Searchable dropdown (SearchSelect) ------------------------------------------- */
 /* The arrow is drawn in the field's background, so the field sizes exactly as the <select> it replaced did. */
 .input.ss-input{padding-right:30px;text-overflow:ellipsis;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a8f9c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center}
@@ -272,3 +276,45 @@
 .ship-table-edit .num-col{width:88px}
 .ship-table-edit th.num{white-space:nowrap}
 .ship-table-edit td:last-child{width:32px}
+
+/* -- Pro forma: one sheet, laid out like the workbook ---------------------------------- */
+.pf-sheet{max-width:1180px;margin:0 auto var(--space-4);padding:var(--space-6) var(--space-6) var(--space-5)}
+.pf-title{display:flex;flex-direction:column;align-items:center;gap:var(--space-2);margin-bottom:var(--space-6);text-align:center}
+.pf-title-text{font-size:var(--fs-lg);font-weight:700;color:var(--text);letter-spacing:.02em}
+.pf-date{width:170px;font-weight:600}
+.pf-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:var(--space-4) var(--space-8);margin-bottom:var(--space-6)}
+.pf-party{font-weight:700;color:var(--text);margin-bottom:var(--space-3)}
+.pf-party-hint{font-weight:400;margin-left:var(--space-3)}
+.pf-row{display:grid;grid-template-columns:190px 1fr;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2)}
+.pf-row label,.pf-label{font-size:var(--fs-sm);line-height:1.3;color:var(--text2)}
+/* The seller, set in the Editor: text as the document has it, the height of a field so it lines up with the customer. */
+.pf-locked{min-height:36px;display:flex;align-items:center;font-size:var(--fs-md);line-height:1.35;color:var(--text);overflow-wrap:anywhere}
+.pf-locked.muted{color:var(--text3)}
+.pf-gap{height:var(--space-4)}
+.pf-seller-edit{max-width:760px;width:100%;min-height:0;overflow:auto}
+.pf-seller-hint{margin:calc(-1 * var(--space-2)) 0 var(--space-4)}
+.pf-saved{display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.pf-saved .ss-input{flex:1 1 auto;width:auto;min-width:0}
+.pf-saved .btn,.pf-saved .saved-note{flex-shrink:0;white-space:nowrap}
+/* The samples in empty fields, set apart from what has been filled in. */
+.pf-sheet .input::placeholder{font-style:italic}
+.pf-add{margin-bottom:var(--space-3)}
+.pf-table{border:1px solid var(--border);border-radius:var(--radius-sm)}
+.pf-origin td{background:var(--surface2)}
+.pf-origin label{font-weight:600;color:var(--text);margin-right:var(--space-2)}
+.pf-origin .input{width:220px}
+.pf-empty{font-style:italic}
+.pf-lines td:nth-child(2){min-width:200px}
+.pf-lines td:nth-child(2) .input{width:100%;box-sizing:border-box}
+.pf-pack{width:72px;margin-left:auto}
+.pf-qty{width:110px;margin-left:auto}
+.pf-price{width:100px;margin-left:auto}
+.pf-vat{display:inline-flex;align-items:center;gap:var(--space-2)}
+.pf-total td{font-weight:600;color:var(--text)}
+.pf-note{margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text3)}
+.pf-issued{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin-top:var(--space-5)}
+.pf-issued-label{font-weight:700;text-decoration:underline;color:var(--text);margin-right:var(--space-1)}
+.pf-issued .input{width:200px}
+.pf-export{display:flex;flex-direction:column;gap:var(--space-2);max-width:1180px;margin:0 auto}
+.pf-export ul{margin:var(--space-1) 0 0;padding-left:18px}
+.pf-export-bar{display:flex;align-items:center;gap:var(--space-2);padding-bottom:var(--space-4)}

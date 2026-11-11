@@ -180,6 +180,7 @@ const Icon = {
   New:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm1 6h2a1 1 0 010 2H9v2a1 1 0 01-2 0V9H5a1 1 0 010-2h2V5a1 1 0 012 0v2z"/></svg>,
   Browse:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 011-1h3.586A1 1 0 017 2.293L7.707 3H13a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3z"/></svg>,
   Shipment:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 4a1 1 0 011-1h7.5a1 1 0 011 1v1.5h1.9a1 1 0 01.8.4l1.6 2.1a1 1 0 01.2.6V11a1 1 0 01-1 1h-.55a2 2 0 01-3.9 0h-2.1a2 2 0 01-3.9 0H2a1 1 0 01-1-1V4zm3.5 7a1 1 0 100 2 1 1 0 000-2zm6.5 0a1 1 0 100 2 1 1 0 000-2zm-.5-4v1.8h3.2L12.3 7h-1.8z"/></svg>,
+  Proforma:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor" fillRule="evenodd"><path d="M4 1h5.6L13 4.4V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm5 1.4V5h2.6L9 2.4zM5 7.2v1.2h6V7.2H5zm0 2.5v1.2h6V9.7H5zm0 2.5v1.2h3.6v-1.2H5z"/></svg>,
   Sku:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3h1.5v10H1V3zm2.5 0h1v10h-1V3zm2 0H8v10H5.5V3zm3.5 0h1v10H9V3zm2 0h1.5v10H11V3zm2.5 0H15v10h-1.5V3z"/></svg>,
   Editor:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M11.3 1.5a1.5 1.5 0 012.1 0l1.1 1.1a1.5 1.5 0 010 2.1l-1.5 1.5-3.2-3.2 1.5-1.5zM8.9 3.9l3.2 3.2-7.6 7.6a1 1 0 01-.5.27l-2.9.6a.5.5 0 01-.59-.59l.6-2.9a1 1 0 01.27-.5l7.52-7.68z"/></svg>,
   Settings:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4.754a3.246 3.246 0 100 6.492 3.246 3.246 0 000-6.492zM5.754 8a2.246 2.246 0 114.492 0 2.246 2.246 0 01-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 01-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 01-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 01.52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 011.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 011.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 01.52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 01-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 01-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 002.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 001.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 00-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 00-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 00-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 003.06 8.858l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 004.175 4.4l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 002.692-1.115l.094-.319z"/></svg>,
@@ -447,6 +448,7 @@ function App(){
             {view==='information'&&<Information config={config} map={map} setMap={setMap} shipping={shipping}/>}
             {view==='shipment'&&<Shipment shipping={shipping} config={config}/>}
             {view==='sku'&&<SkuPage shipping={shipping} config={config} files={map?.files} setSkuList={setSkuList}/>}
+            {view==='proforma'&&<ProformaPage shipping={shipping}/>}
             {view==='editor'&&<Editor config={config} saveConfig={saveConfig} shipping={shipping} saveShipping={saveShipping} setSafety={setSafety} setSkuRules={setSkuRules} setSkuList={setSkuList} unsaved={unsaved} files={map?.files}/>}
             {view==='settings'&&<AppSettings config={config} saveConfig={saveConfig} refreshMap={refreshMap} unsaved={unsaved} checkUpdates={updates.checkNow}/>}
           </div>
@@ -480,6 +482,7 @@ function Sidebar({view,setView,map,refreshMap}){
           {id:'information',label:tx('Information'),I:Icon.Info},
           {id:'shipment',label:tx('Shipment'),I:Icon.Shipment},
           {id:'sku',label:'SKU',I:Icon.Sku},
+          {id:'proforma',label:tx('Pro forma'),I:Icon.Proforma},
           {id:'editor',label:tx('Editor'),I:Icon.Editor},
           {id:'settings',label:tx('Application settings'),I:Icon.Settings}
         ].map(({id,label,I})=>(
@@ -528,12 +531,12 @@ function SyncStatus(){
 }
 
 function Topbar({view,map,navigate}){
-  const titles={dashboard:tx('Dashboard'),new:tx('New Label'),browse:tx('Browse'),information:tx('Information'),shipment:tx('Shipment'),sku:'SKU',editor:tx('Editor'),settings:tx('Application settings')};
+  const titles={dashboard:tx('Dashboard'),new:tx('New Label'),browse:tx('Browse'),information:tx('Information'),shipment:tx('Shipment'),sku:'SKU',proforma:tx('Pro forma'),editor:tx('Editor'),settings:tx('Application settings')};
   return(
     <div className="topbar">
       {view==='new'&&<button className="btn btn-ghost btn-sm" onClick={()=>navigate('browse')}>{tx('← Browse Files')}</button>}
       <span className="topbar-title">{titles[view]}</span>
-      {map?.generated&&view!=='shipment'&&(
+      {map?.generated&&!['shipment','proforma'].includes(view)&&(
         <span className="topbar-meta">{tx('Updated {0}',new Date(map.generated).toLocaleString())}</span>
       )}
       <SyncStatus/>
@@ -1624,9 +1627,22 @@ const FACET_NAME={cat:tx('Category'),kinds:tx('Type'),formats:tx('Format'),sizes
 const FACET_KEYS=['cat','kinds','formats','sizes','status','langs'];
 const NO_FILTERS={cat:null,kinds:[],formats:[],sizes:[],status:[],langs:[],langMode:'all'};
 const NO_FILES=[];
-// Rows rendered at a time. Chrome re-records the whole table on every selection change, and
-// that cost grows with row count: ~65 ms per click at 1000+ rows, ~15 ms at 200.
-const BROWSE_PAGE=200;
+// Long lists draw this many rows at a time, then Show more. Chrome re-records the whole table on every selection
+// change, ~65 ms per click at 1000+ rows and ~15 ms at 200, and drawing all 519 SKUs at once froze the page for 0.4 s.
+const ROWS_PAGE=200;
+// How many rows of a long list to draw: back to the first page whenever resetKey (the search, filters, sort) changes,
+// but not when a row is added or removed, so the list doesn't jump back while someone works down it.
+function usePageSize(resetKey){
+  const [size,setSize]=useState(ROWS_PAGE);
+  useEffect(()=>setSize(ROWS_PAGE),[resetKey]);
+  return [size,()=>setSize(n=>n+ROWS_PAGE)];
+}
+const ShowMore=({shown,total,onMore})=>total>shown&&(
+  <div className="show-more">
+    <button className="btn" onClick={onMore}>{tx('Show {0} more',Math.min(ROWS_PAGE,total-shown))}</button>
+    <span>{tx('{0} of {1} shown -- search or filter to narrow the list',shown,total)}</span>
+  </div>
+);
 
 // Does file f have option v of a facet?
 const FACET_HAS={
@@ -1890,10 +1906,8 @@ function LabelsBrowser({map,setMap,config,onNewLabel}){
   // New search / filter / sort starts again from the first page; a file being added or
   // deleted does not, so the list doesn't jump back while you work down it.
   const filterKey=JSON.stringify([deferredSearch,filters,sort]);
-  const [shown,setShown]=useState(BROWSE_PAGE);
-  useEffect(()=>setShown(BROWSE_PAGE),[filterKey]);
-  const visible=sorted.length>shown?sorted.slice(0,shown):sorted;
-  const hidden=sorted.length-visible.length;
+  const [pageSize,showMore]=usePageSize(filterKey);
+  const visible=sorted.length>pageSize?sorted.slice(0,pageSize):sorted;
 
   const tag=(tone,text,hint)=><><Tag tone={tone}>{text}</Tag>{hint&&<span className="fb-hint">{hint}</span>}</>;
   const opt=(key,list,node)=>list.map(([value,label])=>({value,label,count:counts[key][value]??0,node:node(value,label)}));
@@ -1974,12 +1988,7 @@ function LabelsBrowser({map,setMap,config,onNewLabel}){
                   ))}
                 </tbody>
               </table>
-              {hidden>0&&(
-                <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderTop:'1px solid var(--border)'}}>
-                  <button className="btn" onClick={()=>setShown(n=>n+BROWSE_PAGE)}>{tx('Show {0} more',Math.min(BROWSE_PAGE,hidden))}</button>
-                  <span style={{fontSize:12,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>{tx('{0} of {1} shown -- search or filter to narrow the list',visible.length,sorted.length)}</span>
-                </div>
-              )}
+              <ShowMore shown={visible.length} total={sorted.length} onMore={showMore}/>
             </div>
           )}
         </div>
@@ -2365,7 +2374,16 @@ const qtyForPallets=(it,n)=>n==null?null:Math.round(n*it.palletSize*1e6)/1e6;
 const palletsField=n=>Math.round(n*1e4)/1e4;
 // Each line rounded up, then added: a pallet holds one product, so the parts of two can't share one.
 const palletsNeeded=rows=>rows.reduce((n,r)=>n+wholeUp(r.c.pallets),0);
-const fmtNum=(n,digits=2)=>n==null||Number.isNaN(n)?'–':n.toLocaleString(undefined,{maximumFractionDigits:digits});
+// A number format is slow to build, and toLocaleString builds one on every call: opening the SKU page spent more
+// time on that than on anything else. So each format is built once and kept.
+const NUMBER_FORMATS=new Map();
+const numberFormat=(locale,min,max)=>{
+  const key=`${locale}|${min}|${max}`;
+  let f=NUMBER_FORMATS.get(key);
+  if(!f)NUMBER_FORMATS.set(key,f=new Intl.NumberFormat(locale,{minimumFractionDigits:min,maximumFractionDigits:max}));
+  return f;
+};
+const fmtNum=(n,digits=2)=>n==null||Number.isNaN(n)?'–':typeof n==='number'?numberFormat(undefined,0,digits).format(n):String(n);
 const fmtPack=it=>`${fmtNum(it.packSize,3)} ${it.unit}`;
 const fmtMonths=m=>m>0?txn(m,'{0} month','{0} months'):'–';
 const fmtStorage=p=>p.storageMin==null&&p.storageMax==null?'–':tx('{0} to {1} °C',p.storageMin??'?',p.storageMax??'?');
@@ -2727,7 +2745,7 @@ const StatCard=({label,value,unit,lead,sub})=>(
 
 // ── Shipment: the packing list ───────────────────────────────────────────────────────
 // Written the way the document has always been: a decimal comma and fixed decimals, whatever this PC's locale.
-const docNum=(n,min=2,max=min)=>(n||0).toLocaleString('lt-LT',{minimumFractionDigits:min,maximumFractionDigits:max});
+const docNum=(n,min=2,max=min)=>numberFormat('lt-LT',min,max).format(n||0);
 const docKg=n=>`${docNum(n)} kg`;
 const docUnitKg=n=>`${docNum(n,3,4)} kg`;
 const docCount=n=>docNum(n,0,3);
@@ -3293,7 +3311,8 @@ function useDraft(load,store){
 }
 
 // The Editor changes what the company knows about its products and shipments, for everyone who uses
-// the labels folder. Application settings, below, only change this PC's copy of the app.
+// the labels folder. Application settings, below, only change this PC's copy of the app. The one exception is the
+// pro forma seller: it is edited here, but stays in the pro forma file on this PC.
 const EDITOR_TABS=[
   ['product',tx('Product'),[]],
   ['sheets',tx('Data sheets'),[]],
@@ -3301,6 +3320,7 @@ const EDITOR_TABS=[
   ['shipping',tx('Shipping'),[['items',tx('Shipping products')],['tables',tx('Pallets & packaging')]]],
   ['languages',tx('Label languages'),[]],
   ['sku','SKU',SKU_SECTIONS],
+  ['proforma',tx('Pro forma'),[]],
 ];
 const EDITOR_FILES={sheets:'technical_data.json',safety:'safety_data.json',items:'shipping_profiles.json',tables:'shipping_profiles.json'};
 
@@ -3318,8 +3338,9 @@ function Editor({config,saveConfig,shipping,saveShipping,setSafety,setSkuRules,s
   const [skuListDraft,setSkuListDraft]=useState(shipping?.skuList);
   const skuRulesDirty=!sameValue(skuRulesDraft,shipping?.skuRules);
   const skuListDirty=!sameValue(skuListDraft,shipping?.skuList);
+  const seller=useDraft(loadProformaSeller,s=>api.post('/api/proformas/save',{seller:s}));
   // The drafts hold their changes until Save, and tell App so leaving the page can warn about them.
-  const dirty=cfgDirty||colors.dirty||traits.dirty||shipDirty||safetyDirty||skuRulesDirty||skuListDirty;
+  const dirty=cfgDirty||colors.dirty||traits.dirty||shipDirty||safetyDirty||skuRulesDirty||skuListDirty||seller.dirty;
   useEffect(()=>{unsaved.current=dirty;},[dirty,unsaved]);
   const [tab,setTab]=useState('product');
   // The section open on each tab that has them, kept while moving between tabs.
@@ -3342,7 +3363,8 @@ function Editor({config,saveConfig,shipping,saveShipping,setSafety,setSkuRules,s
             ))}
           </div>
         )}
-        <span className="hint">{tx('Shared with everyone who uses the labels folder{0}.',file?tx(': saved as {0}, next to the file map',file):'')}</span>
+        <span className="hint">{tab==='proforma'?tx('Kept on this PC only, never in the labels folder.')
+          :tx('Shared with everyone who uses the labels folder{0}.',file?tx(': saved as {0}, next to the file map',file):'')}</span>
         {file&&<button className="btn btn-folder btn-sm ml-auto" style={{flexShrink:0}} onClick={async()=>{const p=await api.getLabelsDir();api.openFile(p);}}><Icon.Folder/>{tx('Open folder')}</button>}
       </div>
       <div className="view-anim page-fill" key={`${tab}/${section}`}>
@@ -3351,6 +3373,7 @@ function Editor({config,saveConfig,shipping,saveShipping,setSafety,setSkuRules,s
         {section==='safety'&&<SafetyTab draft={safetyDraft} setDraft={setSafetyDraft} dirty={safetyDirty} config={config} shipping={shipping} setSafety={setSafety}/>}
         {tab==='languages'&&<LanguagesTab {...shared} files={files}/>}
         {tab==='sku'&&<SkuEditor section={section} rules={skuRulesDraft} setRules={setSkuRulesDraft} list={skuListDraft} setList={setSkuListDraft} rulesDirty={skuRulesDirty} listDirty={skuListDirty} shipping={shipping} config={config} setSkuRules={setSkuRules} setSkuList={setSkuList}/>}
+        {tab==='proforma'&&<ProformaSellerTab {...seller}/>}
       </div>
     </div>
   );
@@ -4608,6 +4631,7 @@ function SkuEditor({section,rules,setRules,list,setList,rulesDirty,listDirty,shi
   const [newRowId,setNewRowId]=useState(null);
   const [saved,setSaved]=useState(false);
   const [error,setError]=useState('');
+  const [pageSize,showMore]=usePageSize(JSON.stringify([section,group,deferredSearch]));
   const {list:languageList,names:languageNames}=useLanguages(config);
   const languageOptions=useMemo(()=>languageList.map(l=>({value:l.code,label:`${l.code} ${languageNames[l.code]}`})).sort((a,b)=>a.label.localeCompare(b.label)),[languageList,languageNames]);
   const productNames=useMemo(()=>(config?.products??[]).map(p=>p.name).sort((a,b)=>a.localeCompare(b)),[config]);
@@ -4707,7 +4731,7 @@ function SkuEditor({section,rules,setRules,list,setList,rulesDirty,listDirty,shi
         <table className="table dense sku-rows">
           <thead><tr><th>{tx('Code')}</th>{columns.map(([label])=><th key={label}>{label}</th>)}<th/></tr></thead>
           <tbody>
-            {shown.map(r=>{
+            {shown.slice(0,pageSize).map(r=>{
               const used=usedCount(r);
               return(
                 <Fragment key={r.id}>
@@ -4727,6 +4751,7 @@ function SkuEditor({section,rules,setRules,list,setList,rulesDirty,listDirty,shi
             {shown.length===0&&<tr><td colSpan={columns.length+2} className="muted" style={{fontStyle:'italic'}}>{tx('Nothing here{0}.',search?tx(' matches'):'')}</td></tr>}
           </tbody>
         </table>
+        <ShowMore shown={Math.min(pageSize,shown.length)} total={shown.length} onMore={showMore}/>
       </div>
       {(problem||error)&&<div className="alert alert-error" style={{flexShrink:0,marginTop:'var(--space-3)'}}>{error||tx('{0} Fix this before saving.',problem)}</div>}
       <div className="action-bar">
@@ -4754,18 +4779,23 @@ const SkuParts=({parts})=>(
     ))}
   </div>
 );
-// The label files a SKU can be: its product's label names, narrowed by a brand that names one, with its pack and languages.
+// The label names a SKU can be, each with the shipping product it is in: its product's label names, narrowed by a brand that names one.
+const skuLabelNames=(rules,shipping,read)=>{
+  const code=read.head.slice(0,5);
+  const where=fits=>(shipping?.products??[]).flatMap(p=>(p.links??[]).filter(n=>{const c=skuCodeFor(p,n);return c&&fits(c);}).map(name=>({name,product:p})));
+  // The exact version if a product has it, otherwise any: an older recipe's SKU can still have the same label.
+  let found=where(c=>code.startsWith(c));
+  if(!found.length)found=where(c=>c.slice(0,3)===code.slice(0,3));
+  const brand=skuRow(rules,'brands',read.part('brand')?.code);
+  if(brand?.product)return found.filter(m=>skuNameFits(m.name,brand.product));
+  if(brand?.kind==='standard')return found.filter(m=>!(rules?.brands??[]).some(b=>skuNameFits(m.name,b.product)));
+  return found;
+};
+// The label files a SKU can be: its label names, with its pack and languages.
 const skuLabelFiles=(rules,shipping,files,read)=>{
   const pack=skuRow(rules,'packs',read.pack),language=skuRow(rules,'languages',read.part('language')?.code);
   if(!pack||!language?.labels?.length)return null;
-  const brand=skuRow(rules,'brands',read.part('brand')?.code);
-  const code=read.head.slice(0,5);
-  const namesWhere=fits=>[...new Set((shipping?.products??[]).flatMap(p=>(p.links??[]).filter(n=>{const c=skuCodeFor(p,n);return c&&fits(c);})))];
-  // The exact version if a product has it, otherwise any: an older recipe's SKU can still have the same label.
-  let names=namesWhere(c=>code.startsWith(c));
-  if(!names.length)names=namesWhere(c=>c.slice(0,3)===code.slice(0,3));
-  if(brand?.product)names=names.filter(n=>skuNameFits(n,brand.product));
-  else if(brand?.kind==='standard')names=names.filter(n=>!(rules.brands??[]).some(b=>skuNameFits(n,b.product)));
+  const names=skuLabelNames(rules,shipping,read).map(m=>m.name);
   return (files??[]).filter(f=>names.includes(f.product)&&f.languages&&sameSet(f.languages,language.labels)&&packAmount(f.packaging)===pack.amount)
     .sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.filename.localeCompare(b.filename));
 };
@@ -4822,6 +4852,7 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
     const found=matched.filter(r=>fits(r));
     return deferred.trim()?[...found.filter(r=>matchesSearch(r.own,deferred)),...found.filter(r=>!matchesSearch(r.own,deferred))]:found;
   },[matched,filters,deferred]);
+  const [pageSize,showMore]=usePageSize(JSON.stringify([deferred,filters]));
   const countBy=(skip,key)=>{
     const n={};
     for(const r of matched)if(fits(r,skip))for(const v of [].concat(key(r)))n[v]=(n[v]||0)+1;
@@ -4882,7 +4913,7 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
         <table className="table dense sku-found">
           <thead><tr><th>SKU</th><th>{tx('Name')}</th><th>{tx('Product')}</th><th>{tx('Version')}</th><th>{tx('Pack')}</th><th>{tx('Languages')}</th><th>{tx('Brand')}</th></tr></thead>
           <tbody>
-            {shown.map(({s,read,wrong})=>{
+            {shown.slice(0,pageSize).map(({s,read,wrong})=>{
               const open=openCode===s.code||shown.length===1;
               const toggle=()=>setOpenCode(openCode===s.code?null:s.code);
               const value=key=>read.part(key)?.value||'–';
@@ -4918,6 +4949,7 @@ function SkuFind({rules,list,shipping,files,config,onAdd}){
             {shown.length===0&&<tr><td colSpan={7} className="muted" style={{fontStyle:'italic'}}>{tx('No SKU matches.')}</td></tr>}
           </tbody>
         </table>
+        <ShowMore shown={Math.min(pageSize,shown.length)} total={shown.length} onMore={showMore}/>
       </div>
     </div>
   );
@@ -5031,6 +5063,467 @@ function SkuPage({shipping,config,files,setSkuList}){
       <div className="page-fill" style={mode==='find'?undefined:{display:'none'}}><SkuFind rules={rules} list={list} shipping={shipping} files={files} config={config} onAdd={onAdd}/></div>
       <div className="page-fill" style={mode==='create'?undefined:{display:'none'}}><SkuCreate rules={rules} list={list} shipping={shipping} files={files} onAdd={onAdd}/></div>
     </div>
+  );
+}
+
+// ── Pro forma ────────────────────────────────────────────────────────────────────────
+// A prepayment sales invoice, laid out like the company's pro forma workbook and exported as a Word document, the way
+// the calculator exports its packing list (proforma.py). The seller and the person issuing it belong to this PC: they
+// are kept with the pro formas exported here, in a file on this PC only (/api/proformas), never in the shared folder.
+// The seller is set in Editor → Pro forma and only shown here, so one document can't change it by accident.
+// A product line is a SKU the person picks from the SKU list: nothing is picked for them.
+
+// Each field with its label, worded as the workbook words it, and a made-up sample of what goes in it, shown greyed
+// while it is empty. The samples are in English, like the document.
+const SELLER_FIELDS=[['name',tx('Company name'),'Example Company Ltd'],['registration',tx('Registration No.'),'123456789'],['vat',tx('VAT reg. No.'),'LT123456789012'],
+  ['address',tx('Address'),'1 Example Street, 12345 City, Country'],['phone',tx('Phone No.'),'+370 600 00000']];
+const BANK_FIELDS=[['bank',tx('Bank'),'Bank name, EUR'],['iban','IBAN','LT00 0000 0000 0000 0000'],['swift','SWIFT','BANKLT22']];
+const ORIGIN_FIELD=['origin',tx('Country of origin'),'Lithuania'];
+const CUSTOMER_FIELDS=[['name',tx('Company name'),'Example Farms Ltd'],['registration',tx('Registration No.'),'1234567890'],['vat',tx('VAT reg. No.'),'XX1234567890'],
+  ['address',tx('Address'),'2 Example Road, 12345 City, Country'],['email',tx('Invoice payment recipient\'s e-mail address'),'invoices@example.com']];
+const TERMS_FIELDS=[['payment',tx('Payment terms'),'30% prepayment within 7 days, 70% within 60 days of invoice issue'],
+  ['delivery',tx('Terms of delivery'),'DAP 2 Example Road, 12345 City, Country']];
+const ISSUER_FIELDS=[['name',tx('Name'),'John'],['surname',tx('Surname'),'Smith']];
+// Everything the document has a line for. The phone number is the one it can do without.
+const SELLER_NEEDED=[...SELLER_FIELDS.filter(([k])=>k!=='phone'),...BANK_FIELDS];
+const VAT_RATES=[0,21];
+// The extras the workbook's instructions name. They go on the document as they are, so they are in English.
+const PROFORMA_SERVICES=['Transportation costs','EUR.1 certificate','Certificate of origin'];
+
+// The open pro forma is kept in this browser, like the calculator's order: it survives a reload or a visit to another page.
+const PROFORMA_KEY='etiketas.proforma';
+const blankProforma=()=>({date:localDateKey(new Date()),customer:{},payment:'',delivery:'',lines:[],vatRate:0});
+const readProforma=()=>{
+  const v=storeGetJson(localStorage,PROFORMA_KEY,null),blank=blankProforma();
+  return v&&typeof v==='object'&&Array.isArray(v.lines)?Object.fromEntries(Object.entries(blank).map(([k,d])=>[k,v[k]??d])):blank;
+};
+const isBlank=v=>!String(v??'').trim();
+// Each line to the cent, as the invoice shows it, so the total is the sum of what the lines show. VAT is on that sum.
+const toCents=n=>Math.round(Number((n*100).toPrecision(12)))/100;
+const proformaLineTotal=l=>l.qty!=null&&l.price!=null?toCents(l.qty*l.price):null;
+const proformaSums=(lines,rate)=>{
+  const net=toCents(lines.reduce((n,l)=>n+(proformaLineTotal(l)??0),0)),vat=toCents(net*rate/100);
+  return {net,vat,total:toCents(net+vat)};
+};
+const fmtMoney=n=>numberFormat(undefined,2,2).format(n);
+
+// Letters English doesn't have, as English writes them: Ł is L, Ж is ZH, Ω is O. The keys are capitals, and a small
+// letter maps the same way. A letter that isn't listed loses its accent instead: Ž is Z, Ą is A, Ö is O.
+const LETTER_MAP={
+  'Ł':'L','Ø':'O','Đ':'D','Ð':'D','Ħ':'H','Ŧ':'T','Ŀ':'L','Æ':'AE','Œ':'OE','Þ':'TH','ß':'SS','ı':'I',
+  'А':'A','Б':'B','В':'V','Г':'G','Ґ':'G','Д':'D','Е':'E','Ё':'YO','Є':'YE','Ж':'ZH','З':'Z','И':'I','І':'I','Ї':'YI','Й':'Y',
+  'К':'K','Л':'L','М':'M','Н':'N','О':'O','П':'P','Р':'R','С':'S','Т':'T','У':'U','Ф':'F','Х':'KH','Ц':'TS','Ч':'CH','Ш':'SH',
+  'Щ':'SHCH','Ъ':'','Ы':'Y','Ь':'','Э':'E','Ю':'YU','Я':'YA',
+  'Α':'A','Β':'V','Γ':'G','Δ':'D','Ε':'E','Ζ':'Z','Η':'I','Θ':'TH','Ι':'I','Κ':'K','Λ':'L','Μ':'M','Ν':'N','Ξ':'X','Ο':'O',
+  'Π':'P','Ρ':'R','Σ':'S','Τ':'T','Υ':'Y','Φ':'F','Χ':'CH','Ψ':'PS','Ω':'O',
+};
+const mapLetter=ch=>{
+  const up=ch.toUpperCase(),mapped=LETTER_MAP[ch]??LETTER_MAP[up];
+  return mapped==null?null:ch===up?mapped:mapped.toLowerCase();
+};
+const toEnglishLetters=text=>[...String(text??'')].map(ch=>{
+  const plain=ch.normalize('NFD').replace(/[̀-ͯ]/g,'');
+  return mapLetter(ch)??mapLetter(plain)??plain;
+}).join('');
+const initial=text=>toEnglishLetters(text).toUpperCase().match(/[A-Z]/)?.[0]??'';
+// The customer's letter: the first of the second word, as the first word is often the company type (UAB Agrokoncernas
+// gives A), or of the only word. A "word" here has a letter in it, so a dash or a number between words doesn't count.
+const customerInitial=name=>{
+  const words=String(name??'').split(/\s+/).filter(w=>initial(w));
+  return initial(words[words.length>1?1:0]);
+};
+
+const textOf=v=>String(v??'').trim();
+// The given fields of something, each as text with no spaces around it.
+const pickText=(fields,values)=>Object.fromEntries(fields.map(([k])=>[k,textOf(values?.[k])]));
+
+// What the document says, worked out here so the sums stay in one place. Written like the packing list, with a decimal
+// comma whatever this PC's locale. Everything but the number, which depends on it.
+const proformaContent=(doc,mine)=>{
+  const money=n=>`€${docNum(n)}`;
+  const {net,vat,total}=proformaSums(doc.lines,doc.vatRate);
+  return {
+    date:doc.date,issuedBy:ISSUER_FIELDS.map(([k])=>textOf(mine.issuer[k])).filter(Boolean).join(' '),
+    seller:pickText([...SELLER_FIELDS,...BANK_FIELDS],mine.seller),customer:pickText(CUSTOMER_FIELDS,doc.customer),origin:textOf(mine.seller.origin),
+    ...pickText(TERMS_FIELDS,doc),
+    lines:doc.lines.map((l,i)=>{
+      const product=l.kind==='product';
+      return [String(i+1),textOf(l.name),product?l.sku:'–',product?docCount(l.packaging):'–',product?l.uom:'–',docCount(l.qty),money(l.price),money(proformaLineTotal(l))];
+    }),
+    vatRate:doc.vatRate,net:docNum(net),vat:docNum(vat),total:`${docNum(total)} EUR`,
+  };
+};
+const withoutNumber=({number,...rest})=>rest;
+// The number: the issuer's initials, the customer's letter, the date and a version, as in VPA-20261111-01. The
+// version is the next one free among the pro formas kept on this PC, unless this very pro forma is one of them,
+// exported before and unchanged since: then it keeps its number.
+const proformaNumber=(content,issuer,customer,kept)=>{
+  const letters=[initial(issuer.name),initial(issuer.surname),customerInitial(customer.name)];
+  const base=`${letters.map(l=>l||'?').join('')}-${content.date.replace(/-/g,'')||'????????'}`;
+  const taken=kept.filter(p=>p.number?.startsWith(`${base}-`));
+  const same=taken.find(p=>sameData(withoutNumber(p.doc??{}),content));
+  if(same)return {number:same.number,kept:true};
+  const version=Math.max(0,...taken.map(p=>+p.number.slice(base.length+1)||0))+1;
+  return {number:`${base}-${String(version).padStart(2,'0')}`,kept:false,before:version>1?`${base}-${String(version-1).padStart(2,'0')}`:null};
+};
+
+// What to say before the document is made, as the packing list does. `must`: the document has a place for it and it is
+// empty, so the export waits. `check`: something that looks wrong but may have a reason, so it can go anyway.
+const proformaChecks=(doc,mine)=>{
+  const must=[],check=[];
+  const gaps=(fields,values)=>fields.filter(([k])=>isBlank(values?.[k])).map(([,label])=>label);
+  for(const [part,missing] of [[tx('Seller, in Editor → Pro forma'),gaps(SELLER_NEEDED,mine.seller)],[tx('Customer'),gaps(CUSTOMER_FIELDS,doc.customer)],[tx('Terms'),gaps(TERMS_FIELDS,doc)],[tx('Issued by'),gaps(ISSUER_FIELDS,mine.issuer)]])
+    if(missing.length)must.push(tx('{0}: {1}',part,missing.join(', ')));
+  if(isBlank(mine.seller.origin))must.push(tx('Fill in the country of origin.'));
+  if(!doc.date)must.push(tx('Choose the date.'));
+  // A name can be filled in and still give the number no letter, if it is all digits or signs.
+  for(const [value,label,letter] of [[mine.issuer.name,tx('Name'),initial],[mine.issuer.surname,tx('Surname'),initial],[doc.customer.name,tx('Company name'),customerInitial]])
+    if(!isBlank(value)&&!letter(value))must.push(tx('{0} "{1}" has no letter to start the number with.',label,value.trim()));
+  if(!doc.lines.length)must.push(tx('Add at least one line.'));
+  doc.lines.forEach((l,i)=>{
+    const line=tx('Line {0}',i+1),product=l.kind==='product';
+    const missing=[isBlank(l.name)&&tx('Description'),product&&!(l.packaging>0)&&tx('Packaging'),product&&!l.uom&&tx('UOM'),!(l.qty>0)&&tx('Quantity'),l.price==null&&tx('Price/unit')].filter(Boolean);
+    if(missing.length)must.push(tx('{0}: {1}',line,missing.join(', ')));
+    if(/[/()]/.test(l.name))check.push(tx('{0}: "{1}" looks like an internal name. Write the one the customer should see.',line,l.name.trim()));
+    if(product&&l.uom&&l.qty>0&&l.packaging>0&&!isWhole(l.qty/l.packaging))check.push(tx('{0}: {1} {2} is not a whole number of {3} packs.',line,fmtNum(l.qty,3),l.uom,`${fmtNum(l.packaging,3)} ${l.uom}`));
+  });
+  const email=(doc.customer.email??'').trim();
+  if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))check.push(tx('{0} doesn\'t look like an e-mail address.',email));
+  return {must,check};
+};
+
+// What a picked SKU fills in (`line`): the name its label goes by, when the SKU says which, its pack and the unit it is
+// sold in. Anything can be changed on the line. The SKU list's own names are internal ones, with the markets in them.
+// `pallet`: what one pallet of that pack holds, from the shipping profile, which the quantity starts at. Only when every
+// shipping product the SKU can be has that pack and they agree on it, as a SKU's pack is matched to them by its size.
+const proformaSkuLine=(rules,shipping,code)=>{
+  const read=skuRead(rules,code);
+  const found=skuLabelNames(rules,shipping,read);
+  const names=[...new Set(found.map(m=>m.name))],units=[...new Set(found.map(m=>m.product.unit))];
+  const packaging=skuRow(rules,'packs',read.pack)?.amount??null;
+  const pallets=[...new Set([...new Set(found.map(m=>m.product))].map(p=>(p.packs??[]).find(k=>k.packSize===packaging)?.palletSize||null))];
+  return {line:{sku:code,name:names.length===1?names[0]:read.part('product')?.value??'',packaging,uom:units.length===1?units[0]:''},
+    pallet:pallets.length===1&&units.length===1?pallets[0]:null};
+};
+
+// One line of the sheet: its label and its field, with the sample showing while it is empty.
+const SheetField=({id,spec:[k,label,sample],values,onChange,multiline})=>{
+  const props={id,className:'input',placeholder:sample,value:values?.[k]??'',onChange:e=>onChange(k,e.target.value)};
+  return(
+    <div className="pf-row">
+      <label htmlFor={id}>{label}</label>
+      {multiline?<textarea {...props} rows={2}/>:<input {...props} type="text" autoComplete="off"/>}
+    </div>
+  );
+};
+// A line of the sheet that is set somewhere else: shown as it will be on the document, with no field to change it.
+const LockedField=({spec:[k,label],values})=>{
+  const value=textOf(values?.[k]);
+  return(
+    <div className="pf-row">
+      <span className="pf-label">{label}</span>
+      <div className={'pf-locked'+(value?'':' muted')}>{value||'–'}</div>
+    </div>
+  );
+};
+
+// This PC's seller, issuer, saved customers and exported pro formas. An unreadable file comes back as an error of its
+// own. A request that fails means Etiketas itself didn't answer: it has stopped, or it is a copy that was running
+// before this page was added.
+const loadProformas=()=>fetch('/api/proformas').then(r=>r.ok?r.json():Promise.reject())
+  .catch(()=>({error:'Etiketas didn\'t answer when asked for the pro formas saved on this PC. Close Etiketas, start it again, then open this page.'}));
+const loadProformaSeller=()=>loadProformas().then(m=>m.error?{error:m.error}:m.seller);
+
+// Editor → Pro forma: the seller every pro forma made on this PC is made out from. The Editor holds the draft.
+function ProformaSellerTab({draft,setDraft,dirty,commit}){
+  const [saved,setSaved]=useState(false);
+  const [error,setError]=useState('');
+  if(!draft)return <div className="flex items-center justify-center" style={{padding:'var(--space-8)'}}><div className="spinner" style={{width:24,height:24}}/></div>;
+  if(draft.error)return <div className="alert alert-error">{txs(draft.error)}</div>;
+  const save=async()=>{
+    setError('');
+    const r=await commit().catch(()=>null);
+    if(!r?.ok)return setError(tx('Could not save the seller on this PC.{0}',r?.error?` ${txs(r.error)}`:''));
+    setSaved(true);setTimeout(()=>setSaved(false),2000);
+  };
+  const field=f=><SheetField key={f[0]} id={`pf-seller-${f[0]}`} spec={f} values={draft} onChange={(k,v)=>setDraft(d=>({...d,[k]:v}))}/>;
+  return(
+    <div className="page-fill">
+      <div className="card pf-seller-edit">
+        <div className="pf-party">{tx('Seller')}</div>
+        <div className="hint pf-seller-hint">{tx('Every pro forma made on this PC is made out from this seller. The Pro forma page shows it, but can\'t change it.')}</div>
+        {SELLER_FIELDS.map(field)}
+        <div className="pf-gap"/>
+        {BANK_FIELDS.map(field)}
+      </div>
+      {error&&<div className="alert alert-error" style={{flexShrink:0,marginTop:'var(--space-3)'}}>{error}</div>}
+      <div className="action-bar">
+        <span className="ml-auto"><SavedNote show={saved}/>{dirty&&!saved&&<span className="badge badge-wip">{tx('Unsaved changes')}</span>}</span>
+        <button className="btn btn-primary" disabled={!dirty} onClick={save}>{tx('Save changes')}</button>
+      </div>
+    </div>
+  );
+}
+
+// The customers saved on this PC, to fill the customer's fields from. A customer is known by its company name, so
+// saving one that is already on the list updates it.
+const sameName=(a,b)=>!!textOf(a)&&textOf(a).toLowerCase()===textOf(b).toLowerCase();
+function SavedCustomers({customers,current,onPick,onSave}){
+  const fields=pickText(CUSTOMER_FIELDS,current);
+  const match=customers.find(c=>sameName(c.name,fields.name));
+  const same=match&&CUSTOMER_FIELDS.every(([k])=>textOf(match[k])===fields[k]);
+  const save=()=>onSave(match?customers.map(c=>c===match?{...c,...fields}:c):[...customers,{id:newId('customer'),...fields}]);
+  const remove=()=>{if(window.confirm(tx('Delete {0} from the customers saved on this PC?',match.name)))onSave(customers.filter(c=>c!==match));};
+  return(
+    <div className="pf-row">
+      <label htmlFor="pf-saved-customer">{tx('Saved customer')}</label>
+      <div className="pf-saved">
+        <SearchSelect id="pf-saved-customer" value={match?.id??''} disabled={!customers.length} onChange={id=>onPick(customers.find(c=>c.id===id))}>
+          <option value="">{customers.length?tx('Choose a saved customer…'):tx('No saved customers yet')}</option>
+          {customers.map(c=><option key={c.id} value={c.id}>{c.vat?`${c.name} · ${c.vat}`:c.name}</option>)}
+        </SearchSelect>
+        {same?<span className="saved-note">{tx('✓ Saved')}</span>
+          :<button type="button" className="btn btn-ghost btn-sm" disabled={!fields.name} title={tx('Kept on this PC only.')} onClick={save}>{match?tx('Update saved customer'):tx('Save customer')}</button>}
+        {match&&<button type="button" className="btn btn-ghost btn-sm" title={tx('Delete saved customer')} aria-label={tx('Delete saved customer')} onClick={remove}><Icon.Trash/></button>}
+      </div>
+    </div>
+  );
+}
+
+// A product is a SKU from the list, which fills in its name, pack and unit. A service is anything else on the bill.
+function ProformaAddLine({rules,list,shipping,onAdd}){
+  const [kind,setKind]=useState('product');
+  const [code,setCode]=useState('');
+  const [name,setName]=useState('');
+  // The quantity someone typed, as {qty}. Until they type one, a product's is what one pallet of its pack holds.
+  const [typed,setTyped]=useState(null);
+  const [price,setPrice]=useState(null);
+  const noSkus=!rules||!list;
+  // Grouped by product, so typing a product's name finds all of its SKUs.
+  const options=useMemo(()=>{
+    const groups=new Map();
+    for(const s of list??[])groups.set(s.code.slice(0,3),[...(groups.get(s.code.slice(0,3))??[]),s]);
+    return [...groups].map(([key,skus])=>{
+      const p=skuRow(rules,'products',key);
+      return <optgroup key={key} label={p?`${key} · ${p.name}`:key}>{skus.map(s=><option key={s.code} value={s.code}>{s.name?`${s.code} · ${s.name}`:s.code}</option>)}</optgroup>;
+    });
+  },[rules,list]);
+  const product=kind==='product';
+  const picked=product&&code&&!noSkus?proformaSkuLine(rules,shipping,code):null;
+  const qty=typed?typed.qty:picked?.pallet??null;
+  const canAdd=product?!!picked:!isBlank(name);
+  const add=()=>{
+    if(!canAdd)return;
+    onAdd(product?{kind,...picked.line,qty,price}:{kind,name:name.trim(),qty:qty??1,price});
+    setCode('');setName('');setTyped(null);setPrice(null);
+  };
+  const enter=e=>{if(e.key==='Enter')add();};
+  const unit=picked?.line.uom;
+  return(
+    <div className="ship-add pf-add">
+      <div className="field">
+        <span className="field-label">{tx('Line')}</span>
+        <div className="seg" role="group" aria-label={tx('Line')}>
+          {[['product',tx('Product')],['service',tx('Service')]].map(([k,l])=>(
+            <button key={k} type="button" aria-pressed={kind===k} className={'seg-btn'+(kind===k?' on':'')} onClick={()=>setKind(k)}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {product?(
+        <div className="field ship-add-product">
+          <label htmlFor="pf-sku">SKU</label>
+          <SearchSelect id="pf-sku" value={code} onChange={setCode} disabled={noSkus}>
+            <option value="">{tx('Choose a SKU…')}</option>
+            {options}
+          </SearchSelect>
+        </div>
+      ):(
+        <div className="field ship-add-product">
+          <label htmlFor="pf-service">{tx('Description')}</label>
+          <input id="pf-service" className="input" type="text" list="pf-services" autoComplete="off" placeholder={PROFORMA_SERVICES[0]} value={name} onChange={e=>setName(e.target.value)} onKeyDown={enter}/>
+          <datalist id="pf-services">{PROFORMA_SERVICES.map(s=><option key={s} value={s}/>)}</datalist>
+        </div>
+      )}
+      <div className="field ship-add-num">
+        <label htmlFor="pf-qty">{unit?tx('Quantity ({0})',unit):tx('Quantity')}</label>
+        {/* The sample is only for before a SKU is picked: after that, a grey number would read as one pallet. */}
+        <NumInput id="pf-qty" value={qty} onChange={v=>setTyped({qty:v})} placeholder={!product?'1':picked?'0':'480'} onKeyDown={enter}/>
+      </div>
+      <div className="field ship-add-num">
+        <label htmlFor="pf-price">{unit?tx('Price per {0}',unit):tx('Price/unit')}</label>
+        <NumInput id="pf-price" value={price} onChange={setPrice} placeholder="16,00" onKeyDown={enter}/>
+      </div>
+      <button className="btn btn-primary" disabled={!canAdd} onClick={add}>{tx('Add line')}</button>
+      <div className="hint ship-add-hint">
+        {!product?tx('A service has no SKU or pack: transport, a certificate, anything else the customer pays for.')
+          :noSkus?skuReadError(rules)
+          :picked?<>{skuMeaning(rules,code)}<div>{picked.pallet
+            ?tx('A pallet holds {0} {1} ({2} packs), so the quantity starts at one pallet.',fmtNum(picked.pallet),unit,fmtNum(picked.pallet/picked.line.packaging,2))
+            :tx('The shipping data has no pallet for this pack, so there is no quantity to start from.')}</div></>
+          :tx('Pick the SKU from the list. A SKU that isn\'t on it yet is made on the SKU page.')}
+      </div>
+    </div>
+  );
+}
+
+// The lines as the workbook has them: the country of origin above, the VAT and the total below.
+function ProformaLines({lines,vatRate,origin,onOrigin,onVat,onChange,onRemove}){
+  const {net,vat,total}=proformaSums(lines,vatRate);
+  return(
+    <table className="table dense pf-lines">
+      <thead><tr>
+        <th className="num">{tx('No.')}</th><th>{tx('Description')}</th><th>SKU</th><th className="num">{tx('Packaging')}</th><th>{tx('UOM')}</th>
+        <th className="num">{tx('Quantity')}</th><th className="num">{tx('Price/unit')}</th><th className="num">{tx('Total, EUR')}</th><th aria-label={tx('Remove')}/>
+      </tr></thead>
+      <tbody>
+        <tr className="pf-origin"><td colSpan={9}>
+          <label htmlFor="pf-origin">{tx('Country of origin')}:</label>
+          <input id="pf-origin" className="input" type="text" autoComplete="off" placeholder={ORIGIN_FIELD[2]} value={origin??''} onChange={e=>onOrigin(e.target.value)}/>
+        </td></tr>
+        {lines.length===0&&<tr><td colSpan={9} className="muted pf-empty">{tx('Add a product from the SKU list, or a service such as transport.')}</td></tr>}
+        {lines.map((l,i)=>{
+          const product=l.kind==='product',lineTotal=proformaLineTotal(l),what=l.name||l.sku||tx('Line {0}',i+1);
+          const set=patch=>onChange(l.id,patch);
+          return(
+            <tr key={l.id}>
+              <td className="num muted">{i+1}</td>
+              <td><input className="input" type="text" aria-label={tx('Description of line {0}',i+1)} value={l.name} onChange={e=>set({name:e.target.value})}/></td>
+              <td className="mono nowrap">{product?l.sku:<span className="muted">{tx('Service')}</span>}</td>
+              <td className="num">{product?<NumInput className="pf-pack" aria-label={tx('Packaging of {0}',what)} value={l.packaging} onChange={v=>set({packaging:v})}/>:'–'}</td>
+              <td>{product?<UnitChoice value={l.uom} onChange={u=>set({uom:u})}/>:'–'}</td>
+              <td className="num"><div className="input-unit pf-qty"><NumInput aria-label={tx('Quantity of {0}',what)} placeholder="0" value={l.qty} onChange={v=>set({qty:v})}/>{product&&l.uom&&<span>{l.uom}</span>}</div></td>
+              <td className="num"><div className="input-unit pf-price"><NumInput aria-label={tx('Price of {0}',what)} value={l.price} placeholder="0,00" onChange={v=>set({price:v})}/><span>€</span></div></td>
+              <td className="num nowrap">{lineTotal==null?'–':fmtMoney(lineTotal)}</td>
+              <td><button className="ship-remove" aria-label={tx('Remove {0}',what)} onClick={()=>onRemove(l.id)}><Icon.Close size={12}/></button></td>
+            </tr>
+          );
+        })}
+      </tbody>
+      <tfoot>
+        {vatRate>0&&<tr><td colSpan={7} className="num">{tx('Total without VAT')}</td><td className="num nowrap">{fmtMoney(net)}</td><td/></tr>}
+        <tr>
+          <td colSpan={7} className="num">
+            <span className="pf-vat">{tx('VAT')}
+              <span className="seg small" role="group" aria-label={tx('VAT')}>
+                {VAT_RATES.map(r=><button key={r} type="button" aria-pressed={vatRate===r} className={'seg-btn'+(vatRate===r?' on':'')} onClick={()=>onVat(r)}>{r} %</button>)}
+              </span>
+              {vatRate===0&&'*'}
+            </span>
+          </td>
+          <td className="num nowrap">{fmtMoney(vat)}</td><td/>
+        </tr>
+        <tr className="pf-total"><td colSpan={7} className="num">{tx('Total amount to pay')}</td><td className="num nowrap">{fmtMoney(total)} EUR</td><td/></tr>
+      </tfoot>
+    </table>
+  );
+}
+
+function ProformaPage({shipping}){
+  const [doc,setDoc]=useState(readProforma);
+  useEffect(()=>storeSetJson(localStorage,PROFORMA_KEY,doc),[doc]);
+  // This PC's seller, issuer, saved customers and the pro formas exported here, from a file on this PC.
+  const [mine,setMine]=useState(null);
+  const savedDetails=useRef('');
+  useEffect(()=>{loadProformas().then(m=>{savedDetails.current=JSON.stringify([m.seller,m.issuer]);setMine(m);});},[]);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+  if(!mine)return <div className="flex items-center justify-center" style={{padding:'var(--space-8)'}}><div className="spinner" style={{width:24,height:24}}/></div>;
+  if(mine.error)return <div className="alert alert-error">{txs(mine.error)}</div>;
+  const set=patch=>setDoc(d=>({...d,...patch}));
+  const setCustomer=(k,v)=>setDoc(d=>({...d,customer:{...d.customer,[k]:v}}));
+  // The issuer and the country of origin (kept with the seller) are this PC's. A change is saved when its field is left,
+  // so the next pro forma starts with it. The rest of the seller is only changed in the Editor.
+  const setDetail=(part,k,v)=>setMine(m=>({...m,[part]:{...m[part],[k]:v}}));
+  const saveDetails=async()=>{
+    const now=JSON.stringify([mine.seller,mine.issuer]);
+    if(now===savedDetails.current)return;
+    savedDetails.current=now;
+    const r=await api.post('/api/proformas/save',{seller:mine.seller,issuer:mine.issuer}).catch(()=>null);
+    if(!r?.ok){savedDetails.current='';setError(tx('Could not save the issuer and the country of origin on this PC.{0}',r?.error?` ${txs(r.error)}`:''));}
+  };
+  const pickCustomer=c=>setDoc(d=>({...d,customer:pickText(CUSTOMER_FIELDS,c)}));
+  const saveCustomers=async list=>{
+    const customers=[...list].sort((a,b)=>a.name.localeCompare(b.name));
+    const r=await api.post('/api/proformas/save',{customers}).catch(()=>null);
+    if(r?.ok)setMine(m=>({...m,customers}));
+    else setError(tx('Could not save the customers on this PC.{0}',r?.error?` ${txs(r.error)}`:''));
+  };
+  const addLine=line=>setDoc(d=>({...d,lines:[...d.lines,{id:newId('line'),...line}]}));
+  const updateLine=(id,patch)=>setDoc(d=>({...d,lines:d.lines.map(l=>l.id===id?{...l,...patch}:l)}));
+  const removeLine=id=>setDoc(d=>({...d,lines:d.lines.filter(l=>l.id!==id)}));
+  const startNew=()=>{
+    if(!window.confirm(tx('Start a new pro forma? The customer, terms and lines are cleared. The seller and the issuer stay.')))return;
+    setDoc(blankProforma());setError('');
+  };
+  const content=proformaContent(doc,mine);
+  const num=proformaNumber(content,mine.issuer,doc.customer,mine.proformas);
+  const {must,check}=proformaChecks(doc,mine);
+  const exportDoc=async()=>{
+    setBusy(true);setError('');
+    const sent={number:num.number,...content};
+    try{
+      const r=await api.send('/api/proforma',sent);
+      if(!r.ok)throw new Error((await r.json().catch(()=>null))?.error||'');
+      await saveDownload(r,`${num.number}.docx`);
+      // Kept on this PC now: it keeps this number, and another with the same letters and date takes the next version.
+      setMine(m=>({...m,proformas:[...m.proformas.filter(p=>p.number!==sent.number),{number:sent.number,doc:sent}]}));
+    }catch(e){setError(tx('Could not make the document.{0}',e.message?` ${txs(e.message)}`:''));}
+    setBusy(false);
+  };
+  const sellerFields=fields=>fields.map(f=><LockedField key={f[0]} spec={f} values={mine.seller}/>);
+  return(
+    <>
+      <div className="card pf-sheet" onBlur={saveDetails}>
+        <div className="pf-title">
+          <div className="pf-title-text">{tx('PREPAYMENT SALES INVOICE No.')} <span className="mono">{num.number}</span></div>
+          <input type="date" className="input pf-date" aria-label={tx('Date')} value={doc.date} onChange={e=>set({date:e.target.value})}/>
+          <div className="hint">{num.kept?tx('Exported and saved on this PC with this number. A change makes it a new version.')
+            :num.before?tx('You\'ve already made a pro forma with this number ({0}), so a new version will be used.',num.before)
+            :tx('Made from the issuer\'s initials, the customer\'s initial (the second word of its name, if it has one), the date and a version.')}</div>
+        </div>
+        <div className="pf-columns">
+          <div>
+            <div className="pf-party">{tx('Seller')}<span className="hint pf-party-hint">{tx('Changed in Editor → Pro forma.')}</span></div>
+            {sellerFields(SELLER_FIELDS)}
+            <div className="pf-gap"/>
+            {sellerFields(BANK_FIELDS)}
+          </div>
+          <div>
+            <div className="pf-party">{tx('Customer')}</div>
+            <SavedCustomers customers={mine.customers} current={doc.customer} onPick={pickCustomer} onSave={saveCustomers}/>
+            {CUSTOMER_FIELDS.map(f=><SheetField key={f[0]} id={`pf-customer-${f[0]}`} spec={f} values={doc.customer} onChange={setCustomer}/>)}
+            <div className="pf-gap"/>
+            {TERMS_FIELDS.map(f=><SheetField key={f[0]} id={`pf-${f[0]}`} spec={f} values={doc} onChange={(k,v)=>set({[k]:v})} multiline/>)}
+          </div>
+        </div>
+        <ProformaAddLine rules={shipping?.skuRules} list={shipping?.skuList} shipping={shipping} onAdd={addLine}/>
+        <div className="table-scroll pf-table">
+          <ProformaLines lines={doc.lines} vatRate={doc.vatRate} origin={mine.seller.origin} onOrigin={v=>setDetail('seller','origin',v)}
+            onVat={r=>set({vatRate:r})} onChange={updateLine} onRemove={removeLine}/>
+        </div>
+        {doc.vatRate===0&&<div className="pf-note">{tx('* Tax free according to LT VAT LAW article 17')}</div>}
+        <div className="pf-issued">
+          <span className="pf-issued-label">{tx('Issued by')}:</span>
+          {ISSUER_FIELDS.map(([k,label,sample])=>(
+            <input key={k} id={`pf-issuer-${k}`} className="input" type="text" autoComplete="off" aria-label={label} placeholder={sample}
+              value={mine.issuer[k]??''} onChange={e=>setDetail('issuer',k,e.target.value)}/>
+          ))}
+        </div>
+      </div>
+      <div className="pf-export">
+        {must.length>0&&<div className="alert alert-warning"><div><b>{tx('To fill in before exporting')}</b><ul>{must.map(m=><li key={m}>{m}</li>)}</ul></div></div>}
+        {check.length>0&&<div className="alert alert-warning"><div><b>{tx('Check these')}</b><ul>{check.map(m=><li key={m}>{m}</li>)}</ul></div></div>}
+        {error&&<div className="alert alert-error">{error}</div>}
+        <div className="pf-export-bar">
+          {!must.length&&!check.length&&<span className="saved-note">{tx('All the details are filled in.')}</span>}
+          <button className="btn btn-ghost ml-auto" onClick={startNew}>{tx('New pro forma')}</button>
+          <button className="btn btn-primary" disabled={busy||must.length>0} onClick={exportDoc}>
+            {busy?<div className="spinner" style={{width:12,height:12}}/>:<Icon.Download/>}
+            {busy?tx('Exporting…'):check.length&&!must.length?tx('Export anyway'):tx('Export pro forma')}
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 

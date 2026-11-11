@@ -59,6 +59,7 @@
     [/^No dimensions for (.+)$/, 'No dimensions for {0}'],
     [/^Could not read (.+) or (.+)$/, 'Could not read {0} or {1}'],
     [/^(.+) is already on the SKU list$/, '{0} is already on the SKU list'],
+    [/^Another pro forma is already saved as (.+)\. Reload the page to get the next number\.$/, 'Another pro forma is already saved as {0}. Reload the page to get the next number.'],
     [/^There is no mockup picture for (.+) yet\.$/, 'There is no mockup picture for {0} yet.'],
   ];
   window.txs = message => {

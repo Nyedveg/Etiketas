@@ -14,8 +14,10 @@ from urllib.parse import urlparse, parse_qs, quote, unquote
 
 import organizer
 import packing_list
+import proforma
 import safety
 import stories
+import wordfile
 from labelnames import Catalogue, LANG_ALIASES, label_entry, label_kind, norm_name, pack_base, parse_pack, take_date
 from pdfpage import MM_PER_PT, page_image, pymupdf
 
@@ -50,6 +52,9 @@ DEFAULT_CFG_FILE = APP_DIR / "default_config.json"
 DEFAULT_SHIPPING_FILE = APP_DIR / "default_shipping.json"
 # One PC's own settings: outside the labels folder, which OneDrive shares, and outside the install, which an update replaces.
 LOCAL_FILE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Etiketas" / "settings.json"
+# This PC's pro formas: the seller and the person issuing them, which each new one starts with, the customers saved for
+# reuse, and every one exported here, which the next number is worked out from. Kept on this PC only: none of it may be shared.
+PROFORMA_FILE = LOCAL_FILE.parent / "proformas.json"
 PORT       = 7842
 
 
@@ -251,13 +256,70 @@ def save_shipping(data):
         save_json(TECHNICAL_FILE, technical)
     save_json(SHIPPING_FILE, {k: v for k, v in data.items() if k not in ("tds", "tdsReadOn", "safety", "skuRules", "skuList")})
 
+# ── Pro formas ─────────────────────────────────────────────────────────────────
+# What the page saves itself, and what each is. The exported pro formas are only ever added by keep_proforma.
+PROFORMA_PARTS = {"seller": dict, "issuer": dict, "customers": list}
+
+def load_proformas():
+    """This PC's pro forma data. Empty if there is none yet; None if the file is there but can't be read,
+    so nothing is ever saved over pro formas that couldn't be seen."""
+    data = load_json(PROFORMA_FILE)
+    if data is None:
+        return None if PROFORMA_FILE.exists() else {**{k: kind() for k, kind in PROFORMA_PARTS.items()}, "proformas": []}
+    return {**{k: data.get(k) or kind() for k, kind in PROFORMA_PARTS.items()}, "proformas": data.get("proformas") or []}
+
+def _readable_proformas():
+    data = load_proformas()
+    if data is None:
+        raise ValueError("The pro formas saved on this PC could not be read")
+    return data
+
+def save_proforma_parts(changes):
+    """Some of PROFORMA_PARTS, saved over what the file has now."""
+    save_json(PROFORMA_FILE, {**_readable_proformas(), **changes})
+
+def keep_proforma(doc):
+    """An exported pro forma, kept under its number. Exported again unchanged, it replaces itself. A different one can't
+    take a number already used: the page numbers after what is kept here, so only a page left open elsewhere could try."""
+    data = _readable_proformas()
+    same = next((p for p in data["proformas"] if p.get("number") == doc["number"]), None)
+    if same and {**same.get("doc", {}), "number": None} != {**doc, "number": None}:
+        raise ValueError(f"Another pro forma is already saved as {doc['number']}. Reload the page to get the next number.")
+    kept = [p for p in data["proformas"] if p is not same]
+    kept.append({"number": doc["number"], "saved": datetime.now().isoformat(timespec="seconds"), "doc": doc})
+    save_json(PROFORMA_FILE, {**data, "proformas": sorted(kept, key=lambda p: p.get("number", ""))})
+
 def _onedrive_running():
+    """Whether OneDrive.exe is running, read from Windows' list of processes. That takes a few milliseconds;
+    starting tasklist for it took a fifth of a second, every 30 seconds the page asks for the sync status."""
     if os.name != "nt":
         return False
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):          # PROCESSENTRY32W
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                    ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD),
+                    ("szExeFile", ctypes.c_wchar * 260)]
     try:
-        r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq OneDrive.exe"],
-                            capture_output=True, text=True, timeout=5, creationflags=_NO_WINDOW)
-        return "OneDrive.exe" in r.stdout
+        k32 = ctypes.WinDLL("kernel32")       # its own copy, so these signatures change nothing elsewhere
+        k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        k32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        k32.Process32FirstW.argtypes = k32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(Entry)]
+        k32.CloseHandle.argtypes = [wintypes.HANDLE]
+        snap = k32.CreateToolhelp32Snapshot(0x2, 0)          # TH32CS_SNAPPROCESS
+        if not snap or snap == ctypes.c_void_p(-1).value:
+            return False
+        try:
+            entry = Entry(dwSize=ctypes.sizeof(Entry))
+            ok = k32.Process32FirstW(snap, ctypes.byref(entry))
+            while ok:
+                if entry.szExeFile.lower() == "onedrive.exe":
+                    return True
+                ok = k32.Process32NextW(snap, ctypes.byref(entry))
+            return False
+        finally:
+            k32.CloseHandle(snap)
     except Exception:
         return False
 
@@ -474,11 +536,13 @@ def scan_labels():
     cat = make_catalogue(load_config())
     for root, dirs, fnames in os.walk(LABELS_DIR):
         dirs[:] = [d for d in dirs if not d.startswith('.') and d.lower() not in ('qrcodes', 'template')]
+        # Once per folder, as plain strings: Path.relative_to for each file was a third of the scan's time.
+        rel_root = os.path.relpath(root, LABELS_DIR)
         for fname in fnames:
             p = Path(fname)
             if fname.startswith('.') or not label_kind(p.suffix, p.stem):
                 continue
-            files.append(label_entry(str((Path(root) / fname).relative_to(LABELS_DIR)), fname, cat))
+            files.append(label_entry(fname if rel_root == '.' else os.path.join(rel_root, fname), fname, cat))
     return files
 
 # ── Brand color application ────────────────────────────────────────────────────
@@ -1982,6 +2046,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/product_mockup":  "api_product_mockup",
         "/api/file_info":       "api_file_info",
         "/api/shipping":        "api_shipping",
+        "/api/proformas":       "api_proformas",
         "/api/update/check":    "api_update_check",
         "/api/update/progress": "api_update_progress",
     }
@@ -1989,6 +2054,10 @@ class Handler(BaseHTTPRequestHandler):
     def api_config(self):
         cfg = load_config()
         self.send_json({**cfg, "rules": config_rules(cfg)})
+
+    def api_proformas(self):
+        data = load_proformas()
+        self.send_json(data if data is not None else {"error": "The pro formas saved on this PC could not be read"})
 
     def api_shipping(self):
         with _WRITE_LOCK:     # the first read also writes the seed file
@@ -2143,6 +2212,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/icon_assignments/save":"api_icon_assignments_save",
         "/api/shipping/save":        "api_shipping_save",
         "/api/shipping/packing_list":"api_packing_list",
+        "/api/proforma":             "api_proforma",
+        "/api/proformas/save":       "api_proforma_save",
         "/api/safety/save":          "api_safety_save",
         "/api/sku_rules/save":       "api_sku_rules_save",
         "/api/sku_list/save":        "api_sku_list_save",
@@ -2199,15 +2270,32 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("A SKU needs a code")
         return {"sku": add_to_sku_list(code, (body.get("name") or "").strip())}
 
-    def api_packing_list(self, body):
+    def _send_document(self, kind, body, keep=None):
+        """A Word document the page laid out (packing_list or proforma), sent as a download.
+        keep: what is done with the request once the document is made, such as recording it."""
         try:
             # The logo as a browser draws its SVG, trimmed to its ink: MuPDF draws those styled paths all black.
-            data = packing_list.build_docx(body, (STATIC_DIR / "img" / "Nando-color.png").read_bytes())
-            name = packing_list.file_name(body["customer"])
+            data = kind.build_docx(body, (STATIC_DIR / "img" / "Nando-color.png").read_bytes())
+            name = kind.file_name(body)
+            if keep:
+                keep(body)
         except Exception as e:
-            print("packing list failed", file=sys.stderr); traceback.print_exc()
+            print(f"{kind.__name__} failed", file=sys.stderr); traceback.print_exc()
             return self.send_json({"error": str(e)}, 500)
-        self._send(200, data, packing_list.MIME, {**_attachment(name), "Cache-Control": "no-store"})
+        self._send(200, data, wordfile.MIME, {**_attachment(name), "Cache-Control": "no-store"})
+
+    def api_packing_list(self, body):
+        self._send_document(packing_list, body)
+
+    def api_proforma(self, body):
+        self._send_document(proforma, body, keep=keep_proforma)
+
+    @_ok_json
+    def api_proforma_save(self, body):
+        changes = {k: v for k, v in body.items() if k in PROFORMA_PARTS}
+        if not changes or not all(isinstance(v, PROFORMA_PARTS[k]) for k, v in changes.items()):
+            raise ValueError("Pro forma data must be a seller, an issuer or customers")
+        save_proforma_parts(changes)
 
     @_ok_json
     def api_update_install(self, body):
