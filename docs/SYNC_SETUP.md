@@ -72,12 +72,11 @@ shelf life and storage temperatures from the product's data sheet, in the label'
 whatever the translation file says; **New Label** shows them before anything is created. A
 product with no data sheet keeps its translation's text.
 
-`sku_rules.json` holds what each part of a SKU can be: products and their versions,
-packs, language codes and brands. `sku_list.json` holds the SKUs issued so far. Both are edited in
-**Editor → SKU**. The **SKU** page searches the list, and makes new SKUs from the rules and adds
-them to it. New Label, the packing list and the shipping editor read the rules to say what a typed
-SKU means and to point out what doesn't fit. A SKU on a label or document is still typed by the
-person making it, never filled in for them.
+A SKU on a label, packing list or pro forma is typed by the person making it, never filled in
+for them. The field opens with the product's SKU code, set per shipping product in
+**Editor → Shipping**, and the pack's code (`P0401M5-`); the market and brand are typed after it.
+The app keeps no list of SKUs: `sku_rules.json` and `sku_list.json`, left here by older copies,
+are no longer read.
 
 This data is the company's and only ever lives in this folder. This repository is public, so
 never commit it: `app/default_shipping.json` is deliberately just the empty shape, and if the
@@ -176,12 +175,12 @@ Hover over the dot for the resolved folder path and link target.
   label, deleting a file, changing settings), whichever change OneDrive
   finishes uploading *last* wins for the shared metadata files
   (`labels_map.json`, `app_config.json`, `colors_config.json`,
-  `creation_history.json`, `shipping_profiles.json`, `technical_data.json`, `sku_rules.json`,
-  `sku_list.json` — each is rewritten in full on every save, not merged). The actual label files
+  `creation_history.json`, `shipping_profiles.json`, `technical_data.json` — each is
+  rewritten in full on every save, not merged). The actual label files
   themselves aren't affected by this — only the app's own bookkeeping about them.
   Clicking **Rescan** in the app rebuilds the file map from what's
-  actually on disk, so it self-heals if this ever happens. Shipping data and SKU data
-  can't be rebuilt that way, so two people shouldn't edit them at once.
+  actually on disk, so it self-heals if this ever happens. Shipping data
+  can't be rebuilt that way, so two people shouldn't edit it at once.
 - **Files On-Demand**: if a colleague's OneDrive frees up space by
   making files cloud-only, the app may hit a placeholder file that
   needs to download before it can be read. Right-click the synced

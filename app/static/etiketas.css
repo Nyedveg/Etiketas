@@ -109,7 +109,6 @@
 .ship-group-name{font-weight:600;color:var(--text);margin-right:var(--space-1)}
 .ship-profile{margin-bottom:var(--space-4)}
 .ship-profile-packs{margin-top:var(--space-4);overflow-x:auto}
-.ship-open-row>td{background:var(--surface2)}
 .ship-open{padding:var(--space-1) 0}
 .ship-section{margin-bottom:var(--space-5)}
 .ship-qty{width:108px;margin-left:auto}
@@ -170,58 +169,6 @@
 .ship-sku-names{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-2) var(--space-3);margin-top:var(--space-1)}
 .ship-sku-names label{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-xs);color:var(--text2)}
 
-/* -- SKUs ----------------------------------------------------------------------------- */
-.sku-hints{margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text3);line-height:1.5}
-.sku-warnings{margin-top:var(--space-1);font-size:var(--fs-xs);color:var(--warning);line-height:1.5;white-space:normal}
-.sku-parts{display:flex;align-items:stretch;gap:var(--space-1);max-width:1040px}
-.sku-part{flex:1 1 0;min-width:0;padding:var(--space-1) var(--space-2);border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface)}
-.sku-part.missing{border-style:dashed;background:none}
-.sku-part.unknown{border-color:var(--danger);background:rgba(var(--danger-rgb),.08)}
-.sku-part>span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sku-part-label{font-size:var(--fs-2xs);color:var(--text3);text-transform:uppercase;letter-spacing:var(--tracking-label)}
-.sku-part-code{font-size:var(--fs-lg);font-weight:500;line-height:1.35}
-.sku-part-value{font-size:var(--fs-xs);color:var(--text2)}
-.sku-dash{align-self:center;font-family:var(--font-mono);font-size:var(--fs-lg);color:var(--text3)}
-.sku-files{margin-top:var(--space-2)}
-/* Its own scroll, so a product with many files can't push the table off the page. */
-.sku-file-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:var(--space-1) var(--space-4);max-height:92px;overflow-y:auto;margin-top:var(--space-1)}
-.sku-file{display:flex;align-items:center;gap:var(--space-2);min-width:0}
-.sku-file-name{flex:1;min-width:0;font-size:var(--fs-xs);color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sku-tabs{margin-bottom:var(--space-3)}
-.sku-bar{flex-shrink:0;margin-bottom:0}
-.sku-tab-hint{margin-top:var(--space-1)}
-.sku-table{flex:1;min-height:150px;max-height:none;margin-top:var(--space-2)}
-.sku-pasted{flex-shrink:0;margin-top:var(--space-2)}
-.sku-pasted-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2)}
-.sku-result .sku-pasted-head{margin:var(--space-3) 0 0}
-.sku-result .sku-pasted-head .sku-warnings{margin-top:0}
-.sku-new-code{font-size:var(--fs-lg);font-weight:500;color:var(--text)}
-.sku-create{display:flex;flex-direction:column;gap:var(--space-3)}
-.sku-create .ship-form-grid>div>.hint{margin-top:var(--space-1)}
-.sku-result{flex-shrink:0}
-.sku-found td{vertical-align:top}
-.sku-row{cursor:pointer}
-.sku-found-code{padding:0;border:none;background:none;color:var(--text);font-size:var(--fs-sm);font-weight:500;cursor:pointer}
-.sku-found-code:hover{color:var(--accent)}
-.sku-found-code.wrong{color:var(--warning)}
-.sku-found-note{margin-top:var(--space-2)}
-.sku-copy{padding:2px 6px}
-.sku-found-cell{display:inline-flex;align-items:center;gap:var(--space-1)}
-.sku-found-cell .sku-copy{padding:0 4px;height:20px}
-.sku-rows td{vertical-align:top}
-.sku-rows td:last-child{width:32px}
-.sku-rows .input{width:100%;box-sizing:border-box}
-.sku-rows .ship-num{width:110px}
-.sku-rows td:first-child{width:150px}
-.sku-rows .ship-links{gap:var(--space-1)}
-.sku-rows .ship-link-add{width:150px}
-.sku-versions-toggle{display:inline-flex;align-items:center;gap:var(--space-1);height:28px;padding:0 var(--space-2);border:1px solid var(--border2);border-radius:var(--radius-sm);background:none;color:var(--text);font-size:var(--fs-sm);white-space:nowrap;cursor:pointer}
-.sku-versions-toggle:hover{border-color:var(--accent)}
-.sku-versions-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
-.sku-versions{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-1);padding:var(--space-1) 0}
-.sku-version{display:flex;align-items:center;gap:var(--space-2);width:min(560px,100%)}
-.sku-rows .sku-version .sku-code{flex:0 0 56px;width:56px}
-
 /* -- Settings: shipping editor -------------------------------------------------------- */
 .ship-edit{display:flex;gap:var(--space-5);flex:1;min-height:0}
 .ship-edit-list{width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:var(--space-2);min-height:0}
@@ -265,6 +212,12 @@
 .table tr.ship-line-used td{padding-top:1px;font-size:var(--fs-2xs);line-height:1.3;color:var(--text3);min-width:128px}
 .table tbody tr.ship-line:hover td,.table tbody tr.ship-line-used:hover td{background:none}
 .table tbody tr.ship-line:hover td:first-child,.table tbody tr.ship-line-used:hover td:first-child{box-shadow:none}
+/* The pallet, container and box a line is packed with, under its figures. */
+.ship-pick{display:flex;flex-direction:column;gap:var(--space-1)}
+.ship-line-used .ss-input{min-width:150px}
+.ship-pick-num{display:flex;align-items:center;justify-content:flex-end;gap:var(--space-1);white-space:nowrap}
+.ship-changed{display:flex;align-items:center;gap:var(--space-1);margin-top:var(--space-1);font-size:var(--fs-2xs);color:var(--warning);cursor:help}
+.ship-reset{padding:0;border:none;background:none;color:var(--accent);font-size:inherit;text-decoration:underline;cursor:pointer}
 .ship-table-fit{max-height:calc(100vh - 220px);min-height:280px;overflow:auto}
 .ship-table-fit>.table>thead th{position:sticky;top:0;z-index:2;background:var(--surface);box-shadow:inset 0 -1px 0 var(--border)}
 .ship-table-fit>.table.sticky-first>thead th:first-child{z-index:3;box-shadow:1px 0 0 var(--border),inset 0 -1px 0 var(--border)}
@@ -306,6 +259,7 @@
 .pf-empty{font-style:italic}
 .pf-lines td:nth-child(2){min-width:200px}
 .pf-lines td:nth-child(2) .input{width:100%;box-sizing:border-box}
+.pf-sku{width:140px}
 .pf-pack{width:72px;margin-left:auto}
 .pf-qty{width:110px;margin-left:auto}
 .pf-price{width:100px;margin-left:auto}

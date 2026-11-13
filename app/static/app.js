@@ -39,9 +39,6 @@ const api = {
   getShipping:         ()    => api.get('/api/shipping'),
   saveShipping:        (s)   => api.post('/api/shipping/save', s),
   saveSafety:          (p)   => api.post('/api/safety/save', {products:p}),
-  saveSkuRules:        (r)   => api.post('/api/sku_rules/save', r),
-  saveSkuList:         (l)   => api.post('/api/sku_list/save', {skus:l}),
-  addSku:              (s)   => api.post('/api/sku_list/add', s),
 };
 
 // Saves a response the server marked as a download, under the name it gave.
@@ -181,7 +178,6 @@ const Icon = {
   Browse:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 011-1h3.586A1 1 0 017 2.293L7.707 3H13a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3z"/></svg>,
   Shipment:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 4a1 1 0 011-1h7.5a1 1 0 011 1v1.5h1.9a1 1 0 01.8.4l1.6 2.1a1 1 0 01.2.6V11a1 1 0 01-1 1h-.55a2 2 0 01-3.9 0h-2.1a2 2 0 01-3.9 0H2a1 1 0 01-1-1V4zm3.5 7a1 1 0 100 2 1 1 0 000-2zm6.5 0a1 1 0 100 2 1 1 0 000-2zm-.5-4v1.8h3.2L12.3 7h-1.8z"/></svg>,
   Proforma:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor" fillRule="evenodd"><path d="M4 1h5.6L13 4.4V14a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm5 1.4V5h2.6L9 2.4zM5 7.2v1.2h6V7.2H5zm0 2.5v1.2h6V9.7H5zm0 2.5v1.2h3.6v-1.2H5z"/></svg>,
-  Sku:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3h1.5v10H1V3zm2.5 0h1v10h-1V3zm2 0H8v10H5.5V3zm3.5 0h1v10H9V3zm2 0h1.5v10H11V3zm2.5 0H15v10h-1.5V3z"/></svg>,
   Editor:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M11.3 1.5a1.5 1.5 0 012.1 0l1.1 1.1a1.5 1.5 0 010 2.1l-1.5 1.5-3.2-3.2 1.5-1.5zM8.9 3.9l3.2 3.2-7.6 7.6a1 1 0 01-.5.27l-2.9.6a.5.5 0 01-.59-.59l.6-2.9a1 1 0 01.27-.5l7.52-7.68z"/></svg>,
   Settings:()=><svg className="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4.754a3.246 3.246 0 100 6.492 3.246 3.246 0 000-6.492zM5.754 8a2.246 2.246 0 114.492 0 2.246 2.246 0 01-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 01-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 01-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 01.52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 011.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 011.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 01.52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 01-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 01-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 002.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 001.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 00-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 00-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 00-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 003.06 8.858l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 004.175 4.4l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 002.692-1.115l.094-.319z"/></svg>,
   Refresh:()=>stroke(<><path d="M14 8a6 6 0 1 1-6-6c1.68 0 3.29.67 4.49 1.83L14 5.33"/><path d="M14 2v3.33h-3.33"/></>,13),
@@ -194,7 +190,6 @@ const Icon = {
   Search:({size})=>stroke(<><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></>,size),
   Close:({size})=>stroke(<path d="M4 4l8 8M12 4l-8 8"/>,size),
   Chevron:({size})=>stroke(<path d="M4 6.5l4 4 4-4"/>,size),
-  Copy:({size})=>stroke(<><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 00-1-1h-6a1 1 0 00-1 1v6a1 1 0 001 1h2"/></>,size),
   SortUp:()=>stroke(<path d="M4 10l4-4 4 4"/>,12),
   SortDown:()=>stroke(<path d="M4 6l4 4 4-4"/>,12),
   Tag:()=>stroke(<><path d="M2 2h5.6l6.4 6.4-5.6 5.6L2 7.6z"/><circle cx="5.2" cy="5.2" r=".9" fill="currentColor"/></>),
@@ -413,9 +408,6 @@ function App(){
   const saveShipping=useCallback(async s=>{const r=await api.saveShipping(s);if(r.ok)setShipping(s);return r;},[]);
   // Safety data has its own file; what the calculator shows of it, it reads from the shipping data.
   const setSafety=useCallback(products=>setShipping(s=>s&&!s.error?{...s,safety:products}:s),[]);
-  // SKU rules and the list of SKUs too: they have their own files, and the rest of the app reads them from here.
-  const setSkuRules=useCallback(rules=>setShipping(s=>s&&!s.error?{...s,skuRules:rules}:s),[]);
-  const setSkuList=useCallback(list=>setShipping(s=>s&&!s.error?{...s,skuList:list}:s),[]);
   // The Editor and Application settings set this while they hold unsaved edits, so leaving the page can't lose them silently.
   const unsaved=useRef(false);
   const updates=useUpdates();
@@ -440,16 +432,15 @@ function App(){
       <Sidebar view={view} setView={navigate} map={map} refreshMap={refreshMap}/>
       <div className="main">
         <Topbar view={view} map={map} navigate={navigate}/>
-        <div className={`content${['editor','settings','information','sku'].includes(view)?' no-scroll':''}`}>
+        <div className={`content${['editor','settings','information'].includes(view)?' no-scroll':''}`}>
           <div key={view} className="view-anim" style={{height:'100%'}}>
             {view==='dashboard'&&<Dashboard map={map} config={config} refreshMap={refreshMap}/>}
             {view==='new'&&<NewLabelWizard config={config} map={map} setMap={setMap} shipping={shipping}/>}
             {view==='browse'&&<LabelsBrowser map={map} setMap={setMap} config={config} onNewLabel={()=>navigate('new')}/>}
             {view==='information'&&<Information config={config} map={map} setMap={setMap} shipping={shipping}/>}
             {view==='shipment'&&<Shipment shipping={shipping} config={config}/>}
-            {view==='sku'&&<SkuPage shipping={shipping} config={config} files={map?.files} setSkuList={setSkuList}/>}
             {view==='proforma'&&<ProformaPage shipping={shipping}/>}
-            {view==='editor'&&<Editor config={config} saveConfig={saveConfig} shipping={shipping} saveShipping={saveShipping} setSafety={setSafety} setSkuRules={setSkuRules} setSkuList={setSkuList} unsaved={unsaved} files={map?.files}/>}
+            {view==='editor'&&<Editor config={config} saveConfig={saveConfig} shipping={shipping} saveShipping={saveShipping} setSafety={setSafety} unsaved={unsaved} files={map?.files}/>}
             {view==='settings'&&<AppSettings config={config} saveConfig={saveConfig} refreshMap={refreshMap} unsaved={unsaved} checkUpdates={updates.checkNow}/>}
           </div>
         </div>
@@ -481,7 +472,6 @@ function Sidebar({view,setView,map,refreshMap}){
           {id:'browse',label:tx('Browse Files'),I:Icon.Browse},
           {id:'information',label:tx('Information'),I:Icon.Info},
           {id:'shipment',label:tx('Shipment'),I:Icon.Shipment},
-          {id:'sku',label:'SKU',I:Icon.Sku},
           {id:'proforma',label:tx('Pro forma'),I:Icon.Proforma},
           {id:'editor',label:tx('Editor'),I:Icon.Editor},
           {id:'settings',label:tx('Application settings'),I:Icon.Settings}
@@ -531,7 +521,7 @@ function SyncStatus(){
 }
 
 function Topbar({view,map,navigate}){
-  const titles={dashboard:tx('Dashboard'),new:tx('New Label'),browse:tx('Browse'),information:tx('Information'),shipment:tx('Shipment'),sku:'SKU',proforma:tx('Pro forma'),editor:tx('Editor'),settings:tx('Application settings')};
+  const titles={dashboard:tx('Dashboard'),new:tx('New Label'),browse:tx('Browse'),information:tx('Information'),shipment:tx('Shipment'),proforma:tx('Pro forma'),editor:tx('Editor'),settings:tx('Application settings')};
   return(
     <div className="topbar">
       {view==='new'&&<button className="btn btn-ghost btn-sm" onClick={()=>navigate('browse')}>{tx('← Browse Files')}</button>}
@@ -1219,11 +1209,8 @@ function NewLabelWizard({config,map,setMap,shipping}){
               </div>
               <label htmlFor="label-sku" style={{display:'block',fontSize:11,color:'var(--text2)',marginBottom:4}}>{tx('SKU code')}</label>
               <input id="label-sku" className="input mono" type="text" autoComplete="off" value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} placeholder={tx('e.g. X0000M5-EN0')} style={{width:'100%',boxSizing:'border-box'}}
-                onFocus={e=>{const end=e.target.value.length;e.target.setSelectionRange(end,end);}}/>
+                onFocus={caretToEnd}/>
               {!skuTyped&&<div style={{fontSize:11,color:'var(--warning)',marginTop:6}}>{tx('⚠ No SKU provided')}</div>}
-              <div className="hint" style={{marginTop:6}}>{skuMeaning(shipping?.skuRules,sku)}</div>
-              {skuTyped?<SkuWarnings lines={skuChecks(shipping?.skuRules,skuTyped,{languages,packSize:packAmount(size),name:product,codes:skuCodesForLabel(shipping,product)})}/>:null}
-              <SkuHints lines={skuHints(shipping?.skuRules,languages,product)}/>
             </div>
           )}
           <div className="flex mt-4 gap-2" style={{flexShrink:0}}>
@@ -1628,7 +1615,7 @@ const FACET_KEYS=['cat','kinds','formats','sizes','status','langs'];
 const NO_FILTERS={cat:null,kinds:[],formats:[],sizes:[],status:[],langs:[],langMode:'all'};
 const NO_FILES=[];
 // Long lists draw this many rows at a time, then Show more. Chrome re-records the whole table on every selection
-// change, ~65 ms per click at 1000+ rows and ~15 ms at 200, and drawing all 519 SKUs at once froze the page for 0.4 s.
+// change, ~65 ms per click at 1000+ rows and ~15 ms at 200, and drawing about 500 rows at once froze the page for 0.4 s.
 const ROWS_PAGE=200;
 // How many rows of a long list to draw: back to the first page whenever resetKey (the search, filters, sort) changes,
 // but not when a row is added or removed, so the list doesn't jump back while someone works down it.
@@ -2349,15 +2336,19 @@ function SearchSelect({value,onChange,children,className='',disabled,...rest}){
 const byId=list=>Object.fromEntries((list??[]).map(x=>[x.id,x]));
 const byProfileName=(a,b)=>a.name.localeCompare(b.name);
 const SHIP_GROUPS=[...CATEGORIES,'NON'];
-// One entry per pack, with what the calculator needs read through to the catalogues.
+// The catalogues a pack picks its pallet, container and box from, by id.
+const shipLookups=shipping=>({pallets:byId(shipping?.pallets),containers:byId(shipping?.containers),boxes:byId(shipping?.boxes)});
+// A product's pack with what the calculator needs read through to the catalogues.
+const shipEntry=(p,k,{pallets,containers,boxes})=>{
+  const pallet=pallets[k.palletId],container=containers[k.containerId],box=boxes[k.boxId];
+  return {id:k.id,product:p,pack:k,pallet,container,box,unit:p.unit,density:p.unit==='kg'?1:p.density,strapWeight:p.strapWeight,
+    packSize:k.packSize,palletSize:k.palletSize,palletWeight:pallet?.weight??0,containerWeight:container?.weight??0,
+    unitsPerBox:box?k.unitsPerBox:0,boxWeight:box?.weight??0};
+};
+// One entry per pack.
 const shipEntries=shipping=>{
-  const pallets=byId(shipping?.pallets),containers=byId(shipping?.containers),boxes=byId(shipping?.boxes);
-  return (shipping?.products??[]).flatMap(p=>(p.packs??[]).map(k=>{
-    const pallet=pallets[k.palletId],container=containers[k.containerId],box=boxes[k.boxId];
-    return {id:k.id,product:p,pack:k,pallet,container,box,unit:p.unit,density:p.unit==='kg'?1:p.density,strapWeight:p.strapWeight,
-      packSize:k.packSize,palletSize:k.palletSize,palletWeight:pallet?.weight??0,containerWeight:container?.weight??0,
-      unitsPerBox:box?k.unitsPerBox:0,boxWeight:box?.weight??0};
-  }));
+  const lookups=shipLookups(shipping);
+  return (shipping?.products??[]).flatMap(p=>(p.packs??[]).map(k=>shipEntry(p,k,lookups)));
 };
 // What one order line comes to.
 const perUnit=(a,b)=>b>0?a/b:0;
@@ -2374,8 +2365,8 @@ const qtyForPallets=(it,n)=>n==null?null:Math.round(n*it.palletSize*1e6)/1e6;
 const palletsField=n=>Math.round(n*1e4)/1e4;
 // Each line rounded up, then added: a pallet holds one product, so the parts of two can't share one.
 const palletsNeeded=rows=>rows.reduce((n,r)=>n+wholeUp(r.c.pallets),0);
-// A number format is slow to build, and toLocaleString builds one on every call: opening the SKU page spent more
-// time on that than on anything else. So each format is built once and kept.
+// A number format is slow to build, and toLocaleString builds one on every call: a page with a long list could spend
+// more time on that than on anything else. So each format is built once and kept.
 const NUMBER_FORMATS=new Map();
 const numberFormat=(locale,min,max)=>{
   const key=`${locale}|${min}|${max}`;
@@ -2389,102 +2380,27 @@ const fmtMonths=m=>m>0?txn(m,'{0} month','{0} months'):'–';
 const fmtStorage=p=>p.storageMin==null&&p.storageMax==null?'–':tx('{0} to {1} °C',p.storageMin??'?',p.storageMax??'?');
 const adrOf=p=>p.adrClass||null;
 // ── SKU codes ────────────────────────────────────────────────────────────────
-// How a SKU is built: a group letter, a two-digit product, a two-digit version and a pack, then a dash, a
-// two-character language code and a brand: P0401M5-3B0. What each code means is in sku_rules.json, edited in Editor → SKU.
-const skuRow=(rules,table,code)=>(rules?.[table]??[]).find(r=>r.code===code);
+// A SKU is typed, and reads like P0401M5-3B0: the product's code (group letter, product, version), the pack, a dash,
+// then the market and brand. Each shipping product's code is edited in Editor → Shipping; the rest is for the person to type.
 const skuCodeFor=(p,name)=>(p.skuCodeFor?.[name]||p.skuCode||'').trim();
+// Each pack size's code, by its size in kg or L, as the SKU coding workbook has them.
+const SKU_PACK_CODES={0.05:'S05',0.1:'S1',0.25:'S2',0.5:'S5',1:'M1',2.5:'M2',5:'M5',6:'M6',10:'L1',20:'L2'};
 // What a SKU starts with. A code without its version digits has nothing certain to add after it.
-const skuStart=(p,name,packSize,rules)=>{
+const skuStart=(p,name,packSize)=>{
   const code=skuCodeFor(p,name);
   if(!code)return '';
-  const pack=(rules?.packs??[]).find(k=>k.amount===packSize)?.code;
+  const pack=SKU_PACK_CODES[packSize];
   return code.length===5&&pack?`${code}${pack}-`:code;
 };
 const skuCodesOf=p=>[...new Set([p.skuCode,...Object.values(p.skuCodeFor??{})].filter(Boolean))].join(' / ');
-const SKU_PART_LABEL={group:tx('Group'),product:tx('Product'),version:tx('Version'),pack:tx('Pack'),language:tx('Languages'),brand:tx('Brand'),ending:tx('Ending')};
-// What the Editor's SKU tab has a section for. The ids are the tables in sku_rules.json, and `skus` is sku_list.json.
-const SKU_SECTIONS=[['products',tx('Products')],['packs',tx('Packs')],['languages',tx('Languages')],['brands',tx('Brands')],['endings',tx('Other endings')],['skus',tx('SKU list')]];
-// A product's first letter is its group. The rules only name the letters, so a letter with no name still works.
-const skuGroups=rules=>[...new Set((rules?.products??[]).map(p=>p.code?.[0]).filter(Boolean))].sort().map(code=>({code,name:skuRow(rules,'groups',code)?.name??code}));
-// Each part with what the rules say about it: 'ok', 'unknown' to the rules, or 'missing' so far.
-const skuParts=(rules,{group,product,version,pack,tail,language,brand})=>{
-  const lookup=(table,code,size=1)=>{
-    const row=skuRow(rules,table,code);
-    // With an empty table there is nothing to say a code is wrong.
-    return {row,state:code.length<size?'missing':row||!(rules?.[table]??[]).length?'ok':'unknown'};
-  };
-  const p=lookup('products',group+product,3),k=lookup('packs',pack);
-  const versions=p.row?.versions??[],v=versions.find(x=>x.code===version);
-  const parts=[
-    // Only named: a letter no product has shows up as an unknown product, so it isn't reported twice.
-    {key:'group',code:group,value:skuRow(rules,'groups',group)?.name,state:group?'ok':'missing'},
-    {key:'product',code:product,value:p.row?.name,state:product.length<2?'missing':p.state},
-    {key:'version',code:version,state:version.length<2?'missing':versions.length&&!v?'unknown':'ok',
-      value:version.length<2?'':v?.note||(version==='00'?tx('Original'):tx('Change no. {0}',+version))},
-    {key:'pack',code:pack,value:k.row&&tx('{0} kg or L',fmtNum(k.row.amount,3)),state:pack.length<2?'missing':k.state},
-  ];
-  const ending=skuRow(rules,'endings',tail);
-  if(ending)return [...parts,{key:'ending',code:tail,value:ending.name,state:'ok'}];
-  const l=lookup('languages',language,2),b=lookup('brands',brand);
-  return [...parts,{key:'language',code:language,value:l.row?.name,state:l.state},{key:'brand',code:brand,value:b.row?.name,state:b.state}];
-};
-// A SKU as text, taken apart.
-const skuRead=(rules,raw)=>{
-  const text=(raw||'').trim().toUpperCase();
-  const dash=text.indexOf('-');
-  const head=dash<0?text:text.slice(0,dash),tail=dash<0?'':text.slice(dash+1);
-  const [,group,product,version,pack='',rest]=/^([A-Z]?)(\d{0,2})(\d{0,2})([A-Z]\d{0,2})?(.*)$/.exec(head);
-  const parts=skuParts(rules,{group,product,version,pack,tail,language:tail.slice(0,2),brand:tail.slice(2)});
-  return {text,head,tail,group,product,version,pack,parts,part:key=>parts.find(x=>x.key===key),complete:!rest&&parts.every(x=>x.state!=='missing')};
-};
-const skuUnknown=(rules,raw)=>skuRead(rules,raw).parts.filter(p=>p.state==='unknown').map(p=>tx('Not in the SKU rules: {0} {1}.',SKU_PART_LABEL[p.key],p.code));
-const sameSet=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
-// Whether a name is the one a brand stands for, however it is spelled or added to: "Spuma 5 L" is Spuma.
-const skuNameFits=(name,product)=>{
-  const plain=s=>(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-  return !!plain(product)&&plain(name).includes(plain(product));
-};
-// What someone should look at in a typed SKU, knowing what it is for. These only inform: there can be a reason for any of them.
-const skuChecks=(rules,raw,{languages,packSize,name,codes}={})=>{
-  const read=skuRead(rules,raw);
-  if(!read.text)return [];
-  const out=[];
-  if(!read.complete)out.push(tx('{0} doesn\'t look complete. They look like X0000M5-EN0.',read.text));
-  out.push(...skuUnknown(rules,raw));
-  if(codes?.length&&read.head&&!codes.some(c=>read.head.startsWith(c)))out.push(tx('This starts with {0}, but the SKU code for {1} is {2}.',read.head.slice(0,5),name,codes.join(' / ')));
-  const pack=skuRow(rules,'packs',read.pack);
-  if(pack&&packSize!=null&&pack.amount!==packSize)out.push(tx('{0} means a pack of {1}, but this one is {2}.',pack.code,fmtNum(pack.amount,3),fmtNum(packSize,3)));
-  const language=skuRow(rules,'languages',read.part('language')?.code);
-  if(language?.labels?.length&&languages?.length&&!sameSet(language.labels,languages))out.push(tx('{0} means {1}, but this label is in {2}.',language.code,language.name,languages.join(', ')));
-  const brand=skuRow(rules,'brands',read.part('brand')?.code);
-  if(brand&&name){
-    if(brand.product&&!skuNameFits(name,brand.product))out.push(tx('{0} means {1}, but this is {2}.',brand.code,brand.product,name));
-    const own=(rules?.brands??[]).find(b=>skuNameFits(name,b.product));
-    if(own&&brand.kind==='standard')out.push(tx('{0} is the standard label, but {1} has its own code: {2}.',brand.code,name,own.code));
-  }
-  return out;
-};
-// What the rules say a person's choices are written as. Shown to type from: nothing here goes in the field by itself.
-const skuHints=(rules,languages,name)=>{
-  if(!(rules?.languages??[]).length)return [];
-  const codes=rules.languages.filter(l=>l.labels?.length&&sameSet(l.labels,languages)).map(l=>l.code);
-  const own=(rules.brands??[]).filter(b=>skuNameFits(name,b.product)).map(b=>b.code);
-  const standard=(rules.brands??[]).find(b=>b.kind==='standard')?.code;
-  return [
-    codes.length?tx('Language code for {0}: {1}.',languages.join(', '),codes.join(' / ')):tx('{0} has no language code yet. Add one in Editor → SKU.',languages.join(', ')),
-    own.length?tx('Brand code for {0}: {1}.',name,own.join(' / ')):standard?tx('Brand code: {0} for the standard label, or the distributor\'s.',standard):'',
-  ].filter(Boolean);
-};
-const skuMeaning=(rules,sku,from=0)=>skuRead(rules,sku).parts.slice(from).map(p=>p.value).filter(Boolean).join(' · ');
-const SkuHints=({lines})=>lines.length?<div className="sku-hints">{lines.map(l=><div key={l}>{l}</div>)}</div>:null;
-const SkuWarnings=({lines})=>lines.length?<div className="sku-warnings">{lines.map(l=><div key={l}>{l}</div>)}</div>:null;
-// A pack as labels name it, in the unit shipping uses: "250ml" is 0.25, "5L" is 5.
 // Only when the shipping products linked to a label agree on where its SKU starts.
 const skuStartForLabel=(shipping,product,size)=>{
-  const found=(shipping?.products??[]).filter(p=>p.links?.includes(product)).map(p=>skuStart(p,product,packAmount(size),shipping?.skuRules)).filter(Boolean);
+  const found=(shipping?.products??[]).filter(p=>p.links?.includes(product)).map(p=>skuStart(p,product,packAmount(size))).filter(Boolean);
   return new Set(found).size===1?found[0]:'';
 };
-const skuCodesForLabel=(shipping,product)=>[...new Set((shipping?.products??[]).filter(p=>p.links?.includes(product)).map(p=>skuCodeFor(p,product)).filter(Boolean))];
+// A SKU field opens with that start, and the cursor goes after it, so typing adds to it: tabbing in would otherwise
+// select it all, and typing would replace it.
+const caretToEnd=e=>{const end=e.target.value.length;e.target.setSelectionRange(end,end);};
 // ── Safety data ──────────────────────────────────────────────────────────────
 const GHS=[['GHS01',tx('Explosive')],['GHS02',tx('Flammable')],['GHS03',tx('Oxidising')],['GHS04',tx('Gas under pressure')],['GHS05',tx('Corrosive')],['GHS06',tx('Acute toxicity')],['GHS07',tx('Harmful or irritant')],['GHS08',tx('Serious health hazard')],['GHS09',tx('Hazardous to the environment')]];
 const SIGNAL_LABEL={Danger:tx('Danger'),Warning:tx('Warning')};
@@ -2576,8 +2492,47 @@ const ShipCount=({n,whole=wholeUp(n),title})=>{
     </span>
   );
 };
-// The pallet, container or box a line's weight is worked out from.
-const ShipUsed=({item,weight})=>item?<>{item.name} · {fmtNum(weight,4)} kg</>:'–';
+// The pallet, container and box a pack is weighed with, picked from the catalogues with their weights: for a product's
+// profile in Editor → Shipping, and for one order line in the calculator.
+const PalletSelect=({pallets,value,onChange,...rest})=>(
+  <SearchSelect aria-label={tx('Pallet')} {...rest} value={value??''} onChange={v=>onChange(v||null)}>
+    <option value="">{tx('Choose…')}</option>
+    {pallets.filter(x=>x.weight>0||x.id===value).map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight)} kg</option>)}
+  </SearchSelect>
+);
+// The containers made for the pack's size first, then the rest: bags first for what is sold by weight.
+function ContainerSelect({containers,packSize,unit,value,onChange,...rest}){
+  const made=containers.filter(x=>packSize>0&&x.forSize===packSize&&x.kind===containerKind(unit));
+  const kinds=unit==='kg'?[['bag',tx('Bags')],['container',tx('Containers')]]:[['container',tx('Containers')],['bag',tx('Bags')]];
+  const option=x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>;
+  const container=containers.find(x=>x.id===value);
+  return(
+    <>
+      <SearchSelect aria-label={tx('Container or bag')} {...rest} value={value??''} onChange={v=>onChange(v||null)}>
+        <option value="">{tx('Choose…')}</option>
+        {made.length>0&&<optgroup label={tx('For {0} {1}',fmtNum(packSize,3),unit)}>{made.map(option)}</optgroup>}
+        {kinds.map(([kind,label])=>{
+          const others=containers.filter(x=>x.kind===kind&&!made.includes(x));
+          return others.length?<optgroup key={kind} label={made.length?tx('Other {0}',label.toLowerCase()):label}>{others.map(option)}</optgroup>:null;
+        })}
+      </SearchSelect>
+      {container?.forSize>0&&packSize>0&&container.forSize!==packSize&&<FieldNote>{tx('Made for {0} {1}',fmtNum(container.forSize,3),unit)}</FieldNote>}
+    </>
+  );
+}
+const BoxSelect=({boxes,value,onChange,...rest})=>(
+  <SearchSelect aria-label={tx('Box')} {...rest} value={value??''} onChange={v=>onChange(v||null)}>
+    <option value="">{tx('No box')}</option>
+    {boxes.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}
+  </SearchSelect>
+);
+// A pack given a box: how many go in one comes from the label cheat sheet, else from other packs this size.
+const boxChange=(shipping,config,k,unit,boxId)=>({boxId,
+  unitsPerBox:boxId?unitsPerBoxOnSheet(config,k.packSize,unit)??usualPack(shipping,unit,k.packSize,k.id).unitsPerBox??k.unitsPerBox:null});
+// What a pallet holds of a pack, as other packs this size with the same pallet and container have it: a blue 5 L
+// canister fits 600 L a pallet, the others 720 L.
+const usualPalletSize=(shipping,unit,k)=>mostCommon((shipping?.products??[]).filter(p=>p.unit===unit).flatMap(p=>p.packs??[])
+  .filter(x=>x.packSize===k.packSize&&x.palletId===k.palletId&&x.containerId===k.containerId&&x.palletSize>0).map(x=>x.palletSize));
 const packsPerPallet=k=>k.palletSize>0&&k.packSize>0?k.palletSize/k.packSize:null;
 // The value that turns up most often, blanks included: "most packs this size have no box" is an answer.
 const mostCommon=list=>{
@@ -2728,7 +2683,7 @@ function Shipment({shipping,config}){
         ))}
       </div>
       <div key={tab} className="view-anim">
-        {tab==='calc'&&<ShipCalculator shipping={shipping}/>}
+        {tab==='calc'&&<ShipCalculator shipping={shipping} config={config}/>}
         {tab==='reference'&&<ShipReference shipping={shipping} config={config}/>}
       </div>
     </div>
@@ -2763,21 +2718,21 @@ const docPalletName=pallet=>pallet.name==='EUR'?'Euro pallet':`${pallet.name} pa
 // A SKU starts with the product's code and its pack size, and the rest is typed: which market and brand it
 // is for is for the person shipping to say, so it is never picked for them. A product shipped under several
 // names can have a code per name, and then has none until the name on the document says which.
-const docSkuStart=(r,rules)=>skuStart(r.it.product,docLineName(r),r.it.packSize,rules);
-const docSkuField=(r,rules)=>r.l.sku??docSkuStart(r,rules);
+const docSkuStart=r=>skuStart(r.it.product,docLineName(r),r.it.packSize);
+const docSkuField=r=>r.l.sku??docSkuStart(r);
 // Only the start isn't a SKU yet, so it doesn't go on the document.
-const docSku=(r,rules)=>{
-  const sku=docSkuField(r,rules).trim();
-  return sku===docSkuStart(r,rules)?'':sku;
+const docSku=r=>{
+  const sku=docSkuField(r).trim();
+  return sku===docSkuStart(r)?'':sku;
 };
 
 // One section of the document: an order line, with the same figures the calculator shows for it.
-const docSection=(r,i,rules)=>{
+const docSection=(r,i)=>{
   const {l,it,c}=r;
   const qty=docCount(l.qty),units=docCount(wholeUp(c.units)),boxes=docCount(wholeUp(c.boxes)),word=docContainers(it),packaging=c.containerKg+c.boxKg;
   return {
     title:`${i+1}.  ${docLineName(r)} ${docPack(it)}`,
-    meta:[`SKU: ${docSku(r,rules)||'–'}`,`HS: ${docCustoms(it.product)||'–'}`,`Origin: ${docOrigin(it.product.origin)||'–'}`].join('    |    '),
+    meta:[`SKU: ${docSku(r)||'–'}`,`HS: ${docCustoms(it.product)||'–'}`,`Origin: ${docOrigin(it.product.origin)||'–'}`].join('    |    '),
     rows:[
       [it.unit==='L'?'Liquid material':'Dry material',`${qty} ${it.unit}`,''],
       ['Packaging size',docPack(it),''],
@@ -2792,7 +2747,7 @@ const docSection=(r,i,rules)=>{
   };
 };
 // What the server lays out. Totals come from the same rounding as the calculator's, so the two always agree.
-const packingListDoc=({customer,transport},rows,rules)=>{
+const packingListDoc=({customer,transport},rows)=>{
   const sum=key=>rows.reduce((n,r)=>n+r.c[key],0);
   const whole=(key,list=rows)=>list.reduce((n,r)=>n+wholeUp(r.c[key]),0);
   const amount=unit=>rows.filter(r=>r.it.unit===unit).reduce((n,r)=>n+(r.l.qty||0),0);
@@ -2807,7 +2762,7 @@ const packingListDoc=({customer,transport},rows,rules)=>{
   const pallets=whole('pallets');
   return {
     customer:customer.trim(),transport,
-    sections:rows.map((r,i)=>docSection(r,i,rules)),
+    sections:rows.map(docSection),
     totals:[
       ['Net product weight',amounts,docKg(sum('productKg'))],
       ['Product packaging',`${docCount(whole('units'))} units`+(cartons>0?` / ${docCount(cartons)} cartons`:''),docKg(sum('containerKg')+sum('boxKg'))],
@@ -2838,14 +2793,9 @@ const packingListChecks=({customer,transport},rows,gone,shipping)=>{
     if(!(it.strapWeight>0))must.push(tx('{0}: no strap weight, so the stretch film can\'t be worked out.',line));
     if(!docLineName(r))must.push(tx('{0}: add the name for the document.',line));
     else if(/[/()]/.test(docLineName(r)))check.push(tx('{0}: "{1}" looks like an internal name. Write the one the customer should see.',line,docLineName(r)));
-    const sku=docSku(r,shipping?.skuRules);
-    if(!sku){
-      const start=docSkuStart(r,shipping?.skuRules);
+    if(!docSku(r)){
+      const start=docSkuStart(r);
       check.push(tx('{0}: no SKU. {1}',line,start?tx('Type the rest after {0}.',start):tx('It has no SKU code to start from, so type all of it.')));
-    }
-    else{
-      const code=skuCodeFor(p,docLineName(r));
-      for(const c of skuChecks(shipping?.skuRules,sku,{packSize:it.packSize,name:docLineName(r),codes:code?[code]:[]}))check.push(`${line}: ${c}`);
     }
     if(l.qty>0&&!isWhole(c.boxes))check.push(tx('{0}: the last carton is only part full.',line));
     if(l.qty>0&&!isWhole(c.pallets))check.push(txn(wholeUp(c.pallets),'{1}: not a full pallet. Add {2} {3} for {0} full pallet.','{1}: not a full pallet. Add {2} {3} for {0} full pallets.',line,fmtNum(wholeUp(c.pallets)*it.palletSize-l.qty,3),it.unit));
@@ -2879,7 +2829,7 @@ function PackingListDialog({rows,gone,shipping,updateLine,onClose}){
   const make=async()=>{
     setBusy(true);setError('');
     try{
-      const r=await api.send('/api/shipping/packing_list',packingListDoc(info,rows,shipping?.skuRules));
+      const r=await api.send('/api/shipping/packing_list',packingListDoc(info,rows));
       if(!r.ok)throw new Error((await r.json().catch(()=>null))?.error||'');
       await saveDownload(r,'Packing_List.docx');
       onClose();
@@ -2910,12 +2860,10 @@ function PackingListDialog({rows,gone,shipping,updateLine,onClose}){
                   <td className="ship-doc-line">{i+1}. {it.product.name} <span className="mono nowrap muted">{fmtPack(it)}</span></td>
                   <td><input className="input" type="text" aria-label={tx('Name on the document for {0} {1}',it.product.name,fmtPack(it))} value={l.docName??docDefaultName(it.product)} onChange={e=>updateLine(l.itemId,{docName:e.target.value})}/></td>
                   <td>
-                    {/* The cursor goes after the code, so typing adds to it: tabbing in would otherwise select it all, and typing would replace it. */}
                     <input className="input mono" type="text" autoComplete="off" aria-label={tx('SKU for {0} {1}',it.product.name,fmtPack(it))} placeholder={tx('Type the SKU')}
-                      value={docSkuField(r,shipping?.skuRules)}
-                      onFocus={e=>{const end=e.target.value.length;e.target.setSelectionRange(end,end);}}
+                      value={docSkuField(r)}
+                      onFocus={caretToEnd}
                       onChange={e=>updateLine(l.itemId,{sku:e.target.value.toUpperCase()})}/>
-                    <div className="hint">{skuMeaning(shipping?.skuRules,docSku(r,shipping?.skuRules),4)}</div>
                   </td>
                   <td className="mono nowrap">{docCustoms(it.product)||'–'}</td>
                   <td className="nowrap">{docOrigin(it.product.origin)||'–'}</td>
@@ -2942,38 +2890,71 @@ function PackingListDialog({rows,gone,shipping,updateLine,onClose}){
   );
 }
 
-// Pick a product, then one of its packs: everything for a product is in one place.
-function ShipCalculator({shipping}){
-  const [lines,setLines]=useState(readShipment);
-  useEffect(()=>storeSetJson(localStorage,SHIPMENT_KEY,lines),[lines]);
+// Picking a shipping product, then one of its packs, as the calculator and the pro forma do. A product with one pack
+// has it picked with it. `picked` is the pack, with everything the shipping data says about it (shipEntries).
+function useShipPick(shipping){
   const entries=useMemo(()=>shipEntries(shipping),[shipping]);
-  const entryOf=useMemo(()=>byId(entries),[entries]);
-  const products=useMemo(()=>(shipping.products??[]).filter(p=>p.packs?.length).sort(byProfileName),[shipping]);
-  const groupsOfProducts=useMemo(()=>{
-    const known=SHIP_GROUPS.filter(g=>products.some(p=>p.group===g));
-    const other=[...new Set(products.map(p=>p.group))].filter(g=>!SHIP_GROUPS.includes(g));
-    return [...known,...other];
-  },[products]);
+  const products=useMemo(()=>(shipping?.products??[]).filter(p=>p.packs?.length).sort(byProfileName),[shipping]);
   const [productId,setProductId]=useState('');
   const [packId,setPackId]=useState('');
-  const [qty,setQty]=useState(null);
-  const [price,setPrice]=useState(null);
   const product=products.find(p=>p.id===productId);
   const packs=useMemo(()=>entries.filter(e=>e.product.id===productId).sort((a,b)=>a.packSize-b.packSize),[entries,productId]);
-  const picked=entryOf[packId];
   const pickProduct=id=>{
     setProductId(id);
     const own=entries.filter(e=>e.product.id===id);
     setPackId(own.length===1?own[0].id:'');
   };
+  return {entries,products,product,packs,picked:packs.find(e=>e.id===packId),productId,packId,pickProduct,setPackId};
+}
+function ShipPickFields({id,pick:{products,product,packs,productId,packId,pickProduct,setPackId}}){
+  const groups=useMemo(()=>{
+    const known=SHIP_GROUPS.filter(g=>products.some(p=>p.group===g));
+    const other=[...new Set(products.map(p=>p.group))].filter(g=>!SHIP_GROUPS.includes(g));
+    return [...known,...other];
+  },[products]);
+  return(
+    <>
+      <div className="field ship-add-product">
+        <label htmlFor={id}>{tx('Product')}</label>
+        <SearchSelect id={id} value={productId} onChange={pickProduct}>
+          <option value="">{tx('Choose a product…')}</option>
+          {groups.map(g=>(
+            <optgroup key={g} label={g||tx('No group')}>
+              {products.filter(p=>p.group===g).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </optgroup>
+          ))}
+        </SearchSelect>
+      </div>
+      <div className="field">
+        <span className="field-label">{tx('Pack')}</span>
+        {product?(
+          <div className="seg ship-packs" role="group" aria-label={tx('Pack')}>
+            {packs.map(e=><button key={e.id} type="button" aria-pressed={packId===e.id} className={'seg-btn'+(packId===e.id?' on':'')} onClick={()=>setPackId(e.id)}>{fmtPack(e)}</button>)}
+          </div>
+        ):<div className="hint ship-packs-empty">{tx('Choose a product first')}</div>}
+      </div>
+    </>
+  );
+}
+
+// Pick a product, then one of its packs: everything for a product is in one place.
+function ShipCalculator({shipping,config}){
+  const [lines,setLines]=useState(readShipment);
+  useEffect(()=>storeSetJson(localStorage,SHIPMENT_KEY,lines),[lines]);
+  const pick=useShipPick(shipping);
+  const {entries,product,picked}=pick;
+  const entryOf=useMemo(()=>byId(entries),[entries]);
+  const lookups=useMemo(()=>shipLookups(shipping),[shipping]);
+  const [qty,setQty]=useState(null);
+  const [price,setPrice]=useState(null);
   const canAdd=!!picked&&qty>0;
   const partPack=picked&&qty>0&&!isWhole(qty/picked.packSize);
   const byPallet=picked?.palletSize>0;
   const addLine=()=>{
     if(!canAdd)return;
-    setLines(ls=>ls.some(l=>l.itemId===packId)
-      ?ls.map(l=>l.itemId===packId?{...l,qty:(l.qty||0)+qty,price:price??l.price}:l)    // same product and pack: one line, added up
-      :[...ls,{itemId:packId,qty,price}]);
+    setLines(ls=>ls.some(l=>l.itemId===picked.id)
+      ?ls.map(l=>l.itemId===picked.id?{...l,qty:(l.qty||0)+qty,price:price??l.price}:l)    // same product and pack: one line, added up
+      :[...ls,{itemId:picked.id,qty,price}]);
     setQty(null);setPrice(null);
   };
   const updateLine=(id,change)=>setLines(ls=>ls.map(l=>l.itemId===id?{...l,...change}:l));
@@ -2985,9 +2966,24 @@ function ShipCalculator({shipping}){
   };
   const [docOpen,setDocOpen]=useState(false);
 
+  // A line can be packed differently from its product's profile: `pack` holds only what differs, and stays with the
+  // line in this browser. The profile in Editor → Shipping never changes from here.
+  const changePack=({l,base},change)=>{
+    const now={...l.pack,...change};
+    for(const k of Object.keys(now))if((now[k]??null)===(base.pack[k]??null))delete now[k];
+    updateLine(l.itemId,{pack:Object.keys(now).length?now:undefined});
+  };
+  // A new pallet or container brings what other packs packed that way hold a pallet, or the profile's own figure.
+  const changeHolder=(r,change)=>{
+    const next={...r.it.pack,...change},own=r.base.pack;
+    const held=next.palletId===own.palletId&&next.containerId===own.containerId?own.palletSize:usualPalletSize(shipping,r.it.unit,next);
+    changePack(r,held>0?{...change,palletSize:held}:change);
+  };
+  const changeBox=(r,boxId)=>changePack(r,boxId===r.base.pack.boxId?{boxId,unitsPerBox:r.base.pack.unitsPerBox}:boxChange(shipping,config,r.base.pack,r.it.unit,boxId));
   const rows=lines.map(l=>{
-    const it=entryOf[l.itemId];
-    return {l,it,c:it?shipCalc(it,l.qty):null,cost:it&&l.price!=null?(l.qty||0)*l.price:null};
+    const base=entryOf[l.itemId];
+    const it=base&&l.pack?shipEntry(base.product,{...base.pack,...l.pack},lookups):base;
+    return {l,base,it,c:it?shipCalc(it,l.qty):null,cost:it&&l.price!=null?(l.qty||0)*l.price:null};
   });
   const known=rows.filter(r=>r.it);
   const gone=rows.filter(r=>!r.it);
@@ -3018,25 +3014,7 @@ function ShipCalculator({shipping}){
   return(
     <>
       <div className="card ship-add">
-        <div className="field ship-add-product">
-          <label htmlFor="ship-product">{tx('Product')}</label>
-          <SearchSelect id="ship-product" value={productId} onChange={pickProduct}>
-            <option value="">{tx('Choose a product…')}</option>
-            {groupsOfProducts.map(g=>(
-              <optgroup key={g} label={g||tx('No group')}>
-                {products.filter(p=>p.group===g).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-              </optgroup>
-            ))}
-          </SearchSelect>
-        </div>
-        <div className="field">
-          <span className="field-label">{tx('Pack')}</span>
-          {product?(
-            <div className="seg ship-packs" role="group" aria-label={tx('Pack')}>
-              {packs.map(e=><button key={e.id} type="button" aria-pressed={packId===e.id} className={'seg-btn'+(packId===e.id?' on':'')} onClick={()=>setPackId(e.id)}>{fmtPack(e)}</button>)}
-            </div>
-          ):<div className="hint ship-packs-empty">{tx('Choose a product first')}</div>}
-        </div>
+        <ShipPickFields id="ship-product" pick={pick}/>
         <div className="field ship-add-num">
           <label htmlFor="ship-qty">{tx('Order{0}',product?` (${product.unit})`:'')}</label>
           <NumInput id="ship-qty" value={qty} onChange={setQty} placeholder="0" onKeyDown={e=>{if(e.key==='Enter')addLine();}}/>
@@ -3078,7 +3056,10 @@ function ShipCalculator({shipping}){
       )}
 
       <div className="flex items-center justify-between" style={{marginBottom:'var(--space-3)'}}>
-        <p className="section-title" style={{margin:0}}>{tx('Order lines')}</p>
+        <div>
+          <p className="section-title" style={{margin:0}}>{tx('Order lines')}</p>
+          {lines.length>0&&<div className="hint">{tx('A line can be packed with another pallet, container or box. That changes this order only, not the product\'s profile.')}</div>}
+        </div>
         {lines.length>0&&(
           <div className="flex items-center gap-2">
             <button className="btn btn-ghost btn-sm" onClick={clearLines}>{tx('Clear all')}</button>
@@ -3123,10 +3104,18 @@ function ShipCalculator({shipping}){
                   <td className="num">{group.length>1?fmtNum(group.reduce((n,r)=>n+r.c.totalKg,0)):''}</td>
                   <td colSpan={3}/>
                 </tr>
-                {group.map(({l,it,c,cost})=>(
+                {group.map(r=>{const {l,it,c,cost}=r,what=`${p.name} ${fmtPack(it)}`;return(
                   <Fragment key={l.itemId}>
                     <tr className="ship-line">
-                      <td rowSpan={2} className="mono nowrap">{fmtPack(it)}</td>
+                      <td rowSpan={2} className="nowrap">
+                        <span className="mono">{fmtPack(it)}</span>
+                        {l.pack&&(
+                          <div className="ship-changed">
+                            <span title={tx('Packed differently from its profile in Editor → Shipping. Only this order changes.')}>{tx('Changed')}</span>
+                            <button type="button" className="ship-reset" title={tx('Pack it as its profile says')} onClick={()=>updateLine(l.itemId,{pack:undefined})}>{tx('Reset')}</button>
+                          </div>
+                        )}
+                      </td>
                       <td rowSpan={2} className="num"><div className="input-unit ship-qty"><NumInput aria-label={tx('Order for {0} {1}',p.name,fmtPack(it))} value={l.qty} onChange={v=>updateLine(l.itemId,{qty:v})}/><span>{it.unit}</span></div></td>
                       <td className="num group-start">
                         {/* Typing a pallet count sets the order to what that many pallets hold. */}
@@ -3147,17 +3136,34 @@ function ShipCalculator({shipping}){
                       <td rowSpan={2} className="num">{cost==null?'–':fmtNum(cost)}</td>
                       <td rowSpan={2}><button className="ship-remove" aria-label={tx('Remove {0} {1}',p.name,fmtPack(it))} onClick={()=>removeLine(l.itemId)}><Icon.Close size={12}/></button></td>
                     </tr>
+                    {/* What the line is packed with: the profile's, until it is changed here for this order. */}
                     <tr className="ship-line-used">
                       <td colSpan={2} className="group-start">
-                        <ShipUsed item={it.pallet} weight={it.palletWeight}/>
+                        <div className="ship-pick">
+                          <PalletSelect className={it.pallet?'':'invalid'} aria-label={tx('Pallet for {0}',what)} pallets={shipping.pallets??[]} value={it.pack.palletId} onChange={v=>changeHolder(r,{palletId:v})}/>
+                          <label className="ship-pick-num">{tx('Pallet holds')}
+                            <span className="input-unit ship-num"><NumInput className={it.palletSize>0?'':'invalid'} value={it.palletSize} onChange={v=>changePack(r,{palletSize:v})}/><span>{it.unit}</span></span>
+                          </label>
+                        </div>
                         {/* Products aren't mixed on a pallet, so a part pallet can't be filled up with something else. */}
                         {!isWhole(c.pallets)&&<div className="ship-warn">{txn(wholeUp(c.pallets),'Add {1} {2} for {0} full pallet','Add {1} {2} for {0} full pallets',fmtNum(wholeUp(c.pallets)*it.palletSize-(l.qty||0),3),it.unit)}</div>}
                       </td>
-                      <td colSpan={2} className="group-start"><ShipUsed item={it.container} weight={it.containerWeight}/></td>
-                      <td colSpan={2} className="group-start">{it.box?<ShipUsed item={it.box} weight={it.boxWeight}/>:tx('No box')}</td>
+                      <td colSpan={2} className="group-start">
+                        <ContainerSelect className={it.container?'':'invalid'} aria-label={tx('Container for {0}',what)} containers={shipping.containers??[]} packSize={it.packSize} unit={it.unit} value={it.pack.containerId} onChange={v=>changeHolder(r,{containerId:v})}/>
+                      </td>
+                      <td colSpan={2} className="group-start">
+                        <div className="ship-pick">
+                          <BoxSelect aria-label={tx('Box for {0}',what)} boxes={shipping.boxes??[]} value={it.pack.boxId} onChange={v=>changeBox(r,v)}/>
+                          {it.box&&(
+                            <label className="ship-pick-num">{tx('Per box')}
+                              <NumInput className={'ship-per-box'+(it.unitsPerBox>0?'':' invalid')} value={it.unitsPerBox} onChange={v=>changePack(r,{unitsPerBox:v})}/>
+                            </label>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   </Fragment>
-                ))}
+                );})}
               </tbody>
             ))}
             {gone.length>0&&(
@@ -3319,35 +3325,30 @@ const EDITOR_TABS=[
   ['safety',tx('Safety'),[]],
   ['shipping',tx('Shipping'),[['items',tx('Shipping products')],['tables',tx('Pallets & packaging')]]],
   ['languages',tx('Label languages'),[]],
-  ['sku','SKU',SKU_SECTIONS],
   ['proforma',tx('Pro forma'),[]],
 ];
 const EDITOR_FILES={sheets:'technical_data.json',safety:'safety_data.json',items:'shipping_profiles.json',tables:'shipping_profiles.json'};
 
-function Editor({config,saveConfig,shipping,saveShipping,setSafety,setSkuRules,setSkuList,unsaved,files}){
+function Editor({config,saveConfig,shipping,saveShipping,setSafety,unsaved,files}){
   const {dirty:cfgDirty,shared}=useConfigDraft(config,saveConfig);
   const colors=useDraft(()=>api.getColors().then(r=>r.colors||{}),api.saveColors);
   const traits=useDraft(()=>api.getIconAssignments().then(r=>r.assignments||{}),api.saveIconAssignments);
   const [shipDraft,setShipDraft]=useState(shipping);
-  // Safety data and SKUs are edited on their own tabs, so a change there doesn't count as an edit of the shipping draft.
-  useEffect(()=>{setShipDraft(d=>d&&!d.error?{...d,safety:shipping?.safety,skuRules:shipping?.skuRules,skuList:shipping?.skuList}:d);},[shipping?.safety,shipping?.skuRules,shipping?.skuList]);
+  // Safety data is edited on its own tab, so a change there doesn't count as an edit of the shipping draft.
+  useEffect(()=>{setShipDraft(d=>d&&!d.error?{...d,safety:shipping?.safety}:d);},[shipping?.safety]);
   const shipDirty=useMemo(()=>!sameData(shipDraft,shipping),[shipDraft,shipping]);
   const [safetyDraft,setSafetyDraft]=useState(shipping?.safety??{});
   const safetyDirty=!sameValue(safetyDraft,shipping?.safety??{});
-  const [skuRulesDraft,setSkuRulesDraft]=useState(shipping?.skuRules);
-  const [skuListDraft,setSkuListDraft]=useState(shipping?.skuList);
-  const skuRulesDirty=!sameValue(skuRulesDraft,shipping?.skuRules);
-  const skuListDirty=!sameValue(skuListDraft,shipping?.skuList);
   const seller=useDraft(loadProformaSeller,s=>api.post('/api/proformas/save',{seller:s}));
   // The drafts hold their changes until Save, and tell App so leaving the page can warn about them.
-  const dirty=cfgDirty||colors.dirty||traits.dirty||shipDirty||safetyDirty||skuRulesDirty||skuListDirty||seller.dirty;
+  const dirty=cfgDirty||colors.dirty||traits.dirty||shipDirty||safetyDirty||seller.dirty;
   useEffect(()=>{unsaved.current=dirty;},[dirty,unsaved]);
   const [tab,setTab]=useState('product');
   // The section open on each tab that has them, kept while moving between tabs.
-  const [openSection,setOpenSection]=useState({shipping:'items',sku:'products'});
+  const [openSection,setOpenSection]=useState({shipping:'items'});
   const section=openSection[tab]??tab;
   const sections=EDITOR_TABS.find(([t])=>t===tab)[2];
-  const file=tab==='sku'?(section==='skus'?'sku_list.json':'sku_rules.json'):EDITOR_FILES[section];
+  const file=EDITOR_FILES[section];
   return(
     <div className="page-fill">
       <div className="tabs">
@@ -3372,7 +3373,6 @@ function Editor({config,saveConfig,shipping,saveShipping,setSafety,setSkuRules,s
         {['sheets','items','tables'].includes(section)&&<ShippingTab section={section} draft={shipDraft} setDraft={setShipDraft} dirty={shipDirty} saveShipping={saveShipping} config={config}/>}
         {section==='safety'&&<SafetyTab draft={safetyDraft} setDraft={setSafetyDraft} dirty={safetyDirty} config={config} shipping={shipping} setSafety={setSafety}/>}
         {tab==='languages'&&<LanguagesTab {...shared} files={files}/>}
-        {tab==='sku'&&<SkuEditor section={section} rules={skuRulesDraft} setRules={setSkuRulesDraft} list={skuListDraft} setList={setSkuListDraft} rulesDirty={skuRulesDirty} listDirty={skuListDirty} shipping={shipping} config={config} setSkuRules={setSkuRules} setSkuList={setSkuList}/>}
         {tab==='proforma'&&<ProformaSellerTab {...seller}/>}
       </div>
     </div>
@@ -4183,14 +4183,6 @@ function ShipField({spec:[k,label,type,placeholder],value,set,disabled,hint}){
   );
 }
 const FieldNote=({children,onUse})=><div className="ship-sheet">{children}{onUse&&<button type="button" className="ship-use" onClick={onUse}>{tx('Use')}</button>}</div>;
-// What a product's SKU code means, under the field it is typed in.
-const SkuCodeNote=({rules,code})=>{
-  if(!code?.trim())return null;
-  const read=skuRead(rules,code);
-  const wrong=read.parts.slice(0,3).find(p=>p.state==='unknown');
-  if(wrong)return <FieldNote>{tx('Not in the SKU rules: {0} {1}.',SKU_PART_LABEL[wrong.key],wrong.code)}</FieldNote>;
-  return <div className="hint">{read.parts.slice(1,3).map(p=>p.value).filter(Boolean).join(' · ')}</div>;
-};
 
 // Things picked from a list, shown as chips: label products on a profile, data sheets on a profile, label products on a data sheet.
 function LinkChips({values,options,isGone,goneTitle,keptTitle,onChange,label,addFirst,addMore}){
@@ -4246,7 +4238,6 @@ function ShipProductForm({product:p,draft,config,update,onDuplicate,onDelete}){
   const stored=sheets.find(t=>t.storageMin!=null&&(t.storageMin!==p.storageMin||t.storageMax!==p.storageMax));
   const dense=p.unit==='L'&&p.density==null?sheets.find(t=>t.density):null;      // it varies by batch: a guide while blank, not a check
   const hints={
-    skuCode:<SkuCodeNote rules={draft.skuRules} code={p.skuCode}/>,
     unit:other&&<FieldNote>{tx('{0}\'s labels are in {1}',other.name,other.unit)}</FieldNote>,
     shelfLifeMonths:months&&<FieldNote onUse={()=>update({shelfLifeMonths:months.shelfLifeMonths})}>{tx('Data sheet: {0}',fmtMonths(months.shelfLifeMonths))}</FieldNote>,
     storageMin:stored&&<FieldNote onUse={()=>update({storageMin:stored.storageMin,storageMax:stored.storageMax})}>{tx('Data sheet: {0}',fmtStorage(stored))}</FieldNote>,
@@ -4285,7 +4276,6 @@ function ShipProductForm({product:p,draft,config,update,onDuplicate,onDelete}){
                       const {[n]:_,...rest}=p.skuCodeFor??{};
                       update({skuCodeFor:e.target.value.trim()?{...rest,[n]:e.target.value.trim()}:rest});
                     }}/>
-                    <SkuCodeNote rules={draft.skuRules} code={p.skuCodeFor?.[n]}/>
                   </label>
                 ))}
               </div>
@@ -4322,10 +4312,8 @@ function ShipPacksEditor({product:p,draft,config,update}){
   const entries=byId(shipEntries({...draft,products:[p]}));
   const setPack=(id,change)=>update({packs:packs.map(k=>k.id===id?{...k,...change}:k)});
   const setSize=(k,size)=>setPack(k.id,refillPack(draft,config,k,p.unit,p.unit,size));
-  const setBox=(k,boxId)=>setPack(k.id,{boxId:boxId||null,unitsPerBox:boxId?unitsPerBoxOnSheet(config,k.packSize,p.unit)??usualPack(draft,p.unit,k.packSize,k.id).unitsPerBox??k.unitsPerBox:null});
+  const setBox=(k,boxId)=>setPack(k.id,boxChange(draft,config,k,p.unit,boxId));
   const addPack=()=>update({packs:[...packs,blankPack()]});
-  // Bags for what is sold by weight, containers for liquids, the other kind after them.
-  const kinds=p.unit==='kg'?[['bag',tx('Bags')],['container',tx('Containers')]]:[['container',tx('Containers')],['bag',tx('Bags')]];
   return(
     <div className="card-flat">
       <div className="flex items-center justify-between gap-3">
@@ -4344,9 +4332,6 @@ function ShipPacksEditor({product:p,draft,config,update}){
             <tbody>
               {[...packs].sort((a,b)=>(a.packSize??1e9)-(b.packSize??1e9)).map(k=>{
                 const sheet=k.packSize>0?unitsPerBoxOnSheet(config,k.packSize,p.unit):null;
-                const pickable=pallets.filter(x=>x.weight>0||x.id===k.palletId);
-                const made=containers.filter(x=>k.packSize>0&&x.forSize===k.packSize&&x.kind===containerKind(p.unit));
-                const container=containers.find(x=>x.id===k.containerId);
                 const count=packsPerPallet(k),boxCount=count!=null&&k.boxId&&k.unitsPerBox>0?count/k.unitsPerBox:null;
                 const uneven=(count!=null&&!isWhole(count))||(boxCount!=null&&!isWhole(boxCount));
                 return(
@@ -4356,28 +4341,10 @@ function ShipPacksEditor({product:p,draft,config,update}){
                       <div className="input-unit ship-num"><NumInput className={k.palletSize>0?'':'invalid'} aria-label={tx('What a pallet holds')} value={k.palletSize} onChange={v=>setPack(k.id,{palletSize:v})}/><span>{p.unit}</span></div>
                       {count!=null&&<div className={'ship-derived'+(uneven?' warn':'')} title={uneven?tx('A pallet would hold part of a pack or box. Check the size, what a pallet holds, or the units per box.'):undefined}>{tx('{0} packs{1}',fmtNum(count,2),boxCount!=null?tx(' · {0} boxes',fmtNum(boxCount,2)):'')}</div>}
                     </td>
+                    <td><PalletSelect className={k.palletId?'':'invalid'} pallets={pallets} value={k.palletId} onChange={v=>setPack(k.id,{palletId:v})}/></td>
+                    <td><ContainerSelect className={k.containerId?'':'invalid'} containers={containers} packSize={k.packSize} unit={p.unit} value={k.containerId} onChange={v=>setPack(k.id,{containerId:v})}/></td>
                     <td>
-                      <SearchSelect className={k.palletId?'':'invalid'} aria-label={tx('Pallet')} value={k.palletId??''} onChange={v=>setPack(k.id,{palletId:v||null})}>
-                        <option value="">{tx('Choose…')}</option>
-                        {pickable.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight)} kg</option>)}
-                      </SearchSelect>
-                    </td>
-                    <td>
-                      <SearchSelect className={k.containerId?'':'invalid'} aria-label={tx('Container or bag')} value={k.containerId??''} onChange={v=>setPack(k.id,{containerId:v||null})}>
-                        <option value="">{tx('Choose…')}</option>
-                        {made.length>0&&<optgroup label={tx('For {0} {1}',fmtNum(k.packSize,3),p.unit)}>{made.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}</optgroup>}
-                        {kinds.map(([kind,label])=>{
-                          const rest=containers.filter(x=>x.kind===kind&&!made.includes(x));
-                          return rest.length?<optgroup key={kind} label={made.length?tx('Other {0}',label.toLowerCase()):label}>{rest.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}</optgroup>:null;
-                        })}
-                      </SearchSelect>
-                      {container?.forSize>0&&k.packSize>0&&container.forSize!==k.packSize&&<FieldNote>{tx('Made for {0} {1}',fmtNum(container.forSize,3),p.unit)}</FieldNote>}
-                    </td>
-                    <td>
-                      <SearchSelect aria-label={tx('Box')} value={k.boxId??''} onChange={v=>setBox(k,v)}>
-                        <option value="">{tx('No box')}</option>
-                        {boxes.map(x=><option key={x.id} value={x.id}>{x.name} · {fmtNum(x.weight,4)} kg</option>)}
-                      </SearchSelect>
+                      <BoxSelect boxes={boxes} value={k.boxId} onChange={v=>setBox(k,v)}/>
                       {k.boxId&&k.packSize>0&&noBoxOnSheet(config,k.packSize,p.unit)&&<FieldNote>{tx('This size has no box label')}</FieldNote>}
                     </td>
                     <td>
@@ -4534,544 +4501,12 @@ function ShipTablesEditor({draft,setDraft}){
   );
 }
 
-// ── SKU: the building blocks ─────────────────────────────────────────────────────────
-// What each part of a SKU can be, and the SKUs issued so far. Shared through sku_rules.json and sku_list.json, and edited in Editor → SKU.
-const SKU_SECTION_HINTS={
-  products:tx('A group letter and two digits. Open the versions to see what changed: 00 is the original, 01 the first change, and so on.'),
-  packs:tx('One code per amount, the same for kg and L.'),
-  languages:tx('Two characters. A code starting with a number says how many languages the label has; the letter after it is only a free one. Link the label languages it means, and labels are checked against it.'),
-  brands:tx('What comes after the language code: the standard label, a distributor, or the same product under another name.'),
-  endings:tx('Written after the dash in place of a language code and brand.'),
-  skus:tx('Every SKU issued so far, which the SKU page searches. Correct or remove one here. New ones are made on the SKU page.'),
-};
-const SKU_KINDS=[['standard',tx('Standard label')],['name',tx('Another name')],['distributor',tx('Distributor')]];
-const SKU_CODE_SHAPE={
-  products:[/^[A-Z]\d{2}$/,tx('a letter and two digits, like P04')],
-  packs:[/^[A-Z]\d{1,2}$/,tx('a letter and one or two digits, like M5')],
-  languages:[/^[A-Z0-9]{2}$/,tx('two letters or digits, like 3B')],
-  brands:[/^[A-Z0-9]{1,4}$/,tx('one to four letters or digits, like SU')],
-  endings:[/^[A-Z0-9]{3,8}$/,tx('three to eight letters or digits')],
-};
-const SKU_BLANK={
-  products:group=>({code:group,name:'',note:'',versions:[{code:'00',note:''}]}),
-  packs:()=>({code:'',amount:null}),
-  languages:()=>({code:'',name:'',labels:[],note:''}),
-  brands:()=>({code:'',name:'',kind:'distributor',product:'',note:''}),
-  endings:()=>({code:'',name:'',note:''}),
-  skus:()=>({code:'',name:'',oldCode:'',note:''}),
-};
-const skuCodeTwice=(rows,code)=>rows.filter(r=>r.code===code).length>1;
-const skuRuleProblem=draft=>{
-  for(const [table,title] of SKU_SECTIONS){
-    if(table==='skus')continue;
-    const rows=draft[table]??[];
-    for(const r of rows){
-      const [shape,says]=SKU_CODE_SHAPE[table];
-      if(!shape.test(r.code??''))return tx('{0}: the code "{1}" should be {2}.',title,r.code??'',says);
-      if(skuCodeTwice(rows,r.code))return tx('{0}: {1} is there twice.',title,r.code);
-      if(table==='packs'?!(r.amount>0):!r.name?.trim())return table==='packs'?tx('{0}: {1} needs an amount.',title,r.code):tx('{0}: {1} needs a name.',title,r.code);
-    }
-  }
-  for(const k of draft.packs??[])if(draft.packs.some(o=>o.id!==k.id&&o.amount===k.amount))return tx('{0}: {1} and another code have the same amount.',tx('Packs'),k.code);
-  for(const p of draft.products??[]){
-    for(const v of p.versions??[]){
-      if(!/^\d{2}$/.test(v.code??''))return tx('{0}: a version is two digits, like 01.',p.code);
-      if(skuCodeTwice(p.versions,v.code))return tx('{0}: version {1} is there twice.',p.code,v.code);
-    }
-  }
-  return null;
-};
-// The list keeps old SKUs as they were issued, so it only asks that each is there once: the rules point out the odd ones.
-const skuListProblem=list=>{
-  const seen=new Set();
-  for(const s of list??[]){
-    if(!/^[A-Z0-9-]{3,}$/.test(s.code??''))return tx('{0}: the code "{1}" should be {2}.',tx('SKU list'),s.code??'',tx('letters, digits and a dash'));
-    if(seen.has(s.code))return tx('{0}: {1} is there twice.',tx('SKU list'),s.code);
-    seen.add(s.code);
-  }
-  return null;
-};
-// What someone should look at for one language code. Only ever informs: Bulgarian really has two codes in use.
-const skuLanguageChecks=(row,rows)=>{
-  const labels=row.labels??[],count=/^[2-9]/.test(row.code??'')?+row.code[0]:null;
-  const twins=labels.length?rows.filter(o=>o.id!==row.id&&o.labels?.length&&sameSet(o.labels,labels)).map(o=>o.code):[];
-  return [
-    !labels.length?tx('No label languages linked, so labels can\'t be checked against it.'):null,
-    count&&labels.length&&labels.length!==count?tx('It starts with {0}, so it should link {0} languages.',count):null,
-    twins.length?tx('The same languages as {0}.',twins.join(', ')):null,
-  ].filter(Boolean);
-};
-const skuUsedBy=(shipping,code)=>(shipping?.products??[]).flatMap(p=>[...new Set([p.skuCode,...Object.values(p.skuCodeFor??{})])].filter(c=>c?.startsWith(code)).map(c=>`${p.name} ${c.slice(3)}`.trim()));
-const skuReadError=(rules,error)=>error?txs(error):rules?tx('The SKU list could not be read'):tx('The SKU rules could not be read');
-
-function SkuVersions({product,onChange}){
-  const versions=product.versions??[];
-  const next=String(Math.max(-1,...versions.map(v=>+v.code||0))+1).padStart(2,'0');
-  const set=(i,change)=>onChange(versions.map((v,j)=>j===i?{...v,...change}:v));
-  return(
-    <div className="sku-versions">
-      {versions.map((v,i)=>(
-        <div key={i} className="sku-version">
-          <input className={'input mono sku-code'+(skuCodeTwice(versions,v.code)?' invalid':'')} aria-label={tx('Version')} maxLength={2} value={v.code} onChange={e=>set(i,{code:e.target.value.replace(/\D/g,'')})}/>
-          <input className="input" aria-label={tx('What changed in version {0}',v.code)} placeholder={v.code==='00'?tx('Original'):tx('What changed')} value={v.note??''} onChange={e=>set(i,{note:e.target.value})}/>
-          <button className="ship-remove" aria-label={tx('Remove version {0}',v.code)} onClick={()=>onChange(versions.filter((_,j)=>j!==i))}><Icon.Close size={12}/></button>
-        </div>
-      ))}
-      <button className="btn btn-ghost btn-sm" onClick={()=>onChange([...versions,{code:next,note:''}])}>{tx('+ Add version')}</button>
-    </div>
-  );
-}
-
-// Editor → SKU. One section at a time; the Editor holds the drafts, so moving between its tabs doesn't lose edits.
-function SkuEditor({section,rules,setRules,list,setList,rulesDirty,listDirty,shipping,config,setSkuRules,setSkuList}){
-  const [group,setGroup]=useState('');
-  const [search,setSearch]=useState('');
-  const deferredSearch=useDeferredValue(search);
-  const [openId,setOpenId]=useState(null);
-  const [newRowId,setNewRowId]=useState(null);
-  const [saved,setSaved]=useState(false);
-  const [error,setError]=useState('');
-  const [pageSize,showMore]=usePageSize(JSON.stringify([section,group,deferredSearch]));
-  const {list:languageList,names:languageNames}=useLanguages(config);
-  const languageOptions=useMemo(()=>languageList.map(l=>({value:l.code,label:`${l.code} ${languageNames[l.code]}`})).sort((a,b)=>a.label.localeCompare(b.label)),[languageList,languageNames]);
-  const productNames=useMemo(()=>(config?.products??[]).map(p=>p.name).sort((a,b)=>a.localeCompare(b)),[config]);
-  if(!rules||!list)return <div className="alert alert-error">{tx('{0}. Close whatever has it open, then reload this page.',skuReadError(rules))}</div>;
-  const isList=section==='skus';
-  const rows=isList?list:(rules[section]??[]);
-  const setRows=next=>isList?setList(next):setRules({...rules,[section]:next});
-  const update=(id,change)=>setRows(rows.map(r=>r.id===id?{...r,...change}:r));
-  const add=()=>{
-    const id=newId('sku');
-    setRows([{id,...SKU_BLANK[section](group)},...rows]);
-    setNewRowId(id);setSearch('');setOpenId(null);
-  };
-  const shown=rows.filter(r=>(section!=='products'||!group||r.code.startsWith(group))&&matchesSearch(`${r.code} ${r.name??''} ${r.note??''} ${r.product??''} ${r.oldCode??''} ${(r.labels??[]).join(' ')}`,deferredSearch));
-  const codeCount={};
-  for(const r of rows)codeCount[r.code]=(codeCount[r.code]||0)+1;
-  const problem=skuRuleProblem(rules)||skuListProblem(list);
-  // Rows keep their place while being edited, so one doesn't jump away as its code is typed. Saving puts them in order.
-  const save=async()=>{
-    setError('');
-    if(rulesDirty){
-      const inOrder={...rules,...Object.fromEntries(SKU_SECTIONS.filter(([t])=>t!=='skus').map(([t])=>[t,[...(rules[t]??[])].sort(t==='packs'?(a,b)=>a.amount-b.amount:(a,b)=>a.code.localeCompare(b.code))]))};
-      inOrder.products=inOrder.products.map(p=>({...p,versions:[...(p.versions??[])].sort((a,b)=>a.code.localeCompare(b.code))}));
-      const r=await api.saveSkuRules(inOrder);
-      if(!r.ok)return setError(txs(r.error)||tx('Could not save'));
-      setRules(inOrder);setSkuRules(inOrder);
-    }
-    if(listDirty){
-      const inOrder=[...list].sort((a,b)=>a.code.localeCompare(b.code));
-      const r=await api.saveSkuList(inOrder);
-      if(!r.ok)return setError(txs(r.error)||tx('Could not save'));
-      setList(inOrder);setSkuList(inOrder);
-    }
-    setSaved(true);setTimeout(()=>setSaved(false),2000);
-  };
-  const textCell=(r,key,label)=><input className="input" aria-label={label} value={r[key]??''} onChange={e=>update(r.id,{[key]:e.target.value})}/>;
-  const columns={
-    products:[
-      [tx('Name'),r=>textCell(r,'name',tx('Name'))],
-      [tx('Versions'),r=><button type="button" className="sku-versions-toggle mono" aria-expanded={openId===r.id} onClick={()=>setOpenId(openId===r.id?null:r.id)}>{(r.versions??[]).map(v=>v.code).join(' ')||'–'}<Icon.Chevron size={12}/></button>],
-      [tx('Note'),r=>textCell(r,'note',tx('Note'))],
-      [tx('In shipping'),r=><span className="hint">{skuUsedBy(shipping,r.code).join(', ')||'–'}</span>],
-    ],
-    packs:[[tx('Amount (kg or L)'),r=><NumInput className="ship-num" aria-label={tx('Amount (kg or L)')} value={r.amount??null} onChange={v=>update(r.id,{amount:v})}/>]],
-    languages:[
-      [tx('Means'),r=>textCell(r,'name',tx('Means'))],
-      [tx('Label languages'),r=>(
-        <>
-          <LinkChips values={r.labels??[]} options={languageOptions} isGone={c=>!languageOptions.some(o=>o.value===c)} goneTitle={tx('There is no label language with this code any more')} onChange={labels=>update(r.id,{labels})} label={tx('Link a label language')} addFirst={tx('Link a language…')} addMore={tx('Link another…')}/>
-          <SkuWarnings lines={skuLanguageChecks(r,rows)}/>
-        </>
-      )],
-      [tx('Note'),r=>textCell(r,'note',tx('Note'))],
-    ],
-    brands:[
-      [tx('Name'),r=>textCell(r,'name',tx('Name'))],
-      [tx('Kind'),r=>(
-        <SearchSelect aria-label={tx('Kind')} value={r.kind??'distributor'} onChange={v=>update(r.id,{kind:v,...(v==='name'?{}:{product:''})})}>
-          {SKU_KINDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}
-        </SearchSelect>
-      )],
-      [tx('Label product'),r=>(
-        <SearchSelect aria-label={tx('Label product')} disabled={r.kind!=='name'} value={r.product??''} onChange={v=>update(r.id,{product:v})}>
-          <option value="">{r.kind==='name'?tx('Any'):'–'}</option>
-          {[...new Set([...productNames,r.product].filter(Boolean))].map(n=><option key={n} value={n}>{n}</option>)}
-        </SearchSelect>
-      )],
-      [tx('Note'),r=>textCell(r,'note',tx('Note'))],
-    ],
-    endings:[[tx('Name'),r=>textCell(r,'name',tx('Name'))],[tx('Note'),r=>textCell(r,'note',tx('Note'))]],
-    skus:[
-      [tx('Name'),r=><>{textCell(r,'name',tx('Name'))}<SkuWarnings lines={skuUnknown(rules,r.code)}/></>],
-      [tx('Old code'),r=>textCell(r,'oldCode',tx('Old code'))],
-      [tx('Note'),r=>textCell(r,'note',tx('Note'))],
-    ],
-  }[section];
-  // A product the shipping data leans on can't be pulled from under it.
-  const usedCount=r=>section==='products'?skuUsedBy(shipping,r.code).length:0;
-  return(
-    <div className="page-fill">
-      <div className="fb sku-bar">
-        <div className="fb-row">
-          <SearchBox value={search} onChange={setSearch} label={tx('Search {0}',SKU_SECTIONS.find(([t])=>t===section)[1])}/>
-          {section==='products'&&(
-            <div className="seg" role="group" aria-label={tx('Group')}>
-              {[['',tx('All')],...skuGroups(rules).map(g=>[g.code,g.name])].map(([code,name])=>(
-                <button key={code} type="button" aria-pressed={group===code} className={'seg-btn'+(group===code?' on':'')} onClick={()=>setGroup(code)}>{name}</button>
-              ))}
-            </div>
-          )}
-          <span className="fb-total">{tx('{0} of {1}',shown.length,rows.length)}</span>
-          <button className="btn btn-ghost btn-sm ml-auto" onClick={add}>{tx('+ Add row')}</button>
-        </div>
-        <div className="hint sku-tab-hint">{SKU_SECTION_HINTS[section]}</div>
-      </div>
-      <div className="card table-scroll ship-table-fit sku-table">
-        <table className="table dense sku-rows">
-          <thead><tr><th>{tx('Code')}</th>{columns.map(([label])=><th key={label}>{label}</th>)}<th/></tr></thead>
-          <tbody>
-            {shown.slice(0,pageSize).map(r=>{
-              const used=usedCount(r);
-              return(
-                <Fragment key={r.id}>
-                  <tr>
-                    <td><input className={'input mono sku-code'+(codeCount[r.code]>1?' invalid':'')} aria-label={tx('Code')} autoFocus={newRowId===r.id} value={r.code??''} onChange={e=>update(r.id,{code:e.target.value.toUpperCase().replace(/\s/g,'')})}/></td>
-                    {columns.map(([label,cell])=><td key={label}>{cell(r)}</td>)}
-                    <td>
-                      {used
-                        ?<span className="mono muted ship-used" title={tx('Used by {0}, so it can\'t be removed',used)}>{used}</span>
-                        :<button className="ship-remove" aria-label={tx('Remove {0}',r.code||tx('row'))} onClick={()=>setRows(rows.filter(x=>x.id!==r.id))}><Icon.Close size={12}/></button>}
-                    </td>
-                  </tr>
-                  {section==='products'&&openId===r.id&&<tr className="ship-open-row"><td colSpan={columns.length+2}><SkuVersions product={r} onChange={versions=>update(r.id,{versions})}/></td></tr>}
-                </Fragment>
-              );
-            })}
-            {shown.length===0&&<tr><td colSpan={columns.length+2} className="muted" style={{fontStyle:'italic'}}>{tx('Nothing here{0}.',search?tx(' matches'):'')}</td></tr>}
-          </tbody>
-        </table>
-        <ShowMore shown={Math.min(pageSize,shown.length)} total={shown.length} onMore={showMore}/>
-      </div>
-      {(problem||error)&&<div className="alert alert-error" style={{flexShrink:0,marginTop:'var(--space-3)'}}>{error||tx('{0} Fix this before saving.',problem)}</div>}
-      <div className="action-bar">
-        <span className="ml-auto"><SavedNote show={saved}/>{(rulesDirty||listDirty)&&!saved&&<span className="badge badge-wip">{tx('Unsaved changes')}</span>}</span>
-        <button className="btn btn-primary" disabled={!(rulesDirty||listDirty)||!!problem} onClick={save}>{tx('Save changes')}</button>
-      </div>
-    </div>
-  );
-}
-
-// ── SKU: the page ────────────────────────────────────────────────────────────────────
-// Finding a SKU, and making a new one from the rules. Nothing about the rules changes here: that's for Editor → SKU.
-// A SKU made here is copied or kept on the list by the person making it. It never goes into a label or document by itself.
-const SkuParts=({parts})=>(
-  <div className="sku-parts">
-    {parts.map(p=>(
-      <Fragment key={p.key}>
-        {['language','ending'].includes(p.key)&&<span className="sku-dash">-</span>}
-        <div className={`sku-part ${p.state}`} title={p.value||undefined}>
-          <span className="sku-part-label">{SKU_PART_LABEL[p.key]}</span>
-          <span className="sku-part-code mono">{p.code||'–'}</span>
-          <span className="sku-part-value">{p.value||' '}</span>
-        </div>
-      </Fragment>
-    ))}
-  </div>
-);
-// The label names a SKU can be, each with the shipping product it is in: its product's label names, narrowed by a brand that names one.
-const skuLabelNames=(rules,shipping,read)=>{
-  const code=read.head.slice(0,5);
-  const where=fits=>(shipping?.products??[]).flatMap(p=>(p.links??[]).filter(n=>{const c=skuCodeFor(p,n);return c&&fits(c);}).map(name=>({name,product:p})));
-  // The exact version if a product has it, otherwise any: an older recipe's SKU can still have the same label.
-  let found=where(c=>code.startsWith(c));
-  if(!found.length)found=where(c=>c.slice(0,3)===code.slice(0,3));
-  const brand=skuRow(rules,'brands',read.part('brand')?.code);
-  if(brand?.product)return found.filter(m=>skuNameFits(m.name,brand.product));
-  if(brand?.kind==='standard')return found.filter(m=>!(rules?.brands??[]).some(b=>skuNameFits(m.name,b.product)));
-  return found;
-};
-// The label files a SKU can be: its label names, with its pack and languages.
-const skuLabelFiles=(rules,shipping,files,read)=>{
-  const pack=skuRow(rules,'packs',read.pack),language=skuRow(rules,'languages',read.part('language')?.code);
-  if(!pack||!language?.labels?.length)return null;
-  const names=skuLabelNames(rules,shipping,read).map(m=>m.name);
-  return (files??[]).filter(f=>names.includes(f.product)&&f.languages&&sameSet(f.languages,language.labels)&&packAmount(f.packaging)===pack.amount)
-    .sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.filename.localeCompare(b.filename));
-};
-const SkuLabelFiles=({found})=>found&&(
-  <div className="sku-files">
-    <div className="hint">{found.length?txn(found.length,'{0} label file fits this SKU:','{0} label files fit this SKU:'):tx('No label file fits this product, pack and languages.')}</div>
-    <div className="sku-file-list">
-      {found.map(f=>(
-        <div key={f.path} className="sku-file">
-          <BadgeKind f={f}/>
-          {f.print_file?<BadgePrint/>:<BadgeFormat f={f}/>}
-          <span className="sku-file-name mono" title={f.filename}>{f.filename}</span>
-          <button className="btn btn-ghost btn-sm" title={tx('Open file')} onClick={()=>api.openFile(f.path)}><Icon.Open/></button>
-          <button className="btn btn-folder btn-sm" title={tx('Show in Explorer')} onClick={()=>api.revealFile(f.path)}><Icon.Folder/></button>
-        </div>
-      ))}
-    </div>
-  </div>
-);
-function CopySku({code}){
-  const [done,setDone]=useState(false);
-  const copy=async e=>{
-    e.stopPropagation();
-    await navigator.clipboard.writeText(code);
-    setDone(true);setTimeout(()=>setDone(false),1500);
-  };
-  return <button type="button" className="btn btn-ghost btn-sm sku-copy" title={tx('Copy {0}',code)} aria-label={tx('Copy {0}',code)} onClick={copy}>{done?<Icon.Check/>:<Icon.Copy size={13}/>}</button>;
-}
-
-function SkuFind({rules,list,shipping,files,config,onAdd}){
-  const [search,setSearch]=useState('');
-  const deferred=useDeferredValue(search);
-  const [filters,setFilters]=useState({product:[],language:[],pack:[],brand:[]});
-  const [openFacet,setOpenFacet]=useState(null);
-  const [openCode,setOpenCode]=useState(null);
-  const [addError,setAddError]=useState('');
-  const searchRef=useRef(null);
-  const {byCode:langs}=useLanguages(config);
-  const rows=useMemo(()=>list.map(s=>{
-    const read=skuRead(rules,s.code);
-    const labels=skuRow(rules,'languages',read.part('language')?.code)?.labels??[];
-    return {s,read,labels,product:read.group+read.product,brand:read.part('brand')?.code,wrong:skuUnknown(rules,s.code),
-      own:`${s.code} ${s.name??''} ${s.oldCode??''}`,
-      all:[s.code,s.name,s.oldCode,s.note,...read.parts.flatMap(p=>[p.code,p.value]),...labels.flatMap(c=>[c,langs[c]?.name,langs[c]&&langLabel(langs[c])])].filter(Boolean).join(' ')};
-  }),[list,rules,langs]);
-  // A label holds several languages, so choosing two finds the labels with both. The other filters each find any of what's chosen.
-  const fits=(r,skip)=>(skip==='product'||!filters.product.length||filters.product.includes(r.product))
-    &&(skip==='language'||filters.language.every(c=>r.labels.includes(c)))
-    &&(skip==='pack'||!filters.pack.length||filters.pack.includes(r.read.pack))
-    &&(skip==='brand'||!filters.brand.length||filters.brand.includes(r.brand));
-  const matched=useMemo(()=>rows.filter(r=>matchesSearch(r.all,deferred)),[rows,deferred]);
-  // What the search found in a SKU's own code or name comes before what it found in the product or brand: Spuma's own SKUs before all of Foamex's.
-  const shown=useMemo(()=>{
-    const found=matched.filter(r=>fits(r));
-    return deferred.trim()?[...found.filter(r=>matchesSearch(r.own,deferred)),...found.filter(r=>!matchesSearch(r.own,deferred))]:found;
-  },[matched,filters,deferred]);
-  const [pageSize,showMore]=usePageSize(JSON.stringify([deferred,filters]));
-  const countBy=(skip,key)=>{
-    const n={};
-    for(const r of matched)if(fits(r,skip))for(const v of [].concat(key(r)))n[v]=(n[v]||0)+1;
-    return n;
-  };
-  const facet=(id,name,Ico,options,extra)=>(
-    <FacetMenu id={id} name={name} Ico={Ico} options={options} selected={filters[id]} open={openFacet===id} onOpen={setOpenFacet} {...extra}
-      onToggle={v=>setFilters(f=>({...f,[id]:f[id].includes(v)?f[id].filter(x=>x!==v):[...f[id],v]}))} onClear={()=>setFilters(f=>({...f,[id]:[]}))}/>
-  );
-  const coded=(code,name)=><><span className="fb-code">{code}</span><span>{name}</span></>;
-  const langCodes=[...new Set((rules.languages??[]).flatMap(l=>l.labels??[]))].sort((a,b)=>(langs[a]?langLabel(langs[a]):a).localeCompare(langs[b]?langLabel(langs[b]):b));
-  const counts={product:countBy('product',r=>r.product),language:countBy('language',r=>r.labels),pack:countBy('pack',r=>r.read.pack),brand:countBy('brand',r=>r.brand??[])};
-  const labelOf={
-    product:c=>skuRow(rules,'products',c)?.name??c,
-    language:c=>langs[c]?langLabel(langs[c]):c,
-    pack:c=>tx('{0} kg or L',fmtNum(skuRow(rules,'packs',c)?.amount,3)),
-    brand:c=>skuRow(rules,'brands',c)?.name??c,
-  };
-  const FILTER_NAMES={product:tx('Product'),language:tx('Languages'),pack:tx('Pack'),brand:tx('Brand')};
-  const applied=Object.entries(filters).flatMap(([key,values])=>values.map(v=>({key,value:v,k:FILTER_NAMES[key],label:labelOf[key](v),tone:TONE.neutral})));
-  const clearAll=()=>{setFilters({product:[],language:[],pack:[],brand:[]});setSearch('');};
-  // A whole SKU searched for that isn't on the list: what it would mean, and adding it if the rules know all of it.
-  const typed=deferred.trim().toUpperCase();
-  const pasted=/^[A-Z]\d{4}/.test(typed)&&!list.some(s=>s.code===typed)?skuRead(rules,typed):null;
-  const showPasted=pasted&&(pasted.complete||!shown.length);
-  const canAdd=showPasted&&pasted.complete&&!skuUnknown(rules,typed).length;
-  const add=async()=>{setAddError(await onAdd(typed,''));};
-  return(
-    <div className="page-fill">
-      <div className="fb sku-bar">
-        <div className="fb-row">
-          <SearchBox value={search} onChange={setSearch} inputRef={searchRef} placeholder={tx('Search a SKU, product, language, brand…')} label={tx('Search SKUs')}/>
-          {facet('product',tx('Product'),Icon.File,(rules.products??[]).map(p=>({value:p.code,label:p.name,search:`${p.code} ${p.name}`,count:counts.product[p.code]??0,node:coded(p.code,p.name)})),{searchable:true})}
-          {facet('language',tx('Languages'),Icon.Globe,langCodes.map(c=>({value:c,label:labelOf.language(c),search:langs[c]?langText(langs[c]):c,count:counts.language[c]??0,node:coded(c,labelOf.language(c))})),{searchable:true})}
-          {facet('pack',tx('Pack'),Icon.Ruler,(rules.packs??[]).map(k=>({value:k.code,label:k.code,count:counts.pack[k.code]??0,node:coded(k.code,labelOf.pack(k.code))})))}
-          {facet('brand',tx('Brand'),Icon.Tag,(rules.brands??[]).map(b=>({value:b.code,label:b.name,search:`${b.code} ${b.name}`,count:counts.brand[b.code]??0,node:coded(b.code,b.name)})),{searchable:true})}
-        </div>
-        <div className="fb-row fb-summary">
-          <span className="fb-total">{tx('{0} of {1}',shown.length,list.length)}</span>
-          {applied.map(it=><FilterPill key={it.key+it.value} item={it} onRemove={()=>setFilters(f=>({...f,[it.key]:f[it.key].filter(v=>v!==it.value)}))}/>)}
-          {(applied.length>0||search)&&<button type="button" className="fb-link" onClick={clearAll}>{tx('Clear all')}</button>}
-        </div>
-      </div>
-      {showPasted&&(
-        <div className="card-flat sku-pasted">
-          <div className="sku-pasted-head">
-            <span className="mono sku-new-code">{typed}</span>
-            <span className="hint">{tx('This SKU isn\'t on the list.')}</span>
-            {canAdd&&<button className="btn btn-primary btn-sm ml-auto" onClick={add}>{tx('Add to the list')}</button>}
-          </div>
-          <SkuParts parts={pasted.parts}/>
-          <SkuWarnings lines={skuChecks(rules,typed)}/>
-          {addError&&<div className="alert alert-error" style={{marginTop:'var(--space-2)'}}>{addError}</div>}
-          {pasted.complete&&<SkuLabelFiles found={skuLabelFiles(rules,shipping,files,pasted)}/>}
-        </div>
-      )}
-      <div className="card table-scroll ship-table-fit sku-table">
-        <table className="table dense sku-found">
-          <thead><tr><th>SKU</th><th>{tx('Name')}</th><th>{tx('Product')}</th><th>{tx('Version')}</th><th>{tx('Pack')}</th><th>{tx('Languages')}</th><th>{tx('Brand')}</th></tr></thead>
-          <tbody>
-            {shown.slice(0,pageSize).map(({s,read,wrong})=>{
-              const open=openCode===s.code||shown.length===1;
-              const toggle=()=>setOpenCode(openCode===s.code?null:s.code);
-              const value=key=>read.part(key)?.value||'–';
-              return(
-                <Fragment key={s.id??s.code}>
-                  <tr className="sku-row" onClick={toggle}>
-                    <td className="nowrap">
-                      <span className="sku-found-cell">
-                        <button type="button" className={'sku-found-code mono'+(wrong.length?' wrong':'')} aria-expanded={open} title={wrong.join(' ')||undefined} onClick={e=>{e.stopPropagation();toggle();}}>{s.code}</button>
-                        <CopySku code={s.code}/>
-                      </span>
-                    </td>
-                    <td>{s.name||'–'}</td>
-                    <td>{value('product')}</td>
-                    <td className="mono nowrap" title={value('version')}>{read.version||'–'}</td>
-                    <td className="nowrap">{value('pack')}</td>
-                    <td>{read.part('ending')?.value??value('language')}</td>
-                    <td>{read.part('ending')?'–':value('brand')}</td>
-                  </tr>
-                  {open&&(
-                    <tr className="ship-open-row">
-                      <td colSpan={7}>
-                        <SkuParts parts={read.parts}/>
-                        <SkuWarnings lines={wrong}/>
-                        {(s.oldCode||s.note)&&<div className="hint sku-found-note">{[s.oldCode&&tx('Old code: {0}',s.oldCode),s.note].filter(Boolean).join(' · ')}</div>}
-                        <SkuLabelFiles found={skuLabelFiles(rules,shipping,files,read)}/>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-            {shown.length===0&&<tr><td colSpan={7} className="muted" style={{fontStyle:'italic'}}>{tx('No SKU matches.')}</td></tr>}
-          </tbody>
-        </table>
-        <ShowMore shown={Math.min(pageSize,shown.length)} total={shown.length} onMore={showMore}/>
-      </div>
-    </div>
-  );
-}
-
-// Every part is chosen by the person making it, from what the rules have. A product with one version has nothing to choose.
-function SkuCreate({rules,list,shipping,files,onAdd}){
-  const [product,setProduct]=useState('');
-  const [version,setVersion]=useState('');
-  const [pack,setPack]=useState('');
-  const [language,setLanguage]=useState('');
-  const [brand,setBrand]=useState('');
-  const [name,setName]=useState('');
-  const [added,setAdded]=useState('');
-  const [error,setError]=useState('');
-  const productRow=skuRow(rules,'products',product);
-  const versions=productRow?.versions??[];
-  const ending=skuRow(rules,'endings',language);
-  const pickProduct=code=>{
-    const found=skuRow(rules,'products',code)?.versions??[];
-    setProduct(code);setVersion(found.length===1?found[0].code:'');
-  };
-  const parts=skuParts(rules,{group:product[0]??'',product:product.slice(1),version,pack,tail:ending?.code??'',language:ending?'':language,brand:ending?'':brand});
-  const ready=product&&version&&pack&&(ending||(language&&brand));
-  const code=ready?`${product}${version}${pack}-${ending?ending.code:language+brand}`:'';
-  const same=code&&list.find(s=>s.code===code);
-  const used=product?skuUsedBy(shipping,product):[];
-  const select=(id,label,value,onChange,children,disabled)=>(
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
-      <SearchSelect id={id} value={value} disabled={disabled} onChange={v=>{onChange(v);setAdded('');setError('');}}>
-        <option value="">{tx('Choose…')}</option>
-        {children}
-      </SearchSelect>
-    </div>
-  );
-  const add=async()=>{
-    const problem=await onAdd(code,name);
-    setError(problem);
-    if(!problem){setAdded(code);setName('');}
-  };
-  if(!(rules.products??[]).length)return <div className="empty-state" style={{padding:'var(--space-8) var(--space-5)'}}><p>{tx('There are no SKU rules yet')}</p><div className="hint">{tx('Add the building blocks in Editor → SKU.')}</div></div>;
-  return(
-    <div className="scroll-y sku-create">
-      <div className="card-flat">
-        <div className="hint">{tx('Choose each part from the rules. Anything new, like another language code or brand, is added in Editor → SKU first.')}</div>
-        <div className="ship-form-grid">
-          {select('sku-new-product',tx('Product'),product,pickProduct,skuGroups(rules).map(g=>(
-            <optgroup key={g.code} label={g.name}>
-              {(rules.products??[]).filter(p=>p.code[0]===g.code).map(p=><option key={p.code} value={p.code}>{p.code} · {p.name}</option>)}
-            </optgroup>
-          )))}
-          <div>
-            {select('sku-new-version',tx('Version'),version,setVersion,versions.map(v=><option key={v.code} value={v.code}>{v.code}{v.note?` · ${v.note}`:v.code==='00'?` · ${tx('Original')}`:''}</option>),!product)}
-            {used.length>0&&<div className="hint">{tx('In shipping: {0}',used.join(', '))}</div>}
-          </div>
-          {select('sku-new-pack',tx('Pack'),pack,setPack,(rules.packs??[]).map(k=><option key={k.code} value={k.code}>{k.code} · {tx('{0} kg or L',fmtNum(k.amount,3))}</option>))}
-          {select('sku-new-language',tx('Languages'),language,setLanguage,<>
-            <optgroup label={tx('Languages')}>{(rules.languages??[]).map(l=><option key={l.code} value={l.code}>{l.code} · {l.name}</option>)}</optgroup>
-            {(rules.endings??[]).length>0&&<optgroup label={tx('Other endings')}>{rules.endings.map(e=><option key={e.code} value={e.code}>{e.code} · {e.name}</option>)}</optgroup>}
-          </>)}
-          {select('sku-new-brand',tx('Brand'),ending?'':brand,setBrand,SKU_KINDS.map(([kind,label])=>(
-            <optgroup key={kind} label={label}>
-              {(rules.brands??[]).filter(b=>(b.kind??'distributor')===kind).map(b=><option key={b.code} value={b.code}>{b.code} · {b.name}</option>)}
-            </optgroup>
-          )),!!ending)}
-          <div className="field">
-            <label htmlFor="sku-new-name">{tx('Name on the list')}</label>
-            <input id="sku-new-name" className="input" type="text" autoComplete="off" placeholder={tx('e.g. Spuma 5 l (LV, LT, EE)')} value={name} onChange={e=>setName(e.target.value)}/>
-          </div>
-        </div>
-      </div>
-      <div className="card-flat sku-result">
-        <SkuParts parts={parts}/>
-        {code&&(
-          <>
-            <div className="sku-pasted-head">
-              <span className="mono sku-new-code">{code}</span>
-              <CopySku code={code}/>
-              {same&&added!==code&&<span className="sku-warnings">{tx('Already on the list{0}.',same.name?`: ${same.name}`:'')}</span>}
-              <SavedNote show={added===code}>{tx('✓ Added to the list')}</SavedNote>
-              <button className="btn btn-primary btn-sm ml-auto" disabled={!!same} onClick={add}>{tx('Add to the list')}</button>
-            </div>
-            <SkuWarnings lines={skuChecks(rules,code,{name:name.trim()})}/>
-            {error&&<div className="alert alert-error" style={{marginTop:'var(--space-2)'}}>{error}</div>}
-            <SkuLabelFiles found={skuLabelFiles(rules,shipping,files,skuRead(rules,code))}/>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SkuPage({shipping,config,files,setSkuList}){
-  const [mode,setMode]=useState('find');
-  const rules=shipping?.skuRules,list=shipping?.skuList;
-  if(!rules||!list)return <div className="alert alert-error">{tx('{0}. Close whatever has it open, then reload this page.',skuReadError(rules,shipping?.error))}</div>;
-  // Says what went wrong, or nothing if it went in.
-  const onAdd=async(code,name)=>{
-    const r=await api.addSku({code,name});
-    if(!r.ok)return txs(r.error)||tx('Could not save');
-    setSkuList([...list,r.sku].sort((a,b)=>a.code.localeCompare(b.code)));
-    return '';
-  };
-  return(
-    <div className="page-fill">
-      <div className="tabs sku-tabs">
-        {[['find',tx('Find a SKU')],['create',tx('Create a SKU')]].map(([m,l])=><button key={m} className={`tab ${mode===m?'active':''}`} onClick={()=>setMode(m)}>{l}</button>)}
-      </div>
-      {/* Kept mounted, so going to Create and back doesn't lose a search. */}
-      <div className="page-fill" style={mode==='find'?undefined:{display:'none'}}><SkuFind rules={rules} list={list} shipping={shipping} files={files} config={config} onAdd={onAdd}/></div>
-      <div className="page-fill" style={mode==='create'?undefined:{display:'none'}}><SkuCreate rules={rules} list={list} shipping={shipping} files={files} onAdd={onAdd}/></div>
-    </div>
-  );
-}
-
 // ── Pro forma ────────────────────────────────────────────────────────────────────────
 // A prepayment sales invoice, laid out like the company's pro forma workbook and exported as a Word document, the way
 // the calculator exports its packing list (proforma.py). The seller and the person issuing it belong to this PC: they
 // are kept with the pro formas exported here, in a file on this PC only (/api/proformas), never in the shared folder.
 // The seller is set in Editor → Pro forma and only shown here, so one document can't change it by accident.
-// A product line is a SKU the person picks from the SKU list: nothing is picked for them.
+// A product line is a shipping product in one of its packs. Its SKU is typed on the line: it is never picked for the person.
 
 // Each field with its label, worded as the workbook words it, and a made-up sample of what goes in it, shown greyed
 // while it is empty. The samples are in English, like the document.
@@ -5137,6 +4572,14 @@ const textOf=v=>String(v??'').trim();
 // The given fields of something, each as text with no spaces around it.
 const pickText=(fields,values)=>Object.fromEntries(fields.map(([k])=>[k,textOf(values?.[k])]));
 
+// A product line's SKU field opens with `skuStart`, its product's code and pack. That start alone isn't a SKU yet,
+// so it doesn't go on the document.
+const proformaSkuField=l=>l.sku??l.skuStart??'';
+const proformaSku=l=>{
+  const sku=proformaSkuField(l).trim();
+  return sku===l.skuStart?'':sku;
+};
+
 // What the document says, worked out here so the sums stay in one place. Written like the packing list, with a decimal
 // comma whatever this PC's locale. Everything but the number, which depends on it.
 const proformaContent=(doc,mine)=>{
@@ -5148,7 +4591,7 @@ const proformaContent=(doc,mine)=>{
     ...pickText(TERMS_FIELDS,doc),
     lines:doc.lines.map((l,i)=>{
       const product=l.kind==='product';
-      return [String(i+1),textOf(l.name),product?l.sku:'–',product?docCount(l.packaging):'–',product?l.uom:'–',docCount(l.qty),money(l.price),money(proformaLineTotal(l))];
+      return [String(i+1),textOf(l.name),product?proformaSku(l)||'–':'–',product?docCount(l.packaging):'–',product?l.uom:'–',docCount(l.qty),money(l.price),money(proformaLineTotal(l))];
     }),
     vatRate:doc.vatRate,net:docNum(net),vat:docNum(vat),total:`${docNum(total)} EUR`,
   };
@@ -5184,6 +4627,7 @@ const proformaChecks=(doc,mine)=>{
     const line=tx('Line {0}',i+1),product=l.kind==='product';
     const missing=[isBlank(l.name)&&tx('Description'),product&&!(l.packaging>0)&&tx('Packaging'),product&&!l.uom&&tx('UOM'),!(l.qty>0)&&tx('Quantity'),l.price==null&&tx('Price/unit')].filter(Boolean);
     if(missing.length)must.push(tx('{0}: {1}',line,missing.join(', ')));
+    if(product&&!proformaSku(l))check.push(tx('{0}: no SKU. {1}',line,l.skuStart?tx('Type the rest after {0}.',l.skuStart):tx('It has no SKU code to start from, so type all of it.')));
     if(/[/()]/.test(l.name))check.push(tx('{0}: "{1}" looks like an internal name. Write the one the customer should see.',line,l.name.trim()));
     if(product&&l.uom&&l.qty>0&&l.packaging>0&&!isWhole(l.qty/l.packaging))check.push(tx('{0}: {1} {2} is not a whole number of {3} packs.',line,fmtNum(l.qty,3),l.uom,`${fmtNum(l.packaging,3)} ${l.uom}`));
   });
@@ -5192,19 +4636,6 @@ const proformaChecks=(doc,mine)=>{
   return {must,check};
 };
 
-// What a picked SKU fills in (`line`): the name its label goes by, when the SKU says which, its pack and the unit it is
-// sold in. Anything can be changed on the line. The SKU list's own names are internal ones, with the markets in them.
-// `pallet`: what one pallet of that pack holds, from the shipping profile, which the quantity starts at. Only when every
-// shipping product the SKU can be has that pack and they agree on it, as a SKU's pack is matched to them by its size.
-const proformaSkuLine=(rules,shipping,code)=>{
-  const read=skuRead(rules,code);
-  const found=skuLabelNames(rules,shipping,read);
-  const names=[...new Set(found.map(m=>m.name))],units=[...new Set(found.map(m=>m.product.unit))];
-  const packaging=skuRow(rules,'packs',read.pack)?.amount??null;
-  const pallets=[...new Set([...new Set(found.map(m=>m.product))].map(p=>(p.packs??[]).find(k=>k.packSize===packaging)?.palletSize||null))];
-  return {line:{sku:code,name:names.length===1?names[0]:read.part('product')?.value??'',packaging,uom:units.length===1?units[0]:''},
-    pallet:pallets.length===1&&units.length===1?pallets[0]:null};
-};
 
 // One line of the sheet: its label and its field, with the sample showing while it is empty.
 const SheetField=({id,spec:[k,label,sample],values,onChange,multiline})=>{
@@ -5290,35 +4721,31 @@ function SavedCustomers({customers,current,onPick,onSave}){
   );
 }
 
-// A product is a SKU from the list, which fills in its name, pack and unit. A service is anything else on the bill.
-function ProformaAddLine({rules,list,shipping,onAdd}){
+// A product is one of the shipping data's, in one of its packs, which fills in its name, pack and unit. Its SKU is
+// typed on its line. A service is anything else on the bill.
+function ProformaAddLine({shipping,onAdd}){
   const [kind,setKind]=useState('product');
-  const [code,setCode]=useState('');
+  const pick=useShipPick(shipping);
+  const {product,picked}=pick;
   const [name,setName]=useState('');
   // The quantity someone typed, as {qty}. Until they type one, a product's is what one pallet of its pack holds.
   const [typed,setTyped]=useState(null);
   const [price,setPrice]=useState(null);
-  const noSkus=!rules||!list;
-  // Grouped by product, so typing a product's name finds all of its SKUs.
-  const options=useMemo(()=>{
-    const groups=new Map();
-    for(const s of list??[])groups.set(s.code.slice(0,3),[...(groups.get(s.code.slice(0,3))??[]),s]);
-    return [...groups].map(([key,skus])=>{
-      const p=skuRow(rules,'products',key);
-      return <optgroup key={key} label={p?`${key} · ${p.name}`:key}>{skus.map(s=><option key={s.code} value={s.code}>{s.name?`${s.code} · ${s.name}`:s.code}</option>)}</optgroup>;
-    });
-  },[rules,list]);
-  const product=kind==='product';
-  const picked=product&&code&&!noSkus?proformaSkuLine(rules,shipping,code):null;
-  const qty=typed?typed.qty:picked?.pallet??null;
-  const canAdd=product?!!picked:!isBlank(name);
+  const isProduct=kind==='product';
+  const pallet=isProduct&&picked?.palletSize>0?picked.palletSize:null;
+  const qty=typed?typed.qty:pallet;
+  const canAdd=isProduct?!!picked:!isBlank(name);
   const add=()=>{
     if(!canAdd)return;
-    onAdd(product?{kind,...picked.line,qty,price}:{kind,name:name.trim(),qty:qty??1,price});
-    setCode('');setName('');setTyped(null);setPrice(null);
+    if(isProduct){
+      const lineName=docDefaultName(product);
+      onAdd({kind,name:lineName,skuStart:skuStart(product,lineName,picked.packSize),packaging:picked.packSize,uom:picked.unit,qty,price});
+    }
+    else onAdd({kind,name:name.trim(),qty:qty??1,price});
+    pick.pickProduct('');setName('');setTyped(null);setPrice(null);
   };
   const enter=e=>{if(e.key==='Enter')add();};
-  const unit=picked?.line.uom;
+  const unit=isProduct?picked?.unit:null;
   return(
     <div className="ship-add pf-add">
       <div className="field">
@@ -5329,15 +4756,7 @@ function ProformaAddLine({rules,list,shipping,onAdd}){
           ))}
         </div>
       </div>
-      {product?(
-        <div className="field ship-add-product">
-          <label htmlFor="pf-sku">SKU</label>
-          <SearchSelect id="pf-sku" value={code} onChange={setCode} disabled={noSkus}>
-            <option value="">{tx('Choose a SKU…')}</option>
-            {options}
-          </SearchSelect>
-        </div>
-      ):(
+      {isProduct?<ShipPickFields id="pf-product" pick={pick}/>:(
         <div className="field ship-add-product">
           <label htmlFor="pf-service">{tx('Description')}</label>
           <input id="pf-service" className="input" type="text" list="pf-services" autoComplete="off" placeholder={PROFORMA_SERVICES[0]} value={name} onChange={e=>setName(e.target.value)} onKeyDown={enter}/>
@@ -5346,8 +4765,8 @@ function ProformaAddLine({rules,list,shipping,onAdd}){
       )}
       <div className="field ship-add-num">
         <label htmlFor="pf-qty">{unit?tx('Quantity ({0})',unit):tx('Quantity')}</label>
-        {/* The sample is only for before a SKU is picked: after that, a grey number would read as one pallet. */}
-        <NumInput id="pf-qty" value={qty} onChange={v=>setTyped({qty:v})} placeholder={!product?'1':picked?'0':'480'} onKeyDown={enter}/>
+        {/* The sample is only for before a pack is picked: after that, a grey number would read as one pallet. */}
+        <NumInput id="pf-qty" value={qty} onChange={v=>setTyped({qty:v})} placeholder={!isProduct?'1':picked?'0':'480'} onKeyDown={enter}/>
       </div>
       <div className="field ship-add-num">
         <label htmlFor="pf-price">{unit?tx('Price per {0}',unit):tx('Price/unit')}</label>
@@ -5355,12 +4774,11 @@ function ProformaAddLine({rules,list,shipping,onAdd}){
       </div>
       <button className="btn btn-primary" disabled={!canAdd} onClick={add}>{tx('Add line')}</button>
       <div className="hint ship-add-hint">
-        {!product?tx('A service has no SKU or pack: transport, a certificate, anything else the customer pays for.')
-          :noSkus?skuReadError(rules)
-          :picked?<>{skuMeaning(rules,code)}<div>{picked.pallet
-            ?tx('A pallet holds {0} {1} ({2} packs), so the quantity starts at one pallet.',fmtNum(picked.pallet),unit,fmtNum(picked.pallet/picked.line.packaging,2))
-            :tx('The shipping data has no pallet for this pack, so there is no quantity to start from.')}</div></>
-          :tx('Pick the SKU from the list. A SKU that isn\'t on it yet is made on the SKU page.')}
+        {!isProduct?tx('A service has no SKU or pack: transport, a certificate, anything else the customer pays for.')
+          :!pick.products.length?(shipping?.error?txs(shipping.error):tx('No shipping data yet'))
+          :!picked?tx('Pick the product and its pack. Its SKU is typed on its line.')
+          :pallet?tx('A pallet holds {0} {1} ({2} packs), so the quantity starts at one pallet.',fmtNum(pallet),unit,fmtNum(pallet/picked.packSize,2))
+          :tx('The shipping data has no pallet for this pack, so there is no quantity to start from.')}
       </div>
     </div>
   );
@@ -5380,15 +4798,17 @@ function ProformaLines({lines,vatRate,origin,onOrigin,onVat,onChange,onRemove}){
           <label htmlFor="pf-origin">{tx('Country of origin')}:</label>
           <input id="pf-origin" className="input" type="text" autoComplete="off" placeholder={ORIGIN_FIELD[2]} value={origin??''} onChange={e=>onOrigin(e.target.value)}/>
         </td></tr>
-        {lines.length===0&&<tr><td colSpan={9} className="muted pf-empty">{tx('Add a product from the SKU list, or a service such as transport.')}</td></tr>}
+        {lines.length===0&&<tr><td colSpan={9} className="muted pf-empty">{tx('Add a product, or a service such as transport.')}</td></tr>}
         {lines.map((l,i)=>{
-          const product=l.kind==='product',lineTotal=proformaLineTotal(l),what=l.name||l.sku||tx('Line {0}',i+1);
+          const product=l.kind==='product',lineTotal=proformaLineTotal(l),what=l.name||proformaSku(l)||tx('Line {0}',i+1);
           const set=patch=>onChange(l.id,patch);
           return(
             <tr key={l.id}>
               <td className="num muted">{i+1}</td>
               <td><input className="input" type="text" aria-label={tx('Description of line {0}',i+1)} value={l.name} onChange={e=>set({name:e.target.value})}/></td>
-              <td className="mono nowrap">{product?l.sku:<span className="muted">{tx('Service')}</span>}</td>
+              <td>{product?<input className="input mono pf-sku" type="text" autoComplete="off" aria-label={tx('SKU of {0}',what)} placeholder={tx('Type the SKU')}
+                value={proformaSkuField(l)} onFocus={caretToEnd} onChange={e=>set({sku:e.target.value.toUpperCase()})}/>
+                :<span className="muted">{tx('Service')}</span>}</td>
               <td className="num">{product?<NumInput className="pf-pack" aria-label={tx('Packaging of {0}',what)} value={l.packaging} onChange={v=>set({packaging:v})}/>:'–'}</td>
               <td>{product?<UnitChoice value={l.uom} onChange={u=>set({uom:u})}/>:'–'}</td>
               <td className="num"><div className="input-unit pf-qty"><NumInput aria-label={tx('Quantity of {0}',what)} placeholder="0" value={l.qty} onChange={v=>set({qty:v})}/>{product&&l.uom&&<span>{l.uom}</span>}</div></td>
@@ -5496,7 +4916,7 @@ function ProformaPage({shipping}){
             {TERMS_FIELDS.map(f=><SheetField key={f[0]} id={`pf-${f[0]}`} spec={f} values={doc} onChange={(k,v)=>set({[k]:v})} multiline/>)}
           </div>
         </div>
-        <ProformaAddLine rules={shipping?.skuRules} list={shipping?.skuList} shipping={shipping} onAdd={addLine}/>
+        <ProformaAddLine shipping={shipping} onAdd={addLine}/>
         <div className="table-scroll pf-table">
           <ProformaLines lines={doc.lines} vatRate={doc.vatRate} origin={mine.seller.origin} onOrigin={v=>setDetail('seller','origin',v)}
             onVat={r=>set({vatRate:r})} onChange={updateLine} onRemove={removeLine}/>

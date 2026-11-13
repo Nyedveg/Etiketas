@@ -29,3 +29,6 @@ desktop.ini
 # public: shipping data lives in the shared folder only.
 assets/*.xlsx
 assets/*.docx
+assets/*.csv
+assets/*.msapp
+assets/SKU Power App/
