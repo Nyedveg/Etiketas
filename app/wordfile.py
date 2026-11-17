@@ -1,7 +1,7 @@
-"""What every Word document the app exports shares: the package, the styles, the logo header and the page numbers.
+"""The Word file around an exported document: the package, the styles, the logo header and the page numbers.
 
-Written directly as OOXML with the standard library, so the app needs nothing new installed. Each document
-(packing_list.py, proforma.py) lays out its own body with these pieces and hands it to package().
+Written directly as OOXML with the standard library, so the app needs nothing new installed. The document
+(packing_list.py) lays out its own body with these pieces and hands it to package().
 """
 import io
 import re
@@ -21,7 +21,6 @@ XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
 _REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 HEADING_COLOR, HEADER_FILL = "234A58", "EDF2F4"
-TEXT_WIDTH = 10092                # twips between the page margins of SECTION
 _LOGO_HEIGHT_EMU = 468000         # 1.3 cm
 
 # A4, with the logo in the header and the page number in the footer.
@@ -35,55 +34,38 @@ SECTION = ('<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/>'
 _NOT_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
-def run(text, size=18, bold=False, color=None, underline=False):
+def run(text, size=18, bold=False, color=None):
     """A run of text. A line break in it is kept as one."""
-    props = (("<w:b/>" if bold else "") + (f'<w:color w:val="{color}"/>' if color else "") + f'<w:sz w:val="{size}"/>'
-             + ('<w:u w:val="single"/>' if underline else ""))
+    props = ("<w:b/>" if bold else "") + (f'<w:color w:val="{color}"/>' if color else "") + f'<w:sz w:val="{size}"/>'
     lines = _NOT_XML.sub("", str(text)).split("\n")
     body = "<w:br/>".join(f'<w:t xml:space="preserve">{escape(line)}</w:t>' for line in lines)
     return f"<w:r><w:rPr>{props}</w:rPr>{body}</w:r>"
 
 
-def para(run="", *, before=None, after=None, keep_next=False, align=None, indent=None):
-    """A paragraph. indent: (left, hanging) in twips, with a tab stop where the hanging part ends."""
+def para(run="", *, before=None, after=None, keep_next=False):
+    """A paragraph."""
     spacing = "".join(f' w:{k}="{v}"' for k, v in (("before", before), ("after", after)) if v is not None)
-    props = (("<w:keepNext/>" if keep_next else "")
-             + (f'<w:tabs><w:tab w:val="left" w:pos="{indent[0]}"/></w:tabs>' if indent else "")
-             + (f"<w:spacing{spacing}/>" if spacing else "")
-             + (f'<w:ind w:left="{indent[0]}" w:hanging="{indent[1]}"/>' if indent else "")
-             + (f'<w:jc w:val="{align}"/>' if align else ""))
+    props = ("<w:keepNext/>" if keep_next else "") + (f"<w:spacing{spacing}/>" if spacing else "")
     return f"<w:p>{f'<w:pPr>{props}</w:pPr>' if props else ''}{run}</w:p>"
 
 
-TAB = "<w:r><w:tab/></w:r>"
-
-
-def lines(top=None, left=None, bottom=None, right=None, inside_h=None, inside_v=None):
-    """Borders for a table or a cell, each a thickness in eighths of a point. Written in the order Word requires."""
-    sides = (("top", top), ("left", left), ("bottom", bottom), ("right", right), ("insideH", inside_h), ("insideV", inside_v))
-    return "".join(f'<w:{side} w:val="single" w:sz="{size}" w:space="0" w:color="auto"/>' for side, size in sides if size)
-
-
-def cell(content, width, *, span=1, fill=None, borders=None):
-    """A table cell holding paragraphs, `width` twips wide across `span` columns of the table's grid."""
-    props = (f'<w:tcW w:w="{width}" w:type="dxa"/>' + (f'<w:gridSpan w:val="{span}"/>' if span > 1 else "")
-             + (f"<w:tcBorders>{borders}</w:tcBorders>" if borders else "")
-             + (f'<w:shd w:val="clear" w:color="auto" w:fill="{fill}"/>' if fill else ""))
+def cell(content, width, *, fill=None):
+    """A table cell holding paragraphs, `width` twips wide."""
+    props = f'<w:tcW w:w="{width}" w:type="dxa"/>' + (f'<w:shd w:val="clear" w:color="auto" w:fill="{fill}"/>' if fill else "")
     return f"<w:tc><w:tcPr>{props}</w:tcPr>{content}</w:tc>"
 
 
-def row(cells, *, header=False):
-    """A table row a page break can't split. A header row is repeated on each page the table runs onto."""
-    return f'<w:tr><w:trPr><w:cantSplit/>{"<w:tblHeader/>" if header else ""}</w:trPr>{"".join(cells)}</w:tr>'
+def row(cells):
+    """A table row a page break can't split."""
+    return f'<w:tr><w:trPr><w:cantSplit/></w:trPr>{"".join(cells)}</w:tr>'
 
 
-def table(columns, rows, *, borders=None):
-    """A table of fixed column widths (twips). Without borders it has none: the default table style draws no lines."""
+def table(columns, rows):
+    """A table of fixed column widths (twips), with no lines: the default table style draws none."""
     grid = "".join(f'<w:gridCol w:w="{w}"/>' for w in columns)
     margins = "".join(f'<w:{side} w:w="65" w:type="dxa"/>' for side in ("top", "left", "bottom", "right"))
     return (f'<w:tbl><w:tblPr><w:tblW w:w="{sum(columns)}" w:type="dxa"/>'
-            + (f"<w:tblBorders>{borders}</w:tblBorders>" if borders else "")
-            + f'<w:tblLayout w:type="fixed"/><w:tblCellMar>{margins}</w:tblCellMar></w:tblPr>'
+            f'<w:tblLayout w:type="fixed"/><w:tblCellMar>{margins}</w:tblCellMar></w:tblPr>'
             f'<w:tblGrid>{grid}</w:tblGrid>{"".join(rows)}</w:tbl>')
 
 

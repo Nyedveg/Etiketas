@@ -2,7 +2,7 @@
 
 The page works out every figure and sends them here as text (see packingListDoc in app.js): the
 sums stay in one place, the calculator's, and this file only knows how the document is laid out.
-What every exported document shares, the package, logo and styles, is in wordfile.py.
+The Word file around it, the package, logo and styles, is in wordfile.py.
 Nothing company-specific belongs here, this repo is public: names and figures come in with the request.
 """
 from datetime import datetime

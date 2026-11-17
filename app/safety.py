@@ -30,15 +30,15 @@ _SIGNAL_WORDS_UPPER = {w.upper() for pair in SIGNAL_WORDS.values() for w in pair
 
 # ── Size on the label ─────────────────────────────────────────────────────────
 def size_rule(litres):
-    """(smallest allowed, size to reach if possible) for a pictogram's edge in mm: CLP Annex I, Table 1.3.
-    The edge is the side of the diamond, not the square around it."""
+    """The smallest a pictogram's edge may be, in mm: CLP Annex I, Table 1.3. The edge is the side of the diamond,
+    not the square around it. Up to 3 L the table asks for 16 mm where it fits; only the minimum is checked."""
     if litres <= 3:
-        return 10, 16
+        return 10
     if litres <= 50:
-        return 23, 23
+        return 23
     if litres <= 500:
-        return 32, 32
-    return 46, 46
+        return 32
+    return 46
 
 def capacity_litres(size):
     """A pack as the app names it ("5L", "250ml", "1kg", "1kgx10") in litres, with a box counted whole. None if it can't tell."""
@@ -249,7 +249,7 @@ def apply_to_label(pkg, record, languages, pack, ghs_dir):
         out.update(placed)
         out["tooMany"] = len(placed["placed"]) < len(codes)
         if litres is not None and codes:
-            least, ideal = size_rule(litres)
-            out.update(minMm=least, idealMm=ideal, tooSmall=placed["edgeMm"] < least, belowIdeal=least <= placed["edgeMm"] < ideal)
+            least = size_rule(litres)
+            out.update(minMm=least, tooSmall=placed["edgeMm"] < least)
     out["ok"] = not (out["noRecord"] or out.get("noFrames") or out.get("tooMany") or out.get("tooSmall"))
     return out

@@ -72,7 +72,7 @@ shelf life and storage temperatures from the product's data sheet, in the label'
 whatever the translation file says; **New Label** shows them before anything is created. A
 product with no data sheet keeps its translation's text.
 
-A SKU on a label, packing list or pro forma is typed by the person making it, never filled in
+A SKU on a label or packing list is typed by the person making it, never filled in
 for them. The field opens with the product's SKU code, set per shipping product in
 **Editor → Shipping**, and the pack's code (`P0401M5-`); the market and brand are typed after it.
 The app keeps no list of SKUs: `sku_rules.json` and `sku_list.json`, left here by older copies,
